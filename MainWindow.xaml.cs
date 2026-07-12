@@ -24,6 +24,46 @@ namespace Limelight
             RestoreSavedGameDirectory();
         }
 
+            private void ImportMod_Click(
+    object sender,
+    RoutedEventArgs e)
+        {
+            var fileDialog = new OpenFileDialog
+            {
+                Title = "Choose a Dead as Disco mod",
+                Filter = "ZIP archives (*.zip)|*.zip",
+                Multiselect = false
+            };
+
+            if (fileDialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            // Validate the contents before copying anything into Limelight's library.
+            var validator = new ModArchiveValidator();
+
+            ModArchiveValidationResult result =
+                validator.Validate(fileDialog.FileName);
+
+            if (!result.IsValid)
+            {
+                MessageBox.Show(
+                    result.Message,
+                    "Invalid mod archive",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            MessageBox.Show(
+                result.Message,
+                "Mod archive validated",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
         private void ConnectGame_Click(object sender, RoutedEventArgs e)
         {
             // Ask for the game's main folder rather than making the user

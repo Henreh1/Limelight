@@ -144,7 +144,9 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Content="IMPORT MOD"
+                    <Button x:Name="ImportModButton"
+                            Content="Import Mod"
+                            Click="ImportMod_Click"
                             Margin="0,0,10,0"
                             Style="{StaticResource SecondaryButton}"/>
 
