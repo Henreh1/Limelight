@@ -6,6 +6,9 @@
         public string GameDirectory { get; set; } =
             string.Empty;
 
+     public string ActiveModId { get; set; } =
+    string.Empty;
+
         public List<InstalledMod> InstalledMods { get; set; } =
             new List<InstalledMod>();
     }

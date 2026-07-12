@@ -22,6 +22,7 @@ namespace Limelight.Models
 
         [JsonIgnore]
         public string DisplayName
+
         {
             get
             {
@@ -38,6 +39,9 @@ namespace Limelight.Models
 
                 return cleanedName.Trim();
             }
+
         }
+        [JsonIgnore]
+        public bool IsActive { get; set; }
     }
 }
