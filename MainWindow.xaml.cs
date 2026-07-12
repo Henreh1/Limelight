@@ -122,9 +122,42 @@ namespace Limelight
             };
 
             if (fileDialog.ShowDialog() != true)
+                if (fileDialog.ShowDialog() != true)
+                {
+                    return;
+                }
+
+            string archiveName =
+                Path.GetFileNameWithoutExtension(
+                    fileDialog.FileName);
+
+            string incomingModName =
+                InstalledMod.CreateDisplayName(
+                    archiveName);
+
+            // Compare the cleaned names because Nexus may give the same
+            // download a different timestamp or token each time.
+            InstalledMod? existingMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    Directory.Exists(mod.InstallDirectory) &&
+                    string.Equals(
+                        mod.DisplayName,
+                        incomingModName,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (existingMod != null)
             {
+                MessageBox.Show(
+                    $"{existingMod.DisplayName} is already in your library.\n\n" +
+                    "Remove the existing copy before importing it again.",
+                    "Mod already installed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
                 return;
             }
+
+            ImportModButton.IsEnabled = false;
 
             ImportModButton.IsEnabled = false;
             ImportModButton.Content = "IMPORTING...";

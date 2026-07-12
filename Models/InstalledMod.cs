@@ -21,26 +21,32 @@ namespace Limelight.Models
             DateTimeOffset.Now;
 
         [JsonIgnore]
-        public string DisplayName
+        public string DisplayName =>
+    CreateDisplayName(Name);
 
+        public static string CreateDisplayName(
+            string originalName)
         {
-            get
-            {
-                // Nexus archives often append a mod ID, version, timestamp,
-                // and download token to the readable mod name.
-                string cleanedName =
-                    Name.Replace('_', ' ').Trim();
+            // Nexus archives often append a mod ID, version, timestamp,
+            // and download token to the readable mod name.
+            string cleanedName =
+                originalName.Replace('_', ' ').Trim();
 
-                cleanedName = Regex.Replace(
-                    cleanedName,
-                    @"\s+\d+\s+[\d.]+\s+\d{4}-\d{2}-\d{2}T\S+(?:\s+\S+)?$",
-                    string.Empty,
-                    RegexOptions.IgnoreCase);
+            cleanedName = Regex.Replace(
+                cleanedName,
+                @"\s+\d+\s+[\d.]+\s+\d{4}-\d{2}-\d{2}T\S+(?:\s+\S+)?$",
+                string.Empty,
+                RegexOptions.IgnoreCase);
 
-                return cleanedName.Trim();
-            }
+            // Collapse accidental repeated spaces so name comparisons remain reliable.
+            cleanedName = Regex.Replace(
+                cleanedName,
+                @"\s+",
+                " ");
 
+            return cleanedName.Trim();
         }
+
         [JsonIgnore]
         public bool IsActive { get; set; }
     }
