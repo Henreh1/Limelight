@@ -93,16 +93,16 @@
 
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8"
-                                     Height="8"
-                                     Margin="0,0,9,0"
-                                     Fill="{StaticResource PinkBrush}"/>
-
                             <Ellipse x:Name="GameStatusDot"
-         Width="8"
-         Height="8"
-         Margin="0,0,9,0"
-         Fill="{StaticResource PinkBrush}"/>
+             Width="8"
+             Height="8"
+             Margin="0,0,9,0"
+             Fill="{StaticResource PinkBrush}"/>
+
+                            <TextBlock x:Name="GameStatusTitle"
+               Text="GAME NOT CONNECTED"
+               FontSize="11"
+               FontWeight="Bold"/>
                         </StackPanel>
 
                         <TextBlock x:Name="GameStatusDescription"
