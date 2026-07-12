@@ -33,8 +33,8 @@ namespace Limelight
         }
 
         private void ShowMyMods_Click(
-            object sender,
-            RoutedEventArgs e)
+    object sender,
+    MouseButtonEventArgs e)
         {
             // Refresh before displaying the page so newly imported
             // mods appear without restarting Limelight.
@@ -45,6 +45,8 @@ namespace Limelight
 
             MyModsPageControl.Visibility =
                 Visibility.Visible;
+
+            SetSelectedNavigation(showMyMods: true);
         }
 
         private void ShowDashboard_Click(
@@ -56,6 +58,56 @@ namespace Limelight
 
             DashboardPage.Visibility =
                 Visibility.Visible;
+
+            SetSelectedNavigation(showMyMods: false);
+        }
+
+        private void SetSelectedNavigation(bool showMyMods)
+        {
+            // Keep both borders the same size and only swap their colours.
+            // This prevents the navigation text from shifting when selected.
+            Brush activeBackground =
+                new SolidColorBrush(
+                    Color.FromRgb(37, 32, 59));
+
+            Brush pink =
+                (Brush)FindResource("PinkBrush");
+
+            Brush normalText =
+                (Brush)FindResource("TextBrush");
+
+            Brush mutedText =
+                (Brush)FindResource("MutedTextBrush");
+
+            DashboardNavigation.Background =
+                showMyMods
+                    ? Brushes.Transparent
+                    : activeBackground;
+
+            DashboardNavigation.BorderBrush =
+                showMyMods
+                    ? Brushes.Transparent
+                    : pink;
+
+            DashboardNavigationText.Foreground =
+                showMyMods
+                    ? mutedText
+                    : normalText;
+
+            MyModsNavigation.Background =
+                showMyMods
+                    ? activeBackground
+                    : Brushes.Transparent;
+
+            MyModsNavigation.BorderBrush =
+                showMyMods
+                    ? pink
+                    : Brushes.Transparent;
+
+            MyModsNavigationText.Foreground =
+                showMyMods
+                    ? normalText
+                    : mutedText;
         }
 
         private async void ImportMod_Click(
@@ -94,7 +146,7 @@ namespace Limelight
                 RefreshLibrarySummary();
 
                 MessageBox.Show(
-                    $"{installedMod.Name} was added to your library.\n\n" +
+                    $"{installedMod.DisplayName} was added to your library.\n\n" +
                     $"Package files: {installedMod.PackageFiles.Count}",
                     "Mod imported",
                     MessageBoxButton.OK,

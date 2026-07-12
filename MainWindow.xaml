@@ -57,32 +57,45 @@
                 <StackPanel Grid.Row="1">
 
                     <Border x:Name="DashboardNavigation"
-                            Margin="8,3"
-                            Background="#25203B"
-                            CornerRadius="8"
-                            BorderBrush="{StaticResource PinkBrush}"
-                            BorderThickness="3,0,0,0"
-                            MouseLeftButtonDown="ShowDashboard_Click"
-                            Cursor="Hand">
+            Margin="8,3"
+            Background="#25203B"
+            CornerRadius="8"
+            BorderBrush="{StaticResource PinkBrush}"
+            BorderThickness="3,0,0,0"
+            MouseLeftButtonDown="ShowDashboard_Click"
+            Cursor="Hand">
 
-                        <TextBlock Text="◆    Dashboard"
-                                   Padding="16,13"
-                                   FontSize="14"
-                                   Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock x:Name="DashboardNavigationText"
+                   Text="◆    Dashboard"
+                   Padding="16,13"
+                   FontSize="14"
+                   Foreground="{StaticResource TextBrush}"/>
                     </Border>
 
-                    <Button Content="◇    My Mods"
-                            Click="ShowMyMods_Click"
-                            Style="{StaticResource NavigationButton}"/>
+                    <Border x:Name="MyModsNavigation"
+            Margin="8,3"
+            Background="Transparent"
+            CornerRadius="8"
+            BorderBrush="Transparent"
+            BorderThickness="3,0,0,0"
+            MouseLeftButtonDown="ShowMyMods_Click"
+            Cursor="Hand">
+
+                        <TextBlock x:Name="MyModsNavigationText"
+                   Text="◇    My Mods"
+                   Padding="16,13"
+                   FontSize="14"
+                   Foreground="{StaticResource MutedTextBrush}"/>
+                    </Border>
 
                     <Button Content="◇    Browse Nexus"
-                            Style="{StaticResource NavigationButton}"/>
+            Style="{StaticResource NavigationButton}"/>
 
                     <Button Content="◇    Downloads"
-                            Style="{StaticResource NavigationButton}"/>
+            Style="{StaticResource NavigationButton}"/>
 
                     <Button Content="◇    Settings"
-                            Style="{StaticResource NavigationButton}"/>
+            Style="{StaticResource NavigationButton}"/>
                 </StackPanel>
 
                 <!-- Game connection status -->
