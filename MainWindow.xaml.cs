@@ -1,8 +1,13 @@
 ﻿using Limelight.Models;
 using Limelight.Services;
 using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Limelight
@@ -10,8 +15,8 @@ namespace Limelight
     public partial class MainWindow : Window
     {
         private readonly SettingsService _settingsService;
-        private readonly AppSettings _settings;
         private readonly ModLibraryService _modLibraryService;
+        private readonly AppSettings _settings;
 
         private string? _gameDirectory;
 
@@ -22,15 +27,40 @@ namespace Limelight
             _settingsService = new SettingsService();
             _modLibraryService = new ModLibraryService();
             _settings = _settingsService.Load();
-          
 
             RestoreSavedGameDirectory();
             RefreshLibrarySummary();
         }
 
+        private void ShowMyMods_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            // Refresh before displaying the page so newly imported
+            // mods appear without restarting Limelight.
+            RefreshLibrarySummary();
+
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Visible;
+        }
+
+        private void ShowDashboard_Click(
+            object sender,
+            MouseButtonEventArgs e)
+        {
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DashboardPage.Visibility =
+                Visibility.Visible;
+        }
+
         private async void ImportMod_Click(
-    object sender,
-    RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             var fileDialog = new OpenFileDialog
             {
@@ -49,14 +79,16 @@ namespace Limelight
 
             try
             {
-                // Large archives are copied in the background so Limelight
-                // does not appear frozen during the import.
+                // Large archives are processed in the background so
+                // the interface remains responsive during the import.
                 InstalledMod installedMod =
                     await Task.Run(() =>
                         _modLibraryService.Import(
                             fileDialog.FileName));
 
-                _settings.InstalledMods.Add(installedMod);
+                _settings.InstalledMods.Add(
+                    installedMod);
+
                 _settingsService.Save(_settings);
 
                 RefreshLibrarySummary();
@@ -85,12 +117,23 @@ namespace Limelight
 
         private void RefreshLibrarySummary()
         {
-            // Only count mods whose library folder still exists.
-            int installedCount =
-                _settings.InstalledMods.Count(mod =>
-                    Directory.Exists(mod.InstallDirectory));
+            // Ignore library entries whose extracted folder was
+            // manually removed outside Limelight.
+            List<InstalledMod> availableMods =
+                _settings.InstalledMods
+                    .Where(mod =>
+                        Directory.Exists(
+                            mod.InstallDirectory))
+                    .ToList();
 
-                InstalledModCountText.Text =
+            int installedCount =
+                availableMods.Count;
+
+            // Keep the dashboard and My Mods page on the same snapshot.
+            MyModsPageControl.ShowMods(
+                availableMods);
+
+            InstalledModCountText.Text =
                 installedCount.ToString();
 
             if (installedCount == 0)
@@ -113,31 +156,38 @@ namespace Limelight
                 $"{installedCount} READY";
         }
 
-        private void ConnectGame_Click(object sender, RoutedEventArgs e)
+        private void ConnectGame_Click(
+            object sender,
+            RoutedEventArgs e)
         {
-            // Ask for the game's main folder rather than making the user
-            // manually navigate to its internal Paks directory.
+            // Ask for the main installation folder instead of making
+            // the user locate the internal Paks directory.
             var folderDialog = new OpenFolderDialog
             {
                 Title = "Choose the Dead as Disco installation folder",
                 Multiselect = false
             };
 
-            // Cancelling should leave the current connection unchanged.
+            // Cancelling leaves the current connection unchanged.
             if (folderDialog.ShowDialog() != true)
             {
                 return;
             }
 
-            string selectedDirectory = folderDialog.FolderName;
+            string selectedDirectory =
+                folderDialog.FolderName;
 
-            if (!TryConnectToGame(selectedDirectory, showError: true))
+            if (!TryConnectToGame(
+                    selectedDirectory,
+                    showError: true))
             {
                 return;
             }
 
-            // Save only after the directory has passed all validation checks.
-            _settings.GameDirectory = selectedDirectory;
+            // Store the directory only after it passes validation.
+            _settings.GameDirectory =
+                selectedDirectory;
+
             _settingsService.Save(_settings);
 
             MessageBox.Show(
@@ -161,8 +211,8 @@ namespace Limelight
                 "Content",
                 "Paks");
 
-            // Checking both locations helps avoid accepting an unrelated
-            // folder that happens to contain a file named Pagoda.exe.
+            // Both paths are checked so an unrelated folder containing
+            // a file named Pagoda.exe is not accepted accidentally.
             bool validDirectory =
                 File.Exists(gameExecutable) &&
                 Directory.Exists(pakDirectory);
@@ -182,28 +232,35 @@ namespace Limelight
                 return false;
             }
 
-            _gameDirectory = selectedDirectory;
+            _gameDirectory =
+                selectedDirectory;
 
-            // Update the dashboard only after the installation is confirmed.
+            // Give the user a clear indication that validation passed.
             GameStatusDot.Fill =
                 (Brush)FindResource("LimeBrush");
 
-            GameStatusTitle.Text = "GAME CONNECTED";
-            GameStatusDescription.Text = selectedDirectory;
-            ConnectGameButton.Content = "CHANGE FOLDER";
+            GameStatusTitle.Text =
+                "GAME CONNECTED";
+
+            GameStatusDescription.Text =
+                selectedDirectory;
+
+            ConnectGameButton.Content =
+                "CHANGE FOLDER";
 
             return true;
         }
 
         private void RestoreSavedGameDirectory()
         {
-            if (string.IsNullOrWhiteSpace(_settings.GameDirectory))
+            if (string.IsNullOrWhiteSpace(
+                    _settings.GameDirectory))
             {
                 return;
             }
 
-            // Game updates or Steam library moves can make a previously valid
-            // directory disappear, so it is checked again on every launch.
+            // Steam library moves and game updates can invalidate a
+            // previously saved location, so check it on every launch.
             if (TryConnectToGame(
                     _settings.GameDirectory,
                     showError: false))
@@ -211,7 +268,9 @@ namespace Limelight
                 return;
             }
 
-            _settings.GameDirectory = string.Empty;
+            _settings.GameDirectory =
+                string.Empty;
+
             _settingsService.Save(_settings);
 
             GameStatusDescription.Text =

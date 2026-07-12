@@ -1,0 +1,142 @@
+﻿<UserControl x:Class="Limelight.Views.MyModsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}"
+             Foreground="{StaticResource TextBrush}"
+             FontFamily="Bahnschrift, Segoe UI">
+
+    <Grid Margin="38,30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Page heading -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="MY MODS"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource CyanBrush}"/>
+
+                <TextBlock Text="YOUR CHARACTER LIBRARY"
+                           Margin="0,5,0,0"
+                           FontSize="27"
+                           FontWeight="Bold"/>
+
+                <TextBlock Text="Choose which imported mods should take the spotlight."
+                           Margin="0,8,0,0"
+                           FontSize="13"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Padding="14,8"
+                    VerticalAlignment="Top"
+                    Background="#1A1E35"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8" Margin="5,18,-5,0">
+
+                <TextBlock x:Name="ModCountText"
+                           Text="0 MODS"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PurpleBrush}"/>
+            </Border>
+        </Grid>
+
+        <!-- Imported mod list -->
+        <Grid Grid.Row="1"
+              Margin="0,26,0,0">
+
+            <TextBlock x:Name="EmptyLibraryText"
+                       Text="There are no imported mods to display."
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       FontSize="15"
+                       Foreground="{StaticResource MutedTextBrush}"/>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="ModsList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,12"
+                                    Padding="20"
+                                    Background="{StaticResource PanelBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="11">
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="58"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Temporary artwork until Nexus images are added -->
+                                    <Border Width="46"
+                                            Height="46"
+                                            Background="#28213F"
+                                            BorderBrush="{StaticResource PinkBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8">
+
+                                        <TextBlock Text="◆"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="18"
+                                                   Foreground="{StaticResource PinkBrush}"/>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1"
+                                                VerticalAlignment="Center">
+
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontWeight="Bold"/>
+
+                                        <StackPanel Margin="0,6,0,0"
+                                                    Orientation="Horizontal">
+
+                                            <TextBlock Text="{Binding PackageFiles.Count,
+                                                StringFormat={}{0} package files}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource MutedTextBrush}"/>
+
+                                            <TextBlock Text="  •  "
+                                                       Foreground="{StaticResource MutedTextBrush}"/>
+
+                                            <TextBlock Text="{Binding InstalledAt,
+                                                StringFormat={}Imported {0:dd MMM yyyy}}"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource MutedTextBrush}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <Border Grid.Column="2"
+                                            Padding="12,7"
+                                            VerticalAlignment="Center"
+                                            Background="#252943"
+                                            CornerRadius="6">
+
+                                        <TextBlock Text="READY"
+                                                   FontSize="11"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource LimeBrush}"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>

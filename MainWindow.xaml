@@ -1,6 +1,7 @@
 ﻿<Window x:Class="Limelight.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Limelight.Views"
         Title="Limelight — Dead as Disco Mod Manager"
         Width="1220"
         Height="760"
@@ -15,12 +16,10 @@
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="245"/>
-            <ColumnDefinition Width="262*"/>
-            <ColumnDefinition Width="233*"/>
-            <ColumnDefinition Width="480*"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- sidebar -->
+        <!-- Sidebar -->
         <Border Grid.Column="0"
                 Background="{StaticResource SidebarBrush}"
                 BorderBrush="{StaticResource BorderBrush}"
@@ -33,7 +32,7 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- logo -->
+                <!-- Limelight branding -->
                 <StackPanel Margin="26,30,20,34">
                     <TextBlock Text="LIMELIGHT"
                                FontSize="27"
@@ -41,8 +40,8 @@
                                FontStyle="Italic"
                                Foreground="{StaticResource TextBrush}"/>
 
-                    <Rectangle Height="3"
-                               Width="68"
+                    <Rectangle Width="68"
+                               Height="3"
                                Margin="0,7,0,0"
                                HorizontalAlignment="Left"
                                Fill="{StaticResource PinkBrush}"/>
@@ -54,14 +53,17 @@
                                Foreground="{StaticResource CyanBrush}"/>
                 </StackPanel>
 
-                <!-- navigation -->
+                <!-- Navigation -->
                 <StackPanel Grid.Row="1">
 
-                    <Border Margin="8,3"
+                    <Border x:Name="DashboardNavigation"
+                            Margin="8,3"
                             Background="#25203B"
                             CornerRadius="8"
                             BorderBrush="{StaticResource PinkBrush}"
-                            BorderThickness="3,0,0,0">
+                            BorderThickness="3,0,0,0"
+                            MouseLeftButtonDown="ShowDashboard_Click"
+                            Cursor="Hand">
 
                         <TextBlock Text="◆    Dashboard"
                                    Padding="16,13"
@@ -70,6 +72,7 @@
                     </Border>
 
                     <Button Content="◇    My Mods"
+                            Click="ShowMyMods_Click"
                             Style="{StaticResource NavigationButton}"/>
 
                     <Button Content="◇    Browse Nexus"
@@ -82,7 +85,7 @@
                             Style="{StaticResource NavigationButton}"/>
                 </StackPanel>
 
-                <!-- game connection status -->
+                <!-- Game connection status -->
                 <Border Grid.Row="2"
                         Margin="16,16,16,22"
                         Padding="14"
@@ -93,20 +96,21 @@
 
                     <StackPanel>
                         <StackPanel Orientation="Horizontal">
+
                             <Ellipse x:Name="GameStatusDot"
-             Width="8"
-             Height="8"
-             Margin="0,0,9,0"
-             Fill="{StaticResource PinkBrush}"/>
+                                     Width="8"
+                                     Height="8"
+                                     Margin="0,0,9,0"
+                                     Fill="{StaticResource PinkBrush}"/>
 
                             <TextBlock x:Name="GameStatusTitle"
-               Text="GAME NOT CONNECTED"
-               FontSize="11"
-               FontWeight="Bold"/>
+                                       Text="GAME NOT CONNECTED"
+                                       FontSize="11"
+                                       FontWeight="Bold"/>
                         </StackPanel>
 
                         <TextBlock x:Name="GameStatusDescription"
-                                   Text="Please choose the Dead as Disco install location in settigns :D"
+                                   Text="Choose the Dead as Disco installation folder."
                                    Margin="17,7,0,0"
                                    FontSize="11"
                                    LineHeight="17"
@@ -117,14 +121,16 @@
             </Grid>
         </Border>
 
-        <!-- main area -->
-        <Grid Grid.Column="1" Grid.ColumnSpan="3">
+        <!-- Dashboard page -->
+        <Grid x:Name="DashboardPage"
+              Grid.Column="1">
+
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- header -->
+            <!-- Dashboard header -->
             <Grid Margin="34,24,34,18">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -143,9 +149,11 @@
                                FontWeight="Bold"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal">
+
                     <Button x:Name="ImportModButton"
-                            Content="Import Mod"
+                            Content="IMPORT MOD"
                             Click="ImportMod_Click"
                             Margin="0,0,10,0"
                             Style="{StaticResource SecondaryButton}"/>
@@ -160,7 +168,7 @@
 
                 <StackPanel Margin="34,0,34,34">
 
-                    <!-- hero panel -->
+                    <!-- Main spotlight panel -->
                     <Border Padding="30"
                             CornerRadius="14"
                             BorderBrush="#413568"
@@ -169,10 +177,13 @@
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0"
                                                  EndPoint="1,1">
+
                                 <GradientStop Color="#261531"
                                               Offset="0"/>
+
                                 <GradientStop Color="#141832"
                                               Offset="0.52"/>
+
                                 <GradientStop Color="#102D35"
                                               Offset="1"/>
                             </LinearGradientBrush>
@@ -199,10 +210,11 @@
                                            Foreground="#C8C6D8"/>
 
                                 <StackPanel Orientation="Horizontal">
+
                                     <Button x:Name="ConnectGameButton"
-        Content="CONNECT GAME"
-        Click="ConnectGame_Click"
-        Style="{StaticResource PrimaryButton}"/>
+                                            Content="CONNECT GAME"
+                                            Click="ConnectGame_Click"
+                                            Style="{StaticResource PrimaryButton}"/>
 
                                     <Button Content="BROWSE NEXUS"
                                             Margin="10,0,0,0"
@@ -210,6 +222,7 @@
                                 </StackPanel>
                             </StackPanel>
 
+                            <!-- Temporary Limelight artwork -->
                             <Border Grid.Column="1"
                                     Width="150"
                                     Height="150"
@@ -221,8 +234,8 @@
 
                                 <Grid>
                                     <Ellipse Margin="20"
-         Stroke="{StaticResource PinkBrush}"
-         StrokeThickness="3"/>
+                                             Stroke="{StaticResource PinkBrush}"
+                                             StrokeThickness="3"/>
 
                                     <TextBlock Text="L"
                                                HorizontalAlignment="Center"
@@ -235,7 +248,7 @@
                         </Grid>
                     </Border>
 
-                    <!-- statistic cards -->
+                    <!-- Dashboard statistics -->
                     <UniformGrid Columns="3"
                                  Margin="0,18,0,18">
 
@@ -252,7 +265,8 @@
                                            FontWeight="Bold"
                                            Foreground="{StaticResource MutedTextBrush}"/>
 
-                                <TextBlock Text="NONE"
+                                <TextBlock x:Name="ActiveModelText"
+                                           Text="NONE"
                                            Margin="0,8,0,0"
                                            FontSize="22"
                                            FontWeight="Bold"
@@ -295,7 +309,8 @@
                                            FontWeight="Bold"
                                            Foreground="{StaticResource MutedTextBrush}"/>
 
-                                <TextBlock Text="OFFLINE"
+                                <TextBlock x:Name="LiveLoaderStatusText"
+                                           Text="OFFLINE"
                                            Margin="0,8,0,0"
                                            FontSize="22"
                                            FontWeight="Bold"
@@ -304,7 +319,7 @@
                         </Border>
                     </UniformGrid>
 
-                    <!-- empty library panel -->
+                    <!-- Library summary -->
                     <Border Padding="26"
                             Background="{StaticResource PanelBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
@@ -318,10 +333,15 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel>
+                                <TextBlock Text="RECENTLY INSTALLED"
+                                           FontSize="13"
+                                           FontWeight="Bold"/>
+
                                 <TextBlock x:Name="LibrarySummaryText"
                                            Text="Your mod library is empty. Import a ZIP archive or browse Nexus Mods to get started."
                                            Margin="0,10,20,0"
                                            FontSize="13"
+                                           TextWrapping="Wrap"
                                            Foreground="{StaticResource MutedTextBrush}"/>
                             </StackPanel>
 
@@ -331,11 +351,16 @@
                                        VerticalAlignment="Center"
                                        FontSize="11"
                                        FontWeight="Bold"
-                                        Foreground="{StaticResource PurpleBrush}"/>
+                                       Foreground="{StaticResource PurpleBrush}"/>
                         </Grid>
                     </Border>
                 </StackPanel>
             </ScrollViewer>
         </Grid>
+
+        <!-- My Mods occupies the same content area as the dashboard. -->
+        <views:MyModsPage x:Name="MyModsPageControl"
+                          Grid.Column="1"
+                          Visibility="Collapsed"/>
     </Grid>
 </Window>
