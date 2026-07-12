@@ -11,6 +11,7 @@ namespace Limelight
     {
         private readonly SettingsService _settingsService;
         private readonly AppSettings _settings;
+        private readonly ModLibraryService _modLibraryService;
 
         private string? _gameDirectory;
 
@@ -19,12 +20,15 @@ namespace Limelight
             InitializeComponent();
 
             _settingsService = new SettingsService();
+            _modLibraryService = new ModLibraryService();
             _settings = _settingsService.Load();
+          
 
             RestoreSavedGameDirectory();
+            RefreshLibrarySummary();
         }
 
-            private void ImportMod_Click(
+        private async void ImportMod_Click(
     object sender,
     RoutedEventArgs e)
         {
@@ -40,28 +44,73 @@ namespace Limelight
                 return;
             }
 
-            // Validate the contents before copying anything into Limelight's library.
-            var validator = new ModArchiveValidator();
+            ImportModButton.IsEnabled = false;
+            ImportModButton.Content = "IMPORTING...";
 
-            ModArchiveValidationResult result =
-                validator.Validate(fileDialog.FileName);
+            try
+            {
+                // Large archives are copied in the background so Limelight
+                // does not appear frozen during the import.
+                InstalledMod installedMod =
+                    await Task.Run(() =>
+                        _modLibraryService.Import(
+                            fileDialog.FileName));
 
-            if (!result.IsValid)
+                _settings.InstalledMods.Add(installedMod);
+                _settingsService.Save(_settings);
+
+                RefreshLibrarySummary();
+
+                MessageBox.Show(
+                    $"{installedMod.Name} was added to your library.\n\n" +
+                    $"Package files: {installedMod.PackageFiles.Count}",
+                    "Mod imported",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception)
             {
                 MessageBox.Show(
-                    result.Message,
-                    "Invalid mod archive",
+                    $"Limelight could not import this mod.\n\n{exception.Message}",
+                    "Import failed",
                     MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                ImportModButton.IsEnabled = true;
+                ImportModButton.Content = "IMPORT MOD";
+            }
+        }
+
+        private void RefreshLibrarySummary()
+        {
+            // Only count mods whose library folder still exists.
+            int installedCount =
+                _settings.InstalledMods.Count(mod =>
+                    Directory.Exists(mod.InstallDirectory));
+
+                InstalledModCountText.Text =
+                installedCount.ToString();
+
+            if (installedCount == 0)
+            {
+                LibrarySummaryText.Text =
+                    "Your mod library is empty. Import a ZIP archive or browse Nexus Mods to get started.";
+
+                LibraryStatusText.Text =
+                    "NO MODS YET";
 
                 return;
             }
 
-            MessageBox.Show(
-                result.Message,
-                "Mod archive validated",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            LibrarySummaryText.Text =
+                installedCount == 1
+                    ? "1 mod is installed and ready to activate."
+                    : $"{installedCount} mods are installed and ready to activate.";
+
+            LibraryStatusText.Text =
+                $"{installedCount} READY";
         }
 
         private void ConnectGame_Click(object sender, RoutedEventArgs e)

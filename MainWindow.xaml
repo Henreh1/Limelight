@@ -273,7 +273,8 @@
                                            FontWeight="Bold"
                                            Foreground="{StaticResource MutedTextBrush}"/>
 
-                                <TextBlock Text="0"
+                                <TextBlock x:Name="InstalledModCountText"
+                                           Text="0"
                                            Margin="0,8,0,0"
                                            FontSize="22"
                                            FontWeight="Bold"
@@ -317,22 +318,20 @@
                             </Grid.ColumnDefinitions>
 
                             <StackPanel>
-                                <TextBlock Text="RECENTLY INSTALLED"
-                                           FontSize="13"
-                                           FontWeight="Bold"/>
-
-                                <TextBlock Text="Your mod library is empty. Import a ZIP archive or browse Nexus Mods to get started."
+                                <TextBlock x:Name="LibrarySummaryText"
+                                           Text="Your mod library is empty. Import a ZIP archive or browse Nexus Mods to get started."
                                            Margin="0,10,20,0"
                                            FontSize="13"
                                            Foreground="{StaticResource MutedTextBrush}"/>
                             </StackPanel>
 
-                            <TextBlock Grid.Column="1"
+                            <TextBlock x:Name="LibraryStatusText"
+                                       Grid.Column="1"
                                        Text="NO MODS YET"
                                        VerticalAlignment="Center"
                                        FontSize="11"
                                        FontWeight="Bold"
-                                       Foreground="{StaticResource PurpleBrush}"/>
+                                        Foreground="{StaticResource PurpleBrush}"/>
                         </Grid>
                     </Border>
                 </StackPanel>
