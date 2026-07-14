@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace Limelight.Views
 {
@@ -44,6 +45,11 @@ namespace Limelight.Views
                 visibleMods.Count == 1
                     ? "1 MOD"
                     : $"{visibleMods.Count} MODS";
+            ModCountText.Foreground =
+    (Brush)FindResource(
+        visibleMods.Count == 0
+            ? "PinkBrush"
+            : "CyanBrush");
 
             EmptyLibraryText.Visibility =
                 visibleMods.Count == 0

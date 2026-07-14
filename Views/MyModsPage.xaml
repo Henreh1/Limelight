@@ -47,7 +47,7 @@
                            Text="0 MODS"
                            FontSize="12"
                            FontWeight="Bold"
-                           Foreground="{StaticResource PurpleBrush}"/>
+                           Foreground="{StaticResource PinkBrush}"/>
             </Border>
         </Grid>
 
@@ -146,7 +146,7 @@
                                                                     Value="DEACTIVATE"/>
 
                                                             <Setter Property="Background"
-                                                                    Value="{StaticResource LimeBrush}"/>
+                                                                    Value="{StaticResource CyanBrush}"/>
 
                                                             <Setter Property="Foreground"
                                                                     Value="#090B17"/>

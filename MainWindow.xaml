@@ -307,7 +307,7 @@
                        Margin="0,8,0,0"
                        FontSize="22"
                        FontWeight="Bold"
-                       Foreground="{StaticResource CyanBrush}"/>
+                       Foreground="{StaticResource PinkBrush}"/>
                             </StackPanel>
                         </Border>
 
@@ -390,7 +390,7 @@
                                        VerticalAlignment="Center"
                                        FontSize="11"
                                        FontWeight="Bold"
-                                       Foreground="{StaticResource PurpleBrush}"/>
+                                       Foreground="{StaticResource PinkBrush}"/>
                         </Grid>
                     </Border>
                 </StackPanel>

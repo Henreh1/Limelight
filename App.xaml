@@ -15,7 +15,6 @@
         <SolidColorBrush x:Key="PinkBrush" Color="#FF3CAC"/>
         <SolidColorBrush x:Key="CyanBrush" Color="#35E7FF"/>
         <SolidColorBrush x:Key="PurpleBrush" Color="#885CFF"/>
-        <SolidColorBrush x:Key="LimeBrush" Color="#CBFF4A"/>
 
         <SolidColorBrush x:Key="TextBrush" Color="#F7F5FF"/>
         <SolidColorBrush x:Key="MutedTextBrush" Color="#9296AF"/>

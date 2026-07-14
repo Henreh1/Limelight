@@ -26,6 +26,7 @@ namespace Limelight
         private readonly Ue4ssDetectionService _ue4ssDetectionService;
         private readonly Ue4ssReleaseService _ue4ssReleaseService;
         private readonly Ue4ssInstallerService _ue4ssInstallerService;
+        private readonly LiveLoaderBridgeService _liveLoaderBridgeService;
         private readonly DispatcherTimer _gameStatusTimer;
         private bool _hasHandledLiveLoaderPrompt;
         private bool _isLiveLoaderSetupRunning;
@@ -59,6 +60,9 @@ namespace Limelight
 
             _ue4ssInstallerService =
                 new Ue4ssInstallerService();
+
+            _liveLoaderBridgeService =
+                new LiveLoaderBridgeService();
 
             _settings =
                 _settingsService.Load();
@@ -121,13 +125,13 @@ namespace Limelight
 
         private void UpdateGameRunningStatus()
         {
-            string? gameDirectory =
-                _gameDirectory;
-
             if (_isLiveLoaderSetupRunning)
             {
                 return;
             }
+
+            string? gameDirectory =
+                _gameDirectory;
 
             if (string.IsNullOrWhiteSpace(gameDirectory))
             {
@@ -173,8 +177,6 @@ namespace Limelight
 
             if (loader.IsPartiallyInstalled)
             {
-                // Some UE4SS files are present, but the set is incomplete. Showing
-                // this separately helps the user avoid launching a broken setup.
                 LiveLoaderStatusText.Text =
                     "REPAIR NEEDED";
 
@@ -195,13 +197,46 @@ namespace Limelight
                 return;
             }
 
-            // At this stage we know the loader is installed. Once the Limelight
-            // runtime bridge is added, this will become an ONLINE heartbeat.
+            if (!_liveLoaderBridgeService.IsInstalled(loader))
+            {
+                LiveLoaderStatusText.Text =
+                    "BRIDGE NEEDED";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("PinkBrush");
+
+                return;
+            }
+
+            if (!isGameRunning)
+            {
+                LiveLoaderStatusText.Text =
+                    "READY";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("CyanBrush");
+
+                return;
+            }
+
+            if (_liveLoaderBridgeService.IsOnline())
+            {
+                LiveLoaderStatusText.Text =
+                    "ONLINE";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("CyanBrush");
+
+                return;
+            }
+
+            // UE4SS is installed and the game exists, but the Lua bridge has not
+            // produced a recent heartbeat.
             LiveLoaderStatusText.Text =
-                "INSTALLED";
+                "OFFLINE";
 
             LiveLoaderStatusText.Foreground =
-                (Brush)FindResource("LimeBrush");
+                (Brush)FindResource("PinkBrush");
         }
 
         private async Task ShowLiveLoaderSetupPromptIfNeeded()
@@ -224,7 +259,9 @@ namespace Limelight
                 _ue4ssDetectionService.Detect(
                     gameDirectory);
 
-            if (currentInstallation.IsInstalled)
+            if (currentInstallation.IsInstalled &&
+    _liveLoaderBridgeService.IsInstalled(
+        currentInstallation))
             {
                 _hasHandledLiveLoaderPrompt = true;
                 return;
@@ -298,41 +335,65 @@ namespace Limelight
             {
                 IsEnabled = false;
                 Mouse.OverrideCursor = Cursors.Wait;
+                Ue4ssDetectionResult installedLoader =
+    _ue4ssDetectionService.Detect(
+        gameDirectory);
+
+                if (!installedLoader.IsInstalled)
+                {
+                    LiveLoaderStatusText.Text =
+                        "DOWNLOADING";
+
+                    LiveLoaderStatusText.Foreground =
+                        (Brush)FindResource("CyanBrush");
+
+                    downloadedPackage =
+                        await _ue4ssReleaseService.DownloadAsync();
+
+                    // The user could start the game through Steam while the download is
+                    // running, so check again before changing anything in Win64.
+                    if (_gameProcessService.IsGameRunning(gameDirectory))
+                    {
+                        throw new InvalidOperationException(
+                            "Dead as Disco started while the loader was downloading. " +
+                            "Close the game and try the setup again.");
+                    }
+
+                    LiveLoaderStatusText.Text =
+                        "INSTALLING";
+
+                    installResult =
+                        await _ue4ssInstallerService.InstallAsync(
+                            gameDirectory,
+                            downloadedPackage.PackagePath);
+
+                    installedLoader =
+                        _ue4ssDetectionService.Detect(
+                            gameDirectory);
+
+                    if (!installedLoader.IsInstalled)
+                    {
+                        throw new InvalidOperationException(
+                            "The live-loader files could not be verified after installation.");
+                    }
+                }
 
                 LiveLoaderStatusText.Text =
-                    "DOWNLOADING";
+                    "ADDING BRIDGE";
 
                 LiveLoaderStatusText.Foreground =
                     (Brush)FindResource("CyanBrush");
 
-                downloadedPackage =
-                    await _ue4ssReleaseService.DownloadAsync();
+                // The bridge is Limelight's own Lua mod. Existing UE4SS settings and other
+                // installed Lua mods are left in place.
+                _liveLoaderBridgeService.EnsureInstalled(
+                    installedLoader);
 
-                // The user could start the game through Steam while the download is
-                // running, so check again before changing anything in Win64.
-                if (_gameProcessService.IsGameRunning(gameDirectory))
+                if (!_liveLoaderBridgeService.IsInstalled(
+                        installedLoader))
                 {
                     throw new InvalidOperationException(
-                        "Dead as Disco started while the loader was downloading. " +
-                        "Close the game and try the setup again.");
-                }
-
-                LiveLoaderStatusText.Text =
-                    "INSTALLING";
-
-                installResult =
-                    await _ue4ssInstallerService.InstallAsync(
-                        gameDirectory,
-                        downloadedPackage.PackagePath);
-
-                Ue4ssDetectionResult installedLoader =
-                    _ue4ssDetectionService.Detect(
-                        gameDirectory);
-
-                if (!installedLoader.IsInstalled)
-                {
-                    throw new InvalidOperationException(
-                        "The live-loader files could not be verified after installation.");
+                        "The Limelight runtime bridge could not be verified.");
                 }
 
                 _settings.DismissedLiveLoaderPromptForGameDirectory =
@@ -387,7 +448,7 @@ namespace Limelight
                     : string.Empty;
 
             MessageBox.Show(
-                "The live loader was installed successfully." +
+                "The live loader was set up successfully." +
                 backupMessage +
                 "\n\nIt will start the next time Dead as Disco launches.",
                 "Live loader ready",
@@ -848,6 +909,18 @@ namespace Limelight
                 activeMod?.DisplayName.ToUpperInvariant()
                 ?? "NONE";
 
+            InstalledModCountText.Foreground =
+    (Brush)FindResource(
+        installedCount == 0
+            ? "PinkBrush"
+            : "CyanBrush");
+
+            ActiveModelText.Foreground =
+                (Brush)FindResource(
+                    activeMod is null
+                        ? "PinkBrush"
+                        : "CyanBrush");
+
             if (installedCount == 0)
             {
                 LibrarySummaryText.Text =
@@ -855,6 +928,8 @@ namespace Limelight
 
                 LibraryStatusText.Text =
                     "NO MODS YET";
+                LibraryStatusText.Foreground =
+    (Brush)FindResource("PinkBrush");
 
                 return;
             }
@@ -925,6 +1000,10 @@ namespace Limelight
                         WorkingDirectory = gameDirectory,
                         UseShellExecute = true
                     };
+
+                // A fresh game launch must produce a fresh heartbeat before the dashboard
+                // is allowed to report the bridge as online.
+                _liveLoaderBridgeService.ClearHeartbeat();
 
                 // Use the same launcher Windows would use when Pagoda.exe is
                 // double-clicked, allowing Steam to start if the game needs it.
@@ -1027,7 +1106,7 @@ namespace Limelight
 
             // Give the user a clear indication that validation passed.
             GameStatusDot.Fill =
-                (Brush)FindResource("LimeBrush");
+                (Brush)FindResource("CyanBrush");
 
             GameStatusTitle.Text =
                 "GAME CONNECTED";
