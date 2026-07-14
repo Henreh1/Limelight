@@ -11,47 +11,167 @@ namespace Limelight.Services
             "LimelightBridge";
 
         private const string BridgeScript =
-            """
-            local localAppData = os.getenv("LOCALAPPDATA")
+     """
+    local localAppData = os.getenv("LOCALAPPDATA")
 
-            if localAppData == nil then
-                print("[LimelightBridge] LOCALAPPDATA could not be found\n")
-                return
+    if localAppData == nil then
+        print("[LimelightBridge] LOCALAPPDATA could not be found\n")
+        return
+    end
+
+    local runtimeDirectory =
+        localAppData .. "\\Limelight\\Runtime"
+
+    local heartbeatPath =
+        runtimeDirectory .. "\\heartbeat.txt"
+
+    local commandPath =
+        runtimeDirectory .. "\\command.txt"
+
+    local responsePath =
+        runtimeDirectory .. "\\response.txt"
+
+    local lastHeartbeatSecond = 0
+    local lastRequestId = nil
+
+    local function writeHeartbeat()
+        local heartbeatFile =
+            io.open(heartbeatPath, "w")
+
+        if heartbeatFile == nil then
+            return
+        end
+
+        heartbeatFile:write(
+            tostring(os.time()))
+
+        heartbeatFile:close()
+    end
+
+    local function readValues(path)
+        local file = io.open(path, "r")
+
+        if file == nil then
+            return nil
+        end
+
+        local values = {}
+
+        for line in file:lines() do
+            local key, value =
+                line:match("^([^=]+)=(.*)$")
+
+            if key ~= nil then
+                values[key] = value
             end
+        end
 
-            local runtimeDirectory =
-                localAppData .. "\\Limelight\\Runtime"
+        file:close()
+        return values
+    end
 
-            local heartbeatPath =
-                runtimeDirectory .. "\\heartbeat.txt"
+    local function writeResponse(
+        requestId,
+        success,
+        message)
 
-            local function writeHeartbeat()
-                local heartbeatFile =
-                    io.open(heartbeatPath, "w")
+        local temporaryPath =
+            responsePath .. ".tmp"
 
-                if heartbeatFile == nil then
-                    return
-                end
+        local responseFile =
+            io.open(temporaryPath, "w")
 
-                heartbeatFile:write(
-                    tostring(os.time()))
+        if responseFile == nil then
+            return
+        end
 
-                heartbeatFile:close()
-            end
+        responseFile:write(
+            "requestId=" .. tostring(requestId) .. "\n")
 
-            -- Write immediately so Limelight does not need to wait for the
-            -- first timer interval before recognising the bridge.
+        responseFile:write(
+            "success=" ..
+            (success and "true" or "false") ..
+            "\n")
+
+        responseFile:write(
+            "message=" .. tostring(message) .. "\n")
+
+        responseFile:close()
+
+        os.remove(responsePath)
+        os.rename(
+            temporaryPath,
+            responsePath)
+    end
+
+    local function processCommand()
+        local command =
+            readValues(commandPath)
+
+        if command == nil then
+            return
+        end
+
+        local requestId =
+            command.requestId
+
+        if requestId == nil or
+           requestId == "" then
+
+            os.remove(commandPath)
+            return
+        end
+
+        if requestId == lastRequestId then
+            os.remove(commandPath)
+            return
+        end
+
+        lastRequestId = requestId
+
+        local action =
+            string.lower(
+                command.action or "")
+
+        if action == "ping" then
+            writeResponse(
+                requestId,
+                true,
+                "Limelight bridge is online")
+        else
+            writeResponse(
+                requestId,
+                false,
+                "Unknown bridge command: " .. action)
+        end
+
+        os.remove(commandPath)
+    end
+
+    -- Produce a heartbeat immediately so the dashboard can recognise us.
+    writeHeartbeat()
+    lastHeartbeatSecond = os.time()
+
+    LoopAsync(250, function()
+        local currentSecond =
+            os.time()
+
+        if currentSecond ~=
+           lastHeartbeatSecond then
+
             writeHeartbeat()
+            lastHeartbeatSecond =
+                currentSecond
+        end
 
-            LoopAsync(1000, function()
-                writeHeartbeat()
+        processCommand()
 
-                -- Returning false keeps the heartbeat loop running.
-                return false
-            end)
+        -- Returning false keeps the bridge loop running.
+        return false
+    end)
 
-            print("[LimelightBridge] Runtime bridge online\n")
-            """;
+    print("[LimelightBridge] Runtime bridge online\n")
+    """;
 
         public string RuntimeDirectory =>
             Path.Combine(

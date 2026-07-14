@@ -263,18 +263,15 @@ namespace Limelight
     _liveLoaderBridgeService.IsInstalled(
         currentInstallation))
             {
-                _hasHandledLiveLoaderPrompt = true;
-                return;
-            }
+                if (!_gameProcessService.IsGameRunning(
+                        gameDirectory))
+                {
+                    // Limelight owns this script, so it can safely update the bridge
+                    // without modifying the user's other UE4SS mods.
+                    _liveLoaderBridgeService.EnsureInstalled(
+                        currentInstallation);
+                }
 
-            bool wasDismissedForThisGame =
-                string.Equals(
-                    _settings.DismissedLiveLoaderPromptForGameDirectory,
-                    gameDirectory,
-                    StringComparison.OrdinalIgnoreCase);
-
-            if (wasDismissedForThisGame)
-            {
                 _hasHandledLiveLoaderPrompt = true;
                 return;
             }
