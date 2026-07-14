@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace Limelight
 {
@@ -19,8 +20,11 @@ namespace Limelight
         private readonly AppSettings _settings;
         private readonly ModDeploymentService _modDeploymentService;
         private readonly ExistingModsMigrationService _existingModsMigrationService;
+        private readonly GameProcessService _gameProcessService;
+        private readonly DispatcherTimer _gameStatusTimer;
 
         private string? _gameDirectory;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -37,6 +41,9 @@ namespace Limelight
             _existingModsMigrationService =
                 new ExistingModsMigrationService();
 
+            _gameProcessService =
+                new GameProcessService();
+
             _settings =
                 _settingsService.Load();
 
@@ -48,18 +55,85 @@ namespace Limelight
             MyModsPageControl.RemoveModRequested +=
                 RemoveModRequested;
 
+            // Checking every two seconds keeps the display responsive without
+            // constantly asking Windows for its process list.
+            _gameStatusTimer =
+                new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(2)
+                };
+
+            _gameStatusTimer.Tick +=
+                GameStatusTimer_Tick;
+
             RestoreSavedGameDirectory();
             RefreshLibrarySummary();
 
-            // Wait until the window is visible before showing migration prompts.
+            // Wait until the window is visible before starting timers or
+            // showing the existing-mod migration prompt.
             Loaded += MainWindow_Loaded;
+            Closed += MainWindow_Closed;
         }
 
         private void MainWindow_Loaded(
             object sender,
             RoutedEventArgs e)
         {
+            UpdateGameRunningStatus();
+            _gameStatusTimer.Start();
+
             CheckForExistingMods();
+        }
+
+        private void GameStatusTimer_Tick(
+            object? sender,
+            EventArgs e)
+        {
+            UpdateGameRunningStatus();
+        }
+
+        private void MainWindow_Closed(
+            object? sender,
+            EventArgs e)
+        {
+            // The timer belongs to this window, so there is no reason to leave
+            // it checking processes after Limelight has closed.
+            _gameStatusTimer.Stop();
+        }
+
+        private void UpdateGameRunningStatus()
+        {
+            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                LiveLoaderStatusText.Text =
+                    "NOT CONNECTED";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("MutedTextBrush");
+
+                return;
+            }
+
+            bool isGameRunning =
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory);
+
+            if (isGameRunning)
+            {
+                LiveLoaderStatusText.Text =
+                    "GAME RUNNING";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("LimeBrush");
+
+                return;
+            }
+
+            LiveLoaderStatusText.Text =
+                "WAITING";
+
+            LiveLoaderStatusText.Foreground =
+                (Brush)FindResource("MutedTextBrush");
         }
 
         private async void CheckForExistingMods()
