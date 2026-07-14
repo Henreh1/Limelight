@@ -17,6 +17,7 @@ namespace Limelight
         private readonly SettingsService _settingsService;
         private readonly ModLibraryService _modLibraryService;
         private readonly AppSettings _settings;
+        private readonly ModDeploymentService _modDeploymentService;
 
         private string? _gameDirectory;
 
@@ -26,10 +27,182 @@ namespace Limelight
 
             _settingsService = new SettingsService();
             _modLibraryService = new ModLibraryService();
+            _modDeploymentService = new ModDeploymentService();
             _settings = _settingsService.Load();
+
+            // The page reports button clicks to the main window, where the
+            // settings and game directory are available.
+            MyModsPageControl.ToggleModRequested +=
+                ToggleModRequested;
+
+            MyModsPageControl.RemoveModRequested +=
+                RemoveModRequested;
 
             RestoreSavedGameDirectory();
             RefreshLibrarySummary();
+        }
+
+        private async void ToggleModRequested(string modId)
+        {
+            InstalledMod? selectedMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        modId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (selectedMod == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                MessageBox.Show(
+                    "Connect the Dead as Disco installation before activating a mod.",
+                    "Game not connected",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            string gameDirectory =
+                _gameDirectory;
+
+            bool isCurrentlyActive =
+                string.Equals(
+                    _settings.ActiveModId,
+                    selectedMod.Id,
+                    StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                if (isCurrentlyActive)
+                {
+                    await Task.Run(() =>
+                        _modDeploymentService.Deactivate(
+                            gameDirectory));
+
+                    _settings.ActiveModId =
+                        string.Empty;
+                }
+                else
+                {
+                    await Task.Run(() =>
+                        _modDeploymentService.Activate(
+                            selectedMod,
+                            gameDirectory));
+
+                    _settings.ActiveModId =
+                        selectedMod.Id;
+                }
+
+                _settingsService.Save(_settings);
+                RefreshLibrarySummary();
+
+                string message =
+                    isCurrentlyActive
+                        ? $"{selectedMod.DisplayName} was deactivated."
+                        : $"{selectedMod.DisplayName} was activated on disk.";
+
+                MessageBox.Show(
+                    message,
+                    "Limelight",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    $"Limelight could not change the active mod.\n\n{exception.Message}",
+                    "Mod activation failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private async void RemoveModRequested(string modId)
+        {
+            InstalledMod? selectedMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        modId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (selectedMod == null)
+            {
+                return;
+            }
+
+            MessageBoxResult confirmation =
+                MessageBox.Show(
+                    $"Remove {selectedMod.DisplayName} from Limelight?\n\n" +
+                    "This deletes Limelight's stored copy of the mod.",
+                    "Remove mod",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning);
+
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            bool isCurrentlyActive =
+                string.Equals(
+                    _settings.ActiveModId,
+                    selectedMod.Id,
+                    StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                // Deactivate first so removing an active library copy never
+                // leaves its managed packages inside the game directory.
+                if (isCurrentlyActive)
+                {
+                    if (string.IsNullOrWhiteSpace(_gameDirectory))
+                    {
+                        throw new InvalidOperationException(
+                            "Reconnect the game before removing the active mod.");
+                    }
+
+                    string gameDirectory =
+                        _gameDirectory;
+
+                    await Task.Run(() =>
+                        _modDeploymentService.Deactivate(
+                            gameDirectory));
+
+                    _settings.ActiveModId =
+                        string.Empty;
+                }
+
+                await Task.Run(() =>
+                {
+                    if (Directory.Exists(
+                            selectedMod.InstallDirectory))
+                    {
+                        Directory.Delete(
+                            selectedMod.InstallDirectory,
+                            recursive: true);
+                    }
+                });
+
+                _settings.InstalledMods.Remove(
+                    selectedMod);
+
+                _settingsService.Save(_settings);
+                RefreshLibrarySummary();
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    $"Limelight could not remove this mod.\n\n{exception.Message}",
+                    "Remove failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
 
         private void ShowMyMods_Click(
@@ -202,8 +375,7 @@ namespace Limelight
 
         private void RefreshLibrarySummary()
         {
-            // Ignore library entries whose extracted folder was
-            // manually removed outside Limelight.
+            // Ignore entries whose extracted folder was manually removed.
             List<InstalledMod> availableMods =
                 _settings.InstalledMods
                     .Where(mod =>
@@ -211,15 +383,38 @@ namespace Limelight
                             mod.InstallDirectory))
                     .ToList();
 
+            InstalledMod? activeMod =
+                availableMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        _settings.ActiveModId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            // A missing library folder means the saved active selection
+            // is no longer valid.
+            if (activeMod == null &&
+                !string.IsNullOrWhiteSpace(
+                    _settings.ActiveModId))
+            {
+                _settings.ActiveModId =
+                    string.Empty;
+
+                _settingsService.Save(_settings);
+            }
+
             int installedCount =
                 availableMods.Count;
 
-            // Keep the dashboard and My Mods page on the same snapshot.
             MyModsPageControl.ShowMods(
-                availableMods);
+                availableMods,
+                _settings.ActiveModId);
 
             InstalledModCountText.Text =
                 installedCount.ToString();
+
+            ActiveModelText.Text =
+                activeMod?.DisplayName.ToUpperInvariant()
+                ?? "NONE";
 
             if (installedCount == 0)
             {

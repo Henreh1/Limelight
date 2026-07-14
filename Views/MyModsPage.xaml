@@ -120,17 +120,48 @@
                                         </StackPanel>
                                     </StackPanel>
 
-                                    <Border Grid.Column="2"
-                                            Padding="12,7"
-                                            VerticalAlignment="Center"
-                                            Background="#252943"
-                                            CornerRadius="6">
+                                    <StackPanel Grid.Column="2"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center">
 
-                                        <TextBlock Text="READY"
-                                                   FontSize="11"
-                                                   FontWeight="Bold"
-                                                   Foreground="{StaticResource LimeBrush}"/>
-                                    </Border>
+                                        <Button Tag="{Binding Id}"
+                                                Click="ToggleMod_Click"
+                                                Margin="0,0,8,0">
+
+                                            <Button.Style>
+                                                <Style TargetType="Button"
+                                                       BasedOn="{StaticResource PrimaryButton}">
+
+                                                    <Setter Property="Content"
+                                                            Value="ACTIVATE"/>
+
+                                                    <Setter Property="MinWidth"
+                                                            Value="105"/>
+
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}"
+                                                                     Value="True">
+
+                                                            <Setter Property="Content"
+                                                                    Value="DEACTIVATE"/>
+
+                                                            <Setter Property="Background"
+                                                                    Value="{StaticResource LimeBrush}"/>
+
+                                                            <Setter Property="Foreground"
+                                                                    Value="#090B17"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+
+                                        <Button Content="REMOVE"
+                                        Tag="{Binding Id}"
+                                        Click="RemoveMod_Click"
+                                        Style="{StaticResource SecondaryButton}"/>
+                                    </StackPanel>
+
                                 </Grid>
                             </Border>
                         </DataTemplate>
