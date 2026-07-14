@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Diagnostics;
 
 namespace Limelight
 {
@@ -609,6 +610,78 @@ namespace Limelight
                 $"{installedCount} READY";
         }
 
+        private void LaunchGame_Click(
+    object sender,
+    RoutedEventArgs e)
+        {
+            string? gameDirectory =
+                _gameDirectory;
+
+            if (string.IsNullOrWhiteSpace(gameDirectory))
+            {
+                MessageBox.Show(
+                    "Connect Limelight to your Dead as Disco folder first.",
+                    "Game not connected",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            if (_gameProcessService.IsGameRunning(gameDirectory))
+            {
+                // Starting a second copy can cause Steam or the game to display
+                // confusing errors, so keep the already-running instance.
+                MessageBox.Show(
+                    "Dead as Disco is already running.",
+                    "Game already running",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            string executablePath =
+                Path.Combine(
+                    gameDirectory,
+                    "Pagoda.exe");
+
+            if (!File.Exists(executablePath))
+            {
+                MessageBox.Show(
+                    "Limelight could not find Pagoda.exe.\n\n" +
+                    "Reconnect the game folder in Settings and try again.",
+                    "Game executable missing",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            try
+            {
+                ProcessStartInfo startInfo =
+                    new ProcessStartInfo
+                    {
+                        FileName = executablePath,
+                        WorkingDirectory = gameDirectory,
+                        UseShellExecute = true
+                    };
+
+                // Use the same launcher Windows would use when Pagoda.exe is
+                // double-clicked, allowing Steam to start if the game needs it.
+                Process.Start(startInfo);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    "Dead as Disco could not be started.\n\n" +
+                    exception.Message,
+                    "Launch failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
         private void ConnectGame_Click(
             object sender,
             RoutedEventArgs e)

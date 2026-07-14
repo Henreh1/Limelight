@@ -172,6 +172,7 @@
                             Style="{StaticResource SecondaryButton}"/>
 
                     <Button Content="LAUNCH GAME"
+                            Click="LaunchGame_Click"
                             Style="{StaticResource PrimaryButton}"/>
                 </StackPanel>
             </Grid>
