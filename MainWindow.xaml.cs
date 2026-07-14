@@ -22,6 +22,7 @@ namespace Limelight
         private readonly ModDeploymentService _modDeploymentService;
         private readonly ExistingModsMigrationService _existingModsMigrationService;
         private readonly GameProcessService _gameProcessService;
+        private readonly Ue4ssDetectionService _ue4ssDetectionService;
         private readonly DispatcherTimer _gameStatusTimer;
 
         private string? _gameDirectory;
@@ -44,6 +45,9 @@ namespace Limelight
 
             _gameProcessService =
                 new GameProcessService();
+
+            _ue4ssDetectionService =
+                new Ue4ssDetectionService();
 
             _settings =
                 _settingsService.Load();
@@ -104,8 +108,17 @@ namespace Limelight
 
         private void UpdateGameRunningStatus()
         {
-            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            string? gameDirectory =
+                _gameDirectory;
+
+            if (string.IsNullOrWhiteSpace(gameDirectory))
             {
+                GameProcessStatusText.Text =
+                    "NOT CONNECTED";
+
+                GameProcessStatusText.Foreground =
+                    (Brush)FindResource("MutedTextBrush");
+
                 LiveLoaderStatusText.Text =
                     "NOT CONNECTED";
 
@@ -117,24 +130,60 @@ namespace Limelight
 
             bool isGameRunning =
                 _gameProcessService.IsGameRunning(
-                    _gameDirectory);
+                    gameDirectory);
 
             if (isGameRunning)
             {
+                GameProcessStatusText.Text =
+                    "RUNNING";
+
+                GameProcessStatusText.Foreground =
+                    (Brush)FindResource("CyanBrush");
+            }
+            else
+            {
+                GameProcessStatusText.Text =
+                    "NOT RUNNING";
+
+                GameProcessStatusText.Foreground =
+                    (Brush)FindResource("PinkBrush");
+            }
+
+            Ue4ssDetectionResult loader =
+                _ue4ssDetectionService.Detect(
+                    gameDirectory);
+
+            if (loader.IsPartiallyInstalled)
+            {
+                // Some UE4SS files are present, but the set is incomplete. Showing
+                // this separately helps the user avoid launching a broken setup.
                 LiveLoaderStatusText.Text =
-                    "GAME RUNNING";
+                    "REPAIR NEEDED";
 
                 LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("LimeBrush");
+                    (Brush)FindResource("PinkBrush");
 
                 return;
             }
 
+            if (!loader.IsInstalled)
+            {
+                LiveLoaderStatusText.Text =
+                    "NOT INSTALLED";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("PinkBrush");
+
+                return;
+            }
+
+            // At this stage we know the loader is installed. Once the Limelight
+            // runtime bridge is added, this will become an ONLINE heartbeat.
             LiveLoaderStatusText.Text =
-                "WAITING";
+                "INSTALLED";
 
             LiveLoaderStatusText.Foreground =
-                (Brush)FindResource("MutedTextBrush");
+                (Brush)FindResource("LimeBrush");
         }
 
         private async void CheckForExistingMods()

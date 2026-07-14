@@ -263,72 +263,97 @@
                     </Border>
 
                     <!-- Dashboard statistics -->
-                    <UniformGrid Columns="3"
-                                 Margin="0,18,0,18">
+                    <UniformGrid Columns="4"
+             Margin="0,18,0,18">
 
-                        <Border Margin="0,0,9,0"
-                                Padding="20"
-                                Background="{StaticResource PanelBrush}"
-                                BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="11">
+                        <Border Margin="0,0,7,0"
+            Padding="20"
+            Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="11">
 
                             <StackPanel>
                                 <TextBlock Text="ACTIVE MODEL"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource MutedTextBrush}"/>
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource MutedTextBrush}"/>
 
                                 <TextBlock x:Name="ActiveModelText"
-                                           Text="NONE"
-                                           Margin="0,8,0,0"
-                                           FontSize="22"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource PinkBrush}"/>
+                       Text="NONE"
+                       Margin="0,8,0,0"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{StaticResource PinkBrush}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="9,0"
-                                Padding="20"
-                                Background="{StaticResource PanelBrush}"
-                                BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="11">
+                        <Border Margin="7,0"
+            Padding="20"
+            Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="11">
 
                             <StackPanel>
                                 <TextBlock Text="INSTALLED MODS"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource MutedTextBrush}"/>
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource MutedTextBrush}"/>
 
                                 <TextBlock x:Name="InstalledModCountText"
-                                           Text="0"
-                                           Margin="0,8,0,0"
-                                           FontSize="22"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource CyanBrush}"/>
+                       Text="0"
+                       Margin="0,8,0,0"
+                       FontSize="22"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource CyanBrush}"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Margin="9,0,0,0"
-                                Padding="20"
-                                Background="{StaticResource PanelBrush}"
-                                BorderBrush="{StaticResource BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="11">
+                        <Border Margin="7,0"
+            Padding="20"
+            Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="11">
+
+                            <StackPanel>
+                                <TextBlock Text="GAME STATUS"
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource MutedTextBrush}"/>
+
+                                <TextBlock x:Name="GameProcessStatusText"
+                       Text="NOT RUNNING"
+                       Margin="0,8,0,0"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{StaticResource PinkBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Margin="7,0,0,0"
+            Padding="20"
+            Background="{StaticResource PanelBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="11">
 
                             <StackPanel>
                                 <TextBlock Text="LIVE LOADER"
-                                           FontSize="11"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource MutedTextBrush}"/>
+                       FontSize="11"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource MutedTextBrush}"/>
 
                                 <TextBlock x:Name="LiveLoaderStatusText"
-                                           Text="OFFLINE"
-                                           Margin="0,8,0,0"
-                                           FontSize="22"
-                                           FontWeight="Bold"
-                                           Foreground="{StaticResource LimeBrush}"/>
+                       Text="NOT INSTALLED"
+                       Margin="0,8,0,0"
+                       FontSize="18"
+                       FontWeight="Bold"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{StaticResource PinkBrush}"/>
                             </StackPanel>
                         </Border>
                     </UniformGrid>
