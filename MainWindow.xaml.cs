@@ -18,20 +18,30 @@ namespace Limelight
         private readonly ModLibraryService _modLibraryService;
         private readonly AppSettings _settings;
         private readonly ModDeploymentService _modDeploymentService;
+        private readonly ExistingModsMigrationService _existingModsMigrationService;
 
         private string? _gameDirectory;
-
         public MainWindow()
         {
             InitializeComponent();
 
-            _settingsService = new SettingsService();
-            _modLibraryService = new ModLibraryService();
-            _modDeploymentService = new ModDeploymentService();
-            _settings = _settingsService.Load();
+            _settingsService =
+                new SettingsService();
 
-            // The page reports button clicks to the main window, where the
-            // settings and game directory are available.
+            _modLibraryService =
+                new ModLibraryService();
+
+            _modDeploymentService =
+                new ModDeploymentService();
+
+            _existingModsMigrationService =
+                new ExistingModsMigrationService();
+
+            _settings =
+                _settingsService.Load();
+
+            // The page reports its button clicks to the main window, where
+            // the settings and connected game directory are available.
             MyModsPageControl.ToggleModRequested +=
                 ToggleModRequested;
 
@@ -40,6 +50,95 @@ namespace Limelight
 
             RestoreSavedGameDirectory();
             RefreshLibrarySummary();
+
+            // Wait until the window is visible before showing migration prompts.
+            Loaded += MainWindow_Loaded;
+        }
+
+        private void MainWindow_Loaded(
+            object sender,
+            RoutedEventArgs e)
+        {
+            CheckForExistingMods();
+        }
+
+        private async void CheckForExistingMods()
+        {
+            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                return;
+            }
+
+            string gameDirectory =
+                _gameDirectory;
+
+            int existingModCount =
+                _existingModsMigrationService.CountExistingMods(
+                    gameDirectory);
+
+            if (existingModCount == 0)
+            {
+                return;
+            }
+
+            string modLabel =
+                existingModCount == 1
+                    ? "1 existing mod"
+                    : $"{existingModCount} existing mods";
+
+            MessageBoxResult choice =
+                MessageBox.Show(
+                    $"Limelight found {modLabel} inside the game's ~mods folder.\n\n" +
+                    "Would you like to move them into the Limelight library?\n\n" +
+                    "No files will be removed until the library has been saved.",
+                    "Existing mods found",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+            if (choice != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                List<InstalledMod> librarySnapshot =
+                    _settings.InstalledMods.ToList();
+
+                ExistingModsMigrationPlan plan =
+                    await Task.Run(() =>
+                        _existingModsMigrationService.PrepareMigration(
+                            gameDirectory,
+                            librarySnapshot));
+
+                _settings.InstalledMods.AddRange(
+                    plan.ImportedMods);
+
+                _settingsService.Save(_settings);
+
+                // Originals are removed only after settings.json contains
+                // every successfully prepared library entry.
+                await Task.Run(() =>
+                    _existingModsMigrationService.CompleteMigration(
+                        plan));
+
+                RefreshLibrarySummary();
+
+                MessageBox.Show(
+                    "The existing mods were moved into Limelight successfully.\n\n" +
+                    "Choose the model you want and select Activate.",
+                    "Migration complete",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    $"Limelight could not finish the migration.\n\n{exception.Message}",
+                    "Migration failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
 
         private async void ToggleModRequested(string modId)
@@ -475,6 +574,8 @@ namespace Limelight
                 "Limelight",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
+
+            CheckForExistingMods();
         }
 
         private bool TryConnectToGame(
