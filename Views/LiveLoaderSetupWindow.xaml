@@ -1,0 +1,104 @@
+﻿<Window x:Class="Limelight.Views.LiveLoaderSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Live Loader Setup"
+        Width="620"
+        Height="430"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        FontFamily="Bahnschrift, Segoe UI"
+        Foreground="{StaticResource TextBrush}">
+
+    <Border Padding="1"
+            Background="{StaticResource BorderBrush}"
+            CornerRadius="16">
+
+        <Border Padding="36"
+                Background="{StaticResource BackgroundBrush}"
+                CornerRadius="15">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Heading -->
+                <StackPanel>
+                    <TextBlock Text="OPTIONAL LIVE LOADER"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <TextBlock Text="ENABLE LIVE MODEL SWITCHING?"
+                               Margin="0,10,0,0"
+                               FontSize="28"
+                               FontWeight="Black"/>
+
+                    <Rectangle Width="76"
+                               Height="4"
+                               Margin="0,14,0,0"
+                               HorizontalAlignment="Left"
+                               Fill="{StaticResource PinkBrush}"/>
+                </StackPanel>
+
+                <!-- Explanation -->
+                <StackPanel Grid.Row="1"
+                            Margin="0,24,0,0">
+
+                    <TextBlock Text="Limelight did not find the optional runtime files required for live model switching."
+                               FontSize="15"
+                               LineHeight="23"
+                               TextWrapping="Wrap"
+                               Foreground="#C8C6D8"/>
+
+                    <Border Margin="0,20,0,0"
+                            Padding="20"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+
+                        <StackPanel>
+                            <TextBlock Text="◆  Adds the Limelight runtime bridge"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"/>
+
+                            <TextBlock Text="◆  Enables model changes while the game is running"
+                                       Margin="0,12,0,0"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"/>
+
+                            <TextBlock Text="◆  The mod library still works if you choose Not Now"
+                                       Margin="0,12,0,0"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Actions -->
+                <StackPanel Grid.Row="2"
+                            Margin="0,28,0,0"
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal">
+
+                    <Button Content="NOT NOW"
+                            Click="NotNow_Click"
+                            Style="{StaticResource SecondaryButton}"/>
+
+                    <Button Content="SET UP LIVE LOADER"
+                            Click="Setup_Click"
+                            Margin="12,0,0,0"
+                            Style="{StaticResource PrimaryButton}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Border>
+</Window>

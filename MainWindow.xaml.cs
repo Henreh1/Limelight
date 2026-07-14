@@ -1,5 +1,6 @@
 ﻿using Limelight.Models;
 using Limelight.Services;
+using Limelight.Views;
 using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
@@ -23,7 +24,11 @@ namespace Limelight
         private readonly ExistingModsMigrationService _existingModsMigrationService;
         private readonly GameProcessService _gameProcessService;
         private readonly Ue4ssDetectionService _ue4ssDetectionService;
+        private readonly Ue4ssReleaseService _ue4ssReleaseService;
+        private readonly Ue4ssInstallerService _ue4ssInstallerService;
         private readonly DispatcherTimer _gameStatusTimer;
+        private bool _hasHandledLiveLoaderPrompt;
+        private bool _isLiveLoaderSetupRunning;
 
         private string? _gameDirectory;
 
@@ -48,6 +53,12 @@ namespace Limelight
 
             _ue4ssDetectionService =
                 new Ue4ssDetectionService();
+
+            _ue4ssReleaseService =
+                new Ue4ssReleaseService();
+
+            _ue4ssInstallerService =
+                new Ue4ssInstallerService();
 
             _settings =
                 _settingsService.Load();
@@ -80,14 +91,16 @@ namespace Limelight
             Closed += MainWindow_Closed;
         }
 
-        private void MainWindow_Loaded(
-            object sender,
-            RoutedEventArgs e)
+        private async void MainWindow_Loaded(
+    object sender,
+    RoutedEventArgs e)
         {
             UpdateGameRunningStatus();
             _gameStatusTimer.Start();
 
-            CheckForExistingMods();
+            // Finish any existing-mod migration before opening another modal window.
+            await CheckForExistingMods();
+            await ShowLiveLoaderSetupPromptIfNeeded();
         }
 
         private void GameStatusTimer_Tick(
@@ -110,6 +123,11 @@ namespace Limelight
         {
             string? gameDirectory =
                 _gameDirectory;
+
+            if (_isLiveLoaderSetupRunning)
+            {
+                return;
+            }
 
             if (string.IsNullOrWhiteSpace(gameDirectory))
             {
@@ -186,7 +204,198 @@ namespace Limelight
                 (Brush)FindResource("LimeBrush");
         }
 
-        private async void CheckForExistingMods()
+        private async Task ShowLiveLoaderSetupPromptIfNeeded()
+        {
+            if (_hasHandledLiveLoaderPrompt ||
+                _isLiveLoaderSetupRunning)
+            {
+                return;
+            }
+
+            string? gameDirectory =
+                _gameDirectory;
+
+            if (string.IsNullOrWhiteSpace(gameDirectory))
+            {
+                return;
+            }
+
+            Ue4ssDetectionResult currentInstallation =
+                _ue4ssDetectionService.Detect(
+                    gameDirectory);
+
+            if (currentInstallation.IsInstalled)
+            {
+                _hasHandledLiveLoaderPrompt = true;
+                return;
+            }
+
+            bool wasDismissedForThisGame =
+                string.Equals(
+                    _settings.DismissedLiveLoaderPromptForGameDirectory,
+                    gameDirectory,
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (wasDismissedForThisGame)
+            {
+                _hasHandledLiveLoaderPrompt = true;
+                return;
+            }
+
+            _hasHandledLiveLoaderPrompt = true;
+
+            LiveLoaderSetupWindow setupWindow =
+                new LiveLoaderSetupWindow
+                {
+                    Owner = this
+                };
+
+            setupWindow.ShowDialog();
+
+            if (setupWindow.PromptDismissed)
+            {
+                // Store the actual directory rather than one global yes/no value. A
+                // different installation should receive its own setup choice.
+                _settings.DismissedLiveLoaderPromptForGameDirectory =
+                    gameDirectory;
+
+                _settingsService.Save(_settings);
+                return;
+            }
+
+            if (!setupWindow.SetupRequested)
+            {
+                return;
+            }
+
+            if (_gameProcessService.IsGameRunning(gameDirectory))
+            {
+                MessageBox.Show(
+                    "Close Dead as Disco before setting up the live loader.\n\n" +
+                    "Limelight will ask again the next time it starts.",
+                    "Game is running",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+
+                return;
+            }
+
+            _isLiveLoaderSetupRunning = true;
+
+            bool previousEnabledState =
+                IsEnabled;
+
+            Ue4ssPackageDownload? downloadedPackage =
+                null;
+
+            Ue4ssInstallResult? installResult =
+                null;
+
+            Exception? setupFailure =
+                null;
+
+            try
+            {
+                IsEnabled = false;
+                Mouse.OverrideCursor = Cursors.Wait;
+
+                LiveLoaderStatusText.Text =
+                    "DOWNLOADING";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("CyanBrush");
+
+                downloadedPackage =
+                    await _ue4ssReleaseService.DownloadAsync();
+
+                // The user could start the game through Steam while the download is
+                // running, so check again before changing anything in Win64.
+                if (_gameProcessService.IsGameRunning(gameDirectory))
+                {
+                    throw new InvalidOperationException(
+                        "Dead as Disco started while the loader was downloading. " +
+                        "Close the game and try the setup again.");
+                }
+
+                LiveLoaderStatusText.Text =
+                    "INSTALLING";
+
+                installResult =
+                    await _ue4ssInstallerService.InstallAsync(
+                        gameDirectory,
+                        downloadedPackage.PackagePath);
+
+                Ue4ssDetectionResult installedLoader =
+                    _ue4ssDetectionService.Detect(
+                        gameDirectory);
+
+                if (!installedLoader.IsInstalled)
+                {
+                    throw new InvalidOperationException(
+                        "The live-loader files could not be verified after installation.");
+                }
+
+                _settings.DismissedLiveLoaderPromptForGameDirectory =
+                    string.Empty;
+
+                _settingsService.Save(_settings);
+            }
+            catch (Exception exception)
+            {
+                setupFailure = exception;
+            }
+            finally
+            {
+                if (downloadedPackage is not null)
+                {
+                    try
+                    {
+                        // The installed files and any rollback backup are elsewhere,
+                        // so the downloaded ZIP is no longer needed.
+                        File.Delete(
+                            downloadedPackage.PackagePath);
+                    }
+                    catch
+                    {
+                        // Windows can clear this temporary file later.
+                    }
+                }
+
+                IsEnabled = previousEnabledState;
+                Mouse.OverrideCursor = null;
+
+                _isLiveLoaderSetupRunning = false;
+                UpdateGameRunningStatus();
+            }
+
+            if (setupFailure is not null)
+            {
+                MessageBox.Show(
+                    "Limelight could not set up the live loader.\n\n" +
+                    setupFailure.Message +
+                    "\n\nNo mod-library features were disabled.",
+                    "Live-loader setup failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+
+                return;
+            }
+
+            string backupMessage =
+                installResult?.CreatedBackup == true
+                    ? "\n\nExisting loader files were backed up before installation."
+                    : string.Empty;
+
+            MessageBox.Show(
+                "The live loader was installed successfully." +
+                backupMessage +
+                "\n\nIt will start the next time Dead as Disco launches.",
+                "Live loader ready",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private async Task CheckForExistingMods()
         {
             if (string.IsNullOrWhiteSpace(_gameDirectory))
             {
@@ -731,7 +940,7 @@ namespace Limelight
                     MessageBoxImage.Error);
             }
         }
-        private void ConnectGame_Click(
+        private async void ConnectGame_Click(
             object sender,
             RoutedEventArgs e)
         {
@@ -771,7 +980,11 @@ namespace Limelight
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
 
-            CheckForExistingMods();
+            // A newly selected folder should receive its own optional-loader prompt.
+            _hasHandledLiveLoaderPrompt = false;
+
+            await CheckForExistingMods();
+            await ShowLiveLoaderSetupPromptIfNeeded();
         }
 
         private bool TryConnectToGame(
