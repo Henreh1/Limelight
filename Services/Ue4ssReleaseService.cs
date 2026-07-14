@@ -5,7 +5,6 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -24,8 +23,21 @@ namespace Limelight.Services
 
     public sealed class Ue4ssReleaseService
     {
-        private const string ReleaseApiUrl =
-            "https://api.github.com/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest";
+        public const string CompatiblePackageName =
+            "UE4SS_v3.0.1-1009-gc2ac2464.zip";
+
+        public const string CompatibleReleaseName =
+            "UE4SS v3.0.1-1009 (c2ac2464)";
+
+        public const string CompatibleDllSha256 =
+            "A79B894D4A499C066985B47354D2A3A1FC9069CEBEFE585BA458BB8F572930B5";
+
+        private const string CompatiblePackageUrl =
+            "https://github.com/UE4SS-RE/RE-UE4SS/releases/download/experimental/" +
+            CompatiblePackageName;
+
+        private const string CompatiblePackageSha256 =
+            "BA53BFE27B82895A6A4D0B98C3ACD93E93E913C27134F82C09F619C7C1AAA4C6";
 
         private static readonly HttpClient HttpClient =
             CreateHttpClient();
@@ -37,46 +49,6 @@ namespace Limelight.Services
 
             try
             {
-                using HttpResponseMessage releaseResponse =
-                    await HttpClient.GetAsync(
-                        ReleaseApiUrl,
-                        cancellationToken);
-
-                releaseResponse.EnsureSuccessStatusCode();
-
-                await using Stream releaseStream =
-                    await releaseResponse.Content.ReadAsStreamAsync(
-                        cancellationToken);
-
-                using JsonDocument document =
-                    await JsonDocument.ParseAsync(
-                        releaseStream,
-                        cancellationToken:
-                            cancellationToken);
-
-                JsonElement release =
-                    document.RootElement;
-
-                JsonElement selectedAsset =
-                    FindStandardPackage(release);
-
-                string assetName =
-                    selectedAsset
-                        .GetProperty("name")
-                        .GetString()
-                    ?? throw new InvalidDataException(
-                        "The UE4SS package has no filename.");
-
-                string downloadUrl =
-                    selectedAsset
-                        .GetProperty("browser_download_url")
-                        .GetString()
-                    ?? throw new InvalidDataException(
-                        "The UE4SS package has no download address.");
-
-                string releaseName =
-                    GetReleaseName(release);
-
                 string downloadDirectory =
                     Path.Combine(
                         Path.GetTempPath(),
@@ -89,26 +61,24 @@ namespace Limelight.Services
                 downloadedFile =
                     Path.Combine(
                         downloadDirectory,
-                        Path.GetFileName(assetName));
+                        CompatiblePackageName);
 
                 await DownloadFileAsync(
-                    downloadUrl,
+                    CompatiblePackageUrl,
                     downloadedFile,
                     cancellationToken);
 
-                bool digestVerified =
-                    await VerifyPublishedDigestAsync(
-                        selectedAsset,
-                        downloadedFile,
-                        cancellationToken);
+                await VerifyPackageDigestAsync(
+                    downloadedFile,
+                    cancellationToken);
 
                 ValidatePackage(downloadedFile);
 
                 return new Ue4ssPackageDownload
                 {
                     PackagePath = downloadedFile,
-                    ReleaseName = releaseName,
-                    DigestVerified = digestVerified
+                    ReleaseName = CompatibleReleaseName,
+                    DigestVerified = true
                 };
             }
             catch
@@ -138,58 +108,6 @@ namespace Limelight.Services
                 TimeSpan.FromMinutes(5);
 
             return client;
-        }
-
-        private static JsonElement FindStandardPackage(
-            JsonElement release)
-        {
-            foreach (JsonElement asset in
-                     release.GetProperty("assets")
-                         .EnumerateArray())
-            {
-                string assetName =
-                    asset.GetProperty("name").GetString()
-                    ?? string.Empty;
-
-                bool isStandardPackage =
-                    assetName.StartsWith(
-                        "UE4SS_",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    assetName.EndsWith(
-                        ".zip",
-                        StringComparison.OrdinalIgnoreCase) &&
-                    !assetName.Contains(
-                        "zDEV",
-                        StringComparison.OrdinalIgnoreCase);
-
-                if (isStandardPackage)
-                {
-                    return asset;
-                }
-            }
-
-            throw new InvalidDataException(
-                "The official UE4SS release does not contain a standard Windows package.");
-        }
-
-        private static string GetReleaseName(
-            JsonElement release)
-        {
-            if (release.TryGetProperty(
-                    "name",
-                    out JsonElement nameElement))
-            {
-                string? releaseName =
-                    nameElement.GetString();
-
-                if (!string.IsNullOrWhiteSpace(releaseName))
-                {
-                    return releaseName;
-                }
-            }
-
-            return release.GetProperty("tag_name").GetString()
-                ?? "UE4SS experimental";
         }
 
         private static async Task DownloadFileAsync(
@@ -223,34 +141,10 @@ namespace Limelight.Services
                 cancellationToken);
         }
 
-        private static async Task<bool> VerifyPublishedDigestAsync(
-            JsonElement asset,
+        private static async Task VerifyPackageDigestAsync(
             string packagePath,
             CancellationToken cancellationToken)
         {
-            if (!asset.TryGetProperty(
-                    "digest",
-                    out JsonElement digestElement) ||
-                digestElement.ValueKind != JsonValueKind.String)
-            {
-                return false;
-            }
-
-            string? publishedDigest =
-                digestElement.GetString();
-
-            if (string.IsNullOrWhiteSpace(publishedDigest) ||
-                !publishedDigest.StartsWith(
-                    "sha256:",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            string expectedHash =
-                publishedDigest["sha256:".Length..]
-                    .Trim();
-
             await using FileStream packageStream =
                 File.OpenRead(packagePath);
 
@@ -263,15 +157,13 @@ namespace Limelight.Services
                 Convert.ToHexString(actualHash);
 
             if (!string.Equals(
-                    expectedHash,
+                    CompatiblePackageSha256,
                     actualHashText,
                     StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException(
                     "The UE4SS package did not match its published SHA-256 digest.");
             }
-
-            return true;
         }
 
         private static void ValidatePackage(

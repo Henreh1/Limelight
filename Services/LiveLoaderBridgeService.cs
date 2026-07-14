@@ -269,6 +269,28 @@ namespace Limelight.Services
             }
         }
 
+        public bool HasBridgeFiles(
+            Ue4ssDetectionResult installation)
+        {
+            if (!installation.IsInstalled ||
+                string.IsNullOrWhiteSpace(
+                    installation.ModsDirectory))
+            {
+                return false;
+            }
+
+            string scriptPath =
+                Path.Combine(
+                    installation.ModsDirectory,
+                    BridgeName,
+                    "scripts",
+                    "main.lua");
+
+            // The bridge script only exists after the user has accepted
+            // setup, so it is safe for Limelight to repair its mods.txt entry.
+            return File.Exists(scriptPath);
+        }
+
         public bool IsOnline()
         {
             try

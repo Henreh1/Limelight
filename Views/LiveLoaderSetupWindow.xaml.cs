@@ -5,6 +5,9 @@ namespace Limelight.Views
 {
     public partial class LiveLoaderSetupWindow : Window
     {
+        private const string Ue4ssReleaseUrl =
+            "https://github.com/UE4SS-RE/RE-UE4SS/releases/tag/experimental";
+
         public bool SetupRequested { get; private set; }
 
         public bool PromptDismissed { get; private set; }
@@ -34,6 +37,20 @@ namespace Limelight.Views
             // Remembering this choice will prevent the popup from appearing
             // every time Limelight checks the game folder.
             DialogResult = false;
+        }
+
+        private void OpenSource_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            // Use the user's normal browser so the source page opens with
+            // their existing GitHub session and accessibility settings.
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = Ue4ssReleaseUrl,
+                    UseShellExecute = true
+                });
         }
 
         private void Window_MouseLeftButtonDown(
