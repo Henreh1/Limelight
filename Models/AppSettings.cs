@@ -11,6 +11,9 @@ namespace Limelight.Models
         public string ActiveModId { get; set; } =
             string.Empty;
 
+        public string PendingDeploymentModId { get; set; } =
+            string.Empty;
+
         public string DismissedLiveLoaderPromptForGameDirectory { get; set; } =
             string.Empty;
 

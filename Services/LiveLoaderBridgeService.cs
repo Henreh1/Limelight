@@ -31,8 +31,17 @@ namespace Limelight.Services
     local responsePath =
         runtimeDirectory .. "\\response.txt"
 
+    local mountFunctionsPath =
+        runtimeDirectory .. "\\mount-functions.txt"
+
     local lastHeartbeatSecond = 0
     local lastRequestId = nil
+    local worldTransitioning = false
+    local transitionGeneration = 0
+    local automaticCharlieRefreshEnabled = false
+    local activeCharliePortrait = nil
+    local portraitRefreshPassesRemaining = 0
+    local lastPortraitRefreshSecond = 0
 
     local function writeHeartbeat()
         local heartbeatFile =
@@ -70,6 +79,20 @@ namespace Limelight.Services
         return values
     end
 
+    local function splitPipeSeparated(value)
+        local values = {}
+
+        if value == nil or value == "" then
+            return values
+        end
+
+        for item in string.gmatch(value, "([^|]+)") do
+            table.insert(values, item)
+        end
+
+        return values
+    end
+
     local function writeResponse(
         requestId,
         success,
@@ -102,6 +125,603 @@ namespace Limelight.Services
         os.rename(
             temporaryPath,
             responsePath)
+    end
+
+    local function refreshCharliePortraitWidgets()
+        if activeCharliePortrait == nil or
+           not activeCharliePortrait:IsValid() then
+
+            return 0
+        end
+
+        local activeNameReadSucceeded,
+              activeFullName =
+            pcall(function()
+                return string.lower(
+                    activeCharliePortrait:GetFullName())
+            end)
+
+        if not activeNameReadSucceeded then
+            return 0
+        end
+
+        local imageWidgets =
+            FindAllOf("Image")
+
+        if imageWidgets == nil then
+            return 0
+        end
+
+        local refreshedCount = 0
+
+        for _, imageWidget in
+            pairs(imageWidgets) do
+
+            if imageWidget ~= nil and
+               imageWidget:IsValid() then
+
+                local resourceReadSucceeded,
+                      resourceObject =
+                    pcall(function()
+                        local brush =
+                            imageWidget.Brush
+
+                        if brush == nil then
+                            return nil
+                        end
+
+                        return brush.ResourceObject
+                    end)
+
+                if resourceReadSucceeded and
+                   resourceObject ~= nil and
+                   resourceObject:IsValid() then
+
+                    local nameReadSucceeded,
+                          resourceFullName =
+                        pcall(function()
+                            return string.lower(
+                                resourceObject:GetFullName())
+                        end)
+
+                    local isCharliePortrait =
+                        nameReadSucceeded and
+                        string.find(
+                            resourceFullName,
+                            "dialog_charlie_01",
+                            1,
+                            true) ~= nil
+
+                    if isCharliePortrait and
+                       resourceFullName ~= activeFullName then
+
+                        local setSucceeded =
+                            pcall(function()
+                                -- Keep the widget's existing layout size while
+                                -- replacing only the texture behind its brush.
+                                imageWidget:SetBrushFromTexture(
+                                    activeCharliePortrait,
+                                    false)
+                            end)
+
+                        if setSucceeded then
+                            refreshedCount =
+                                refreshedCount + 1
+                        end
+                    end
+                end
+            end
+        end
+
+        return refreshedCount
+    end
+
+    local function reloadAssets(objectPathsText)
+        local objectPaths =
+            splitPipeSeparated(objectPathsText)
+
+        if #objectPaths == 0 then
+            return false,
+                "The refresh command did not include any asset paths."
+        end
+
+        local loadedCount = 0
+        local failures = {}
+
+        for _, objectPath in ipairs(objectPaths) do
+            local callSucceeded,
+                  asset,
+                  assetWasFound,
+                  assetWasLoaded =
+                pcall(function()
+                    return LoadAsset(objectPath)
+                end)
+
+            if callSucceeded and
+               assetWasFound and
+               assetWasLoaded and
+               asset ~= nil and
+               asset:IsValid() then
+
+                loadedCount = loadedCount + 1
+
+                local lowerObjectPath =
+                    string.lower(objectPath)
+
+                if string.find(
+                        lowerObjectPath,
+                        "/ui/art/dialog/portraits/dialog_charlie_01.",
+                        1,
+                        true) ~= nil then
+
+                    activeCharliePortrait = asset
+                    portraitRefreshPassesRemaining = 20
+
+                    local refreshedCount =
+                        refreshCharliePortraitWidgets()
+
+                    print(
+                        "[LimelightBridge] Charlie portrait loaded; refreshed " ..
+                        tostring(refreshedCount) ..
+                        " existing image widget(s).\n")
+                end
+            else
+                table.insert(
+                    failures,
+                    objectPath)
+            end
+        end
+
+        if #failures > 0 then
+            -- New textures and materials are often absent from the base Asset
+            -- Registry. Unreal still loads them normally when SK_Charlie asks
+            -- for its cooked dependencies from the mounted container.
+            print(
+                "[LimelightBridge] Preloaded " ..
+                tostring(loadedCount) ..
+                " registered assets. " ..
+                tostring(#failures) ..
+                " dependency packages will load through SK_Charlie.\n")
+
+            return true,
+                "Preloaded " .. tostring(loadedCount) ..
+                " registered assets. " .. tostring(#failures) ..
+                " dependency packages will load with the character."
+        end
+
+        return true,
+            "Preloaded " .. tostring(loadedCount) ..
+            " mounted assets, including interface and localization content."
+    end
+
+    local function scanCharlie()
+        local playerControllers =
+            FindAllOf("PlayerController")
+
+        if playerControllers == nil then
+            return false,
+                "No player controllers were found. Enter a playable stage and try again."
+        end
+
+        local playerController = nil
+        local pawn = nil
+
+        -- Find the controller that currently owns a valid playable pawn.
+        for _, candidateController in
+            pairs(playerControllers) do
+
+            if candidateController ~= nil and
+               candidateController:IsValid() then
+
+                local pawnReadSucceeded,
+                      candidatePawn =
+                    pcall(function()
+                        return candidateController.Pawn
+                    end)
+
+                if pawnReadSucceeded and
+                   candidatePawn ~= nil and
+                   candidatePawn:IsValid() then
+
+                    playerController =
+                        candidateController
+
+                    pawn =
+                        candidatePawn
+
+                    break
+                end
+            end
+        end
+
+        if playerController == nil or
+           pawn == nil then
+
+            return false,
+                "No player controller currently owns a valid pawn."
+        end
+
+        local meshReadSucceeded, mesh =
+            pcall(function()
+                return pawn.Mesh
+            end)
+
+        if not meshReadSucceeded or
+           mesh == nil or
+           not mesh:IsValid() then
+
+            return false,
+                "The player pawn was found, but its Mesh component was unavailable."
+        end
+
+        local assetReadSucceeded, meshAsset =
+            pcall(function()
+                return mesh:GetSkeletalMeshAsset()
+            end)
+
+        if not assetReadSucceeded or
+           meshAsset == nil or
+           not meshAsset:IsValid() then
+
+            return false,
+                "The player mesh component was found, but its skeletal mesh asset was unavailable."
+        end
+
+        local assetName =
+            meshAsset:GetFName():ToString()
+
+        local message =
+            "Pawn: " .. pawn:GetFullName() ..
+            " | Component: " .. mesh:GetFullName() ..
+            " | Asset: " .. meshAsset:GetFullName()
+
+        if string.lower(assetName) ==
+           "sk_charlie" then
+
+            message =
+                message ..
+                " | SK_Charlie target confirmed"
+        else
+            message =
+                message ..
+                " | Expected SK_Charlie but found " ..
+                assetName
+        end
+
+        return true, message
+    end
+    local function reapplyCharlie()
+        local loadCallSucceeded,
+              meshAsset,
+              assetWasFound,
+              assetWasLoaded =
+            pcall(function()
+                return LoadAsset(
+                    "/Game/Pagoda/Characters/Player/Meshes/SK_Charlie.SK_Charlie")
+            end)
+
+        if not loadCallSucceeded then
+            return false,
+                "The replacement SK_Charlie asset could not be loaded: " ..
+                tostring(meshAsset)
+        end
+
+        if not assetWasFound or
+           not assetWasLoaded or
+           meshAsset == nil or
+           not meshAsset:IsValid() then
+
+            return false,
+                "The newly mounted container did not provide a loadable SK_Charlie asset."
+        end
+
+        local assetName =
+            string.lower(
+                meshAsset:GetFName():ToString())
+
+        if assetName ~= "sk_charlie" then
+            return false,
+                "The freshly loaded asset was not SK_Charlie."
+        end
+
+        local meshComponents =
+            FindAllOf("SkeletalMeshComponent")
+
+        if meshComponents == nil then
+            return false,
+                "No skeletal mesh components were found."
+        end
+
+        local updatedComponentCount = 0
+        local firstUpdateError = nil
+
+        for _, meshComponent in
+            pairs(meshComponents) do
+
+            if meshComponent ~= nil and
+               meshComponent:IsValid() then
+
+                local componentName =
+                    string.lower(
+                        meshComponent:GetFullName())
+
+                local isCharliePawnMesh =
+                    string.find(
+                        componentName,
+                        "bp_pagodaplayercharacter_charlie",
+                        1,
+                        true) ~= nil and
+                    string.find(
+                        componentName,
+                        "charactermesh0",
+                        1,
+                        true) ~= nil
+
+                local usesCharlieMesh = false
+
+                local meshReadSucceeded,
+                      currentMesh =
+                    pcall(function()
+                        return meshComponent.SkeletalMesh
+                    end)
+
+                if meshReadSucceeded and
+                   currentMesh ~= nil and
+                   currentMesh:IsValid() then
+
+                    local currentMeshName =
+                        string.lower(
+                            currentMesh:GetFName():ToString())
+
+                    usesCharlieMesh =
+                        currentMeshName == "sk_charlie"
+                end
+
+                -- The level-select preview is not owned by the gameplay pawn,
+                -- but it still displays SK_Charlie. Updating both kinds keeps
+                -- every visible Charlie in step with the active Limelight mod.
+                local isCharlieComponent =
+                    isCharliePawnMesh or
+                    usesCharlieMesh
+
+                if isCharlieComponent then
+                    local clearedOverrideCount = 0
+
+                    local clearSucceeded,
+                          clearError =
+                        pcall(function()
+                            local overrideMaterials =
+                                meshComponent.OverrideMaterials
+
+                            if overrideMaterials ~= nil then
+                                clearedOverrideCount =
+                                    overrideMaterials:GetArrayNum()
+
+                                -- CharacterMesh0 can keep dynamic overrides from
+                                -- the previous model. Empty them before swapping
+                                -- the mesh so its own material slots win again.
+                                overrideMaterials:Empty()
+                            end
+                        end)
+
+                    local setSucceeded = false
+                    local setError = nil
+
+                    if clearSucceeded then
+                        setSucceeded,
+                        setError =
+                            pcall(function()
+                                meshComponent:SetSkeletalMeshAsset(
+                                    meshAsset)
+                            end)
+                    else
+                        setError = clearError
+                    end
+
+                    if not setSucceeded then
+                        firstUpdateError =
+                            firstUpdateError or
+                            tostring(setError)
+                    else
+                        updatedComponentCount =
+                            updatedComponentCount + 1
+
+                    local activeMaterials = {}
+
+                    local materialReadSucceeded,
+                          materialReadError =
+                        pcall(function()
+                            local materialCount =
+                                meshComponent:GetNumMaterials()
+
+                            for materialIndex = 0,
+                                materialCount - 1 do
+
+                                local material =
+                                    meshComponent:GetMaterial(
+                                        materialIndex)
+
+                                if material ~= nil and
+                                   material:IsValid() then
+
+                                    table.insert(
+                                        activeMaterials,
+                                        material:GetFullName())
+                                else
+                                    table.insert(
+                                        activeMaterials,
+                                        "<empty slot " ..
+                                        tostring(materialIndex) ..
+                                        ">")
+                                end
+                            end
+                        end)
+
+                    local materialSummary =
+                        table.concat(
+                            activeMaterials,
+                            " | ")
+
+                    if not materialReadSucceeded then
+                        materialSummary =
+                            "material inspection failed: " ..
+                            tostring(materialReadError)
+                    end
+
+                        print(
+                            "[LimelightBridge] Cleared " ..
+                            tostring(clearedOverrideCount) ..
+                            " material overrides on " ..
+                            meshComponent:GetFullName() ..
+                            ". Active materials: " ..
+                            materialSummary ..
+                            "\n")
+                    end
+                end
+            end
+        end
+
+        if updatedComponentCount > 0 then
+            return true,
+                "A fresh SK_Charlie asset and its material slots were applied to " ..
+                tostring(updatedComponentCount) ..
+                " visible Charlie component(s)."
+        end
+
+        if firstUpdateError ~= nil then
+            return false,
+                "Charlie components were found, but could not be refreshed: " ..
+                firstUpdateError
+        end
+
+        return false,
+            "No visible SK_Charlie component was found. Enter gameplay and try again."
+    end
+
+    local function scanMountFunctions()
+        local candidates = {}
+        local candidateSet = {}
+        local scannedObjectCount = 0
+
+        -- Search reflected Unreal functions without printing every object.
+        ForEachUObject(function(object)
+            scannedObjectCount =
+                scannedObjectCount + 1
+
+            local nameReadSucceeded,
+                  fullName =
+                pcall(function()
+                    return object:GetFullName()
+                end)
+
+            if nameReadSucceeded and
+               fullName ~= nil then
+
+                local lowerName =
+                    string.lower(fullName)
+
+                local isFunction =
+                    string.sub(
+                        lowerName,
+                        1,
+                        9) == "function "
+
+                local mentionsMount =
+                    string.find(
+                        lowerName,
+                        "mount",
+                        1,
+                        true) ~= nil
+
+                local mentionsContainer =
+                    string.find(
+                        lowerName,
+                        "pak",
+                        1,
+                        true) ~= nil or
+                    string.find(
+                        lowerName,
+                        "iostore",
+                        1,
+                        true) ~= nil or
+                    string.find(
+                        lowerName,
+                        "container",
+                        1,
+                        true) ~= nil or
+                    string.find(
+                        lowerName,
+                        "chunk",
+                        1,
+                        true) ~= nil
+
+                local mentionsPakAction =
+                    string.find(
+                        lowerName,
+                        "loadpak",
+                        1,
+                        true) ~= nil or
+                    string.find(
+                        lowerName,
+                        "openpak",
+                        1,
+                        true) ~= nil
+
+                if isFunction and
+                   ((mentionsMount and mentionsContainer) or
+                    mentionsPakAction) and
+                   candidateSet[fullName] == nil then
+
+                    candidateSet[fullName] = true
+
+                    table.insert(
+                        candidates,
+                        fullName)
+                end
+            end
+        end)
+
+        table.sort(candidates)
+
+        local reportFile =
+            io.open(
+                mountFunctionsPath,
+                "w")
+
+        if reportFile == nil then
+            return false,
+                "Limelight could not create the mount-function report."
+        end
+
+        reportFile:write(
+            "Objects scanned: " ..
+            tostring(scannedObjectCount) ..
+            "\n")
+
+        reportFile:write(
+            "Candidate functions: " ..
+            tostring(#candidates) ..
+            "\n\n")
+
+        for _, candidate in
+            ipairs(candidates) do
+
+            reportFile:write(
+                candidate .. "\n")
+        end
+
+        reportFile:close()
+
+        if #candidates == 0 then
+            return false,
+                "No reflected mounting functions were found. The report was saved to " ..
+                mountFunctionsPath
+        end
+
+        return true,
+            tostring(#candidates) ..
+            " possible mounting functions were found. The report was saved to " ..
+            mountFunctionsPath
     end
 
     local function processCommand()
@@ -138,6 +758,95 @@ namespace Limelight.Services
                 requestId,
                 true,
                 "Limelight bridge is online")
+        elseif action == "scan_mount_functions" then
+            ExecuteInGameThread(function()
+                local callSucceeded,
+                      scanSucceeded,
+                      scanMessage =
+                    pcall(scanMountFunctions)
+
+                if not callSucceeded then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "Mount-function scan failed: " ..
+                        tostring(scanSucceeded))
+                else
+                    writeResponse(
+                        requestId,
+                        scanSucceeded,
+                        scanMessage)
+                end
+            end)
+        elseif action == "reapply_charlie" then
+            ExecuteInGameThread(function()
+                if worldTransitioning then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "A level is still loading. Limelight will retry once the new world is ready.")
+
+                    return
+                end
+
+                local callSucceeded,
+                      reapplySucceeded,
+                      reapplyMessage =
+                    pcall(reapplyCharlie)
+
+                if not callSucceeded then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "Model reapply failed: " ..
+                        tostring(reapplySucceeded))
+                else
+                    if reapplySucceeded then
+                        automaticCharlieRefreshEnabled = true
+                    end
+
+                    writeResponse(
+                        requestId,
+                        reapplySucceeded,
+                        reapplyMessage)
+                end
+            end)
+        elseif action == "reload_assets" then
+            ExecuteInGameThread(function()
+                if worldTransitioning then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "A level is still loading. Mounted assets were left untouched until it finishes.")
+
+                    return
+                end
+
+                local callSucceeded,
+                      reloadSucceeded,
+                      reloadMessage =
+                    pcall(function()
+                        return reloadAssets(
+                            command.objectPaths)
+                    end)
+
+                if not callSucceeded then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "Mounted asset reload failed: " ..
+                        tostring(reloadSucceeded))
+                else
+                    if reloadSucceeded then
+                        automaticCharlieRefreshEnabled = true
+                    end
+
+                    writeResponse(
+                        requestId,
+                        reloadSucceeded,
+                        reloadMessage)
+                end
+            end)
         else
             writeResponse(
                 requestId,
@@ -147,6 +856,96 @@ namespace Limelight.Services
 
         os.remove(commandPath)
     end
+
+    local function scheduleAutomaticCharlieRefresh(
+        delayMilliseconds,
+        expectedGeneration)
+
+        if not automaticCharlieRefreshEnabled then
+            return
+        end
+
+        ExecuteInGameThreadWithDelay(
+            delayMilliseconds,
+            function()
+                if worldTransitioning or
+                   expectedGeneration ~= transitionGeneration or
+                   not automaticCharlieRefreshEnabled then
+
+                    return
+                end
+
+                local callSucceeded,
+                      refreshSucceeded,
+                      refreshMessage =
+                    pcall(reapplyCharlie)
+
+                if callSucceeded and refreshSucceeded then
+                    print(
+                        "[LimelightBridge] Automatic post-load refresh: " ..
+                        tostring(refreshMessage) ..
+                        "\n")
+                else
+                    print(
+                        "[LimelightBridge] Automatic post-load refresh is still waiting for Charlie.\n")
+                end
+            end)
+    end
+
+    RegisterLoadMapPreHook(function()
+        worldTransitioning = true
+        transitionGeneration =
+            transitionGeneration + 1
+
+        print(
+            "[LimelightBridge] Level transition started; model refresh paused.\n")
+    end)
+
+    RegisterLoadMapPostHook(function()
+        worldTransitioning = false
+
+        -- The map callback fires before every streamed actor and component is
+        -- guaranteed to exist, so allow the new world to settle first.
+        scheduleAutomaticCharlieRefresh(
+            2000,
+            transitionGeneration)
+
+        print(
+            "[LimelightBridge] Level transition finished; model refresh scheduled.\n")
+    end)
+
+    RegisterBeginPlayPostHook(function(contextParameter)
+        if worldTransitioning or
+           not automaticCharlieRefreshEnabled then
+
+            return
+        end
+
+        local context = contextParameter:get()
+
+        if context == nil or
+           not context:IsValid() then
+
+            return
+        end
+
+        local contextName =
+            string.lower(
+                context:GetFullName())
+
+        if string.find(
+                contextName,
+                "bp_pagodaplayercharacter_charlie",
+                1,
+                true) ~= nil then
+
+            -- This catches characters created after LoadMap's normal delay,
+            -- including streamed stages and late player respawns.
+            scheduleAutomaticCharlieRefresh(
+                350,
+                transitionGeneration)
+        end
+    end)
 
     -- Produce a heartbeat immediately so the dashboard can recognise us.
     writeHeartbeat()

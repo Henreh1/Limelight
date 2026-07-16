@@ -16,6 +16,7 @@ namespace Limelight.Services
 
         private readonly string _libraryDirectory;
         private readonly ModArchiveValidator _validator;
+        private readonly ModAssetScannerService _assetScanner;
 
         public ModLibraryService()
         {
@@ -26,6 +27,7 @@ namespace Limelight.Services
                 "Mods");
 
             _validator = new ModArchiveValidator();
+            _assetScanner = new ModAssetScannerService();
         }
 
         public InstalledMod Import(string archivePath)
@@ -62,6 +64,9 @@ namespace Limelight.Services
                 List<string> packageFiles =
                     FindPackageFiles(stagingDirectory);
 
+                List<ModAssetPackage> assetPackages =
+                    _assetScanner.Scan(stagingDirectory);
+
                 // Moving the finished folder keeps half-imported mods out
                 // of the user's main library.
                 Directory.Move(
@@ -74,6 +79,9 @@ namespace Limelight.Services
                     Name = CreateDisplayName(archivePath),
                     InstallDirectory = finalDirectory,
                     PackageFiles = packageFiles,
+                    AssetPackages = assetPackages,
+                    AssetManifestVersion =
+                        ModAssetScannerService.CurrentManifestVersion,
                     InstalledAt = DateTimeOffset.Now
                 };
             }
@@ -89,6 +97,15 @@ namespace Limelight.Services
 
                 throw;
             }
+        }
+
+        public List<ModAssetPackage> ScanAssets(
+            InstalledMod mod)
+        {
+            // Older Limelight libraries predate asset manifests, so they are
+            // scanned lazily the first time the live loader needs one.
+            return _assetScanner.Scan(
+                mod.InstallDirectory);
         }
 
         private static void ExtractArchiveSafely(

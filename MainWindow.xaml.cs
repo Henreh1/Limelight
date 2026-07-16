@@ -28,9 +28,18 @@ namespace Limelight
         private readonly Ue4ssInstallerService _ue4ssInstallerService;
         private readonly DeadAsDiscoUe4ssConfigurationService _ue4ssConfigurationService;
         private readonly LiveLoaderBridgeService _liveLoaderBridgeService;
+        private readonly LiveLoaderCommandService _liveLoaderCommandService;
+        private readonly LiveModStagingService _liveModStagingService;
         private readonly DispatcherTimer _gameStatusTimer;
         private bool _hasHandledLiveLoaderPrompt;
         private bool _isLiveLoaderSetupRunning;
+        private bool _isLiveModChangeRunning;
+        private bool _isLiveLoaderInitializationRunning;
+        private bool _hasInitialisedCurrentGameSession;
+        private bool _wasGameRunning;
+        private bool _isApplyingPendingDeployment;
+        private bool _pendingDeploymentAttempted;
+        private int _nextLiveMountOrder = 1000;
 
         private string? _gameDirectory;
 
@@ -68,6 +77,12 @@ namespace Limelight
             _liveLoaderBridgeService =
                 new LiveLoaderBridgeService();
 
+            _liveLoaderCommandService =
+                new LiveLoaderCommandService();
+
+            _liveModStagingService =
+                new LiveModStagingService();
+
             _settings =
                 _settingsService.Load();
 
@@ -104,18 +119,56 @@ namespace Limelight
     RoutedEventArgs e)
         {
             UpdateGameRunningStatus();
-            _gameStatusTimer.Start();
 
             // Finish any existing-mod migration before opening another modal window.
             await CheckForExistingMods();
+            await ApplyPendingDeploymentIfPossible();
             await ShowLiveLoaderSetupPromptIfNeeded();
+
+            _wasGameRunning =
+                !string.IsNullOrWhiteSpace(_gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory);
+
+            _gameStatusTimer.Start();
+
+            if (_wasGameRunning)
+            {
+                await InitialiseLiveLoaderForRunningGameAsync(
+                    waitForGameProcess: false);
+            }
         }
 
-        private void GameStatusTimer_Tick(
+        private async void GameStatusTimer_Tick(
             object? sender,
             EventArgs e)
         {
+            bool isGameRunning =
+                !string.IsNullOrWhiteSpace(_gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory);
+
+            bool gameJustStarted =
+                isGameRunning &&
+                !_wasGameRunning;
+
+            if (!isGameRunning &&
+                _wasGameRunning)
+            {
+                _hasInitialisedCurrentGameSession = false;
+                _nextLiveMountOrder = 1000;
+            }
+
+            _wasGameRunning = isGameRunning;
+
             UpdateGameRunningStatus();
+            await ApplyPendingDeploymentIfPossible();
+
+            if (gameJustStarted)
+            {
+                await InitialiseLiveLoaderForRunningGameAsync(
+                    waitForGameProcess: false);
+            }
         }
 
         private void MainWindow_Closed(
@@ -127,9 +180,189 @@ namespace Limelight
             _gameStatusTimer.Stop();
         }
 
+        private async Task InitialiseLiveLoaderForRunningGameAsync(
+            bool waitForGameProcess)
+        {
+            if (_isLiveLoaderInitializationRunning ||
+                _hasInitialisedCurrentGameSession ||
+                string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                return;
+            }
+
+            string gameDirectory =
+                _gameDirectory;
+
+            Ue4ssDetectionResult loader =
+                _ue4ssDetectionService.Detect(
+                    gameDirectory);
+
+            if (!loader.IsInstalled ||
+                !_ue4ssConfigurationService.IsConfigured(loader) ||
+                !_liveLoaderBridgeService.IsInstalled(loader))
+            {
+                // The optional loader has not been accepted yet. The normal
+                // dashboard and setup prompt remain available.
+                return;
+            }
+
+            _isLiveLoaderInitializationRunning = true;
+
+            LiveLoaderInitializingWindow initialisingWindow =
+                new LiveLoaderInitializingWindow
+                {
+                    Owner = this
+                };
+
+            bool previousEnabledState =
+                IsEnabled;
+
+            Exception? initialisationFailure =
+                null;
+
+            try
+            {
+                initialisingWindow.Show();
+                IsEnabled = false;
+
+                initialisingWindow.Report(
+                    "WAITING FOR DEAD AS DISCO",
+                    8,
+                    "Limelight is waiting for the game process to start.");
+
+                DateTime processDeadline =
+                    DateTime.UtcNow.AddSeconds(
+                        waitForGameProcess
+                            ? 75
+                            : 10);
+
+                while (!_gameProcessService.IsGameRunning(
+                           gameDirectory))
+                {
+                    if (DateTime.UtcNow >= processDeadline)
+                    {
+                        throw new TimeoutException(
+                            "Dead as Disco did not start before the live-loader check timed out.");
+                    }
+
+                    await Task.Delay(250);
+                }
+
+                _wasGameRunning = true;
+
+                initialisingWindow.Report(
+                    "CONNECTING TO UE4SS",
+                    18,
+                    "The game is running. Waiting for the Limelight runtime bridge and Unreal object system.");
+
+                DateTime bridgeDeadline =
+                    DateTime.UtcNow.AddMinutes(2);
+
+                while (!_liveLoaderBridgeService.IsOnline())
+                {
+                    if (!_gameProcessService.IsGameRunning(
+                            gameDirectory))
+                    {
+                        throw new InvalidOperationException(
+                            "Dead as Disco closed before the live loader was ready.");
+                    }
+
+                    if (DateTime.UtcNow >= bridgeDeadline)
+                    {
+                        throw new TimeoutException(
+                            "UE4SS did not bring the Limelight bridge online in time.");
+                    }
+
+                    await Task.Delay(300);
+                }
+
+                initialisingWindow.Report(
+                    "VERIFYING NATIVE BRIDGE",
+                    27,
+                    "Limelight is checking the transition-safe package mounting bridge.");
+
+                LiveLoaderCommandResult nativePing =
+                    await _liveLoaderCommandService.PingNativeAsync();
+
+                if (!nativePing.Success)
+                {
+                    throw new InvalidOperationException(
+                        nativePing.Message);
+                }
+
+                InstalledMod? activeMod =
+                    _settings.InstalledMods.FirstOrDefault(mod =>
+                        string.Equals(
+                            mod.Id,
+                            _settings.ActiveModId,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        Directory.Exists(
+                            mod.InstallDirectory));
+
+                if (activeMod is not null)
+                {
+                    await ActivateLiveModAsync(
+                        activeMod,
+                        gameDirectory,
+                        (phase, progress) =>
+                            initialisingWindow.Report(
+                                phase,
+                                progress),
+                        allowDeferredCharlieRefresh: true);
+                }
+                else
+                {
+                    initialisingWindow.Report(
+                        "LIVE LOADER READY",
+                        100,
+                        "The runtime is online. No active model mod needs to be mounted.");
+                }
+
+                _hasInitialisedCurrentGameSession = true;
+
+                await Task.Delay(650);
+            }
+            catch (Exception exception)
+            {
+                initialisationFailure = exception;
+            }
+            finally
+            {
+                if (initialisingWindow.IsVisible)
+                {
+                    initialisingWindow.Close();
+                }
+
+                IsEnabled = previousEnabledState;
+                _isLiveLoaderInitializationRunning = false;
+                UpdateGameRunningStatus();
+            }
+
+            if (initialisationFailure is not null)
+            {
+                MessageBox.Show(
+                    "The Live Loader could not finish initialising.\n\n" +
+                    initialisationFailure.Message +
+                    "\n\nDead as Disco can still be played normally, but live switching will remain locked for this launch.",
+                    "Live Loader initialisation failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
         private void UpdateGameRunningStatus()
         {
             if (_isLiveLoaderSetupRunning)
+            {
+                return;
+            }
+
+            if (_isLiveModChangeRunning)
+            {
+                return;
+            }
+
+            if (_isLiveLoaderInitializationRunning)
             {
                 return;
             }
@@ -160,6 +393,8 @@ namespace Limelight
 
             if (isGameRunning)
             {
+                _pendingDeploymentAttempted = false;
+
                 GameProcessStatusText.Text =
                     "RUNNING";
 
@@ -252,6 +487,68 @@ namespace Limelight
 
             LiveLoaderStatusText.Foreground =
                 (Brush)FindResource("PinkBrush");
+        }
+
+        private async Task ApplyPendingDeploymentIfPossible()
+        {
+            if (_isApplyingPendingDeployment ||
+                _isLiveModChangeRunning ||
+                _pendingDeploymentAttempted ||
+                string.IsNullOrWhiteSpace(
+                    _settings.PendingDeploymentModId) ||
+                string.IsNullOrWhiteSpace(
+                    _gameDirectory) ||
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory))
+            {
+                return;
+            }
+
+            InstalledMod? pendingMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        _settings.PendingDeploymentModId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (pendingMod == null ||
+                !Directory.Exists(
+                    pendingMod.InstallDirectory))
+            {
+                _settings.PendingDeploymentModId =
+                    string.Empty;
+
+                _settingsService.Save(_settings);
+                return;
+            }
+
+            _isApplyingPendingDeployment = true;
+            _pendingDeploymentAttempted = true;
+
+            try
+            {
+                string gameDirectory =
+                    _gameDirectory;
+
+                await Task.Run(() =>
+                    _modDeploymentService.Activate(
+                        pendingMod,
+                        gameDirectory));
+
+                _settings.PendingDeploymentModId =
+                    string.Empty;
+
+                _settingsService.Save(_settings);
+            }
+            catch
+            {
+                // Keep the pending ID. Limelight can try again the next time
+                // it opens while the game is fully closed.
+            }
+            finally
+            {
+                _isApplyingPendingDeployment = false;
+            }
         }
 
         private async Task ShowLiveLoaderSetupPromptIfNeeded()
@@ -598,8 +895,145 @@ namespace Limelight
             }
         }
 
+        private async Task<List<ModAssetPackage>>
+            GetLivePackagesAsync(
+                InstalledMod mod)
+        {
+            if (mod.AssetPackages.Count == 0 ||
+                mod.AssetManifestVersion <
+                    ModAssetScannerService.CurrentManifestVersion)
+            {
+                mod.AssetPackages =
+                    await Task.Run(() =>
+                        _modLibraryService.ScanAssets(
+                            mod));
+
+                mod.AssetManifestVersion =
+                    ModAssetScannerService.CurrentManifestVersion;
+
+                _settingsService.Save(_settings);
+            }
+
+            return mod.AssetPackages
+                .Where(package =>
+                    package.IsSafeForLiveReload)
+                .OrderBy(package =>
+                    package.ReloadPriority)
+                .ThenBy(package =>
+                    package.PackagePath)
+                .ToList();
+        }
+
+        private async Task ActivateLiveModAsync(
+            InstalledMod mod,
+            string gameDirectory,
+            Action<string, int>? reportProgress = null,
+            bool allowDeferredCharlieRefresh = false)
+        {
+            reportProgress?.Invoke(
+                "SCANNING MOD CONTENT",
+                35);
+
+            List<ModAssetPackage> livePackages =
+                await GetLivePackagesAsync(mod);
+
+            if (livePackages.Count == 0)
+            {
+                throw new InvalidDataException(
+                    "This mod does not contain any assets Limelight can safely refresh live.");
+            }
+
+            if (!livePackages.Any(package =>
+                    package.IsCharlieMesh))
+            {
+                throw new InvalidDataException(
+                    "This mod does not replace SK_Charlie, so Limelight will not live-mount it automatically.");
+            }
+
+            reportProgress?.Invoke(
+                "STAGING MOD CONTAINER",
+                48);
+
+            LiveModStageResult stageResult =
+                await Task.Run(() =>
+                    _liveModStagingService.Stage(
+                        mod,
+                        gameDirectory));
+
+            reportProgress?.Invoke(
+                "MOUNTING MOD CONTENT",
+                60);
+
+            foreach (string pakPath in
+                     stageResult.PakPaths)
+            {
+                LiveLoaderCommandResult mountResult =
+                    await _liveLoaderCommandService.MountPakAsync(
+                        pakPath,
+                        _nextLiveMountOrder++);
+
+                if (!mountResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        mountResult.Message);
+                }
+            }
+
+            reportProgress?.Invoke(
+                "REFRESHING OVERRIDDEN PACKAGES",
+                74);
+
+            LiveLoaderCommandResult releaseResult =
+                await _liveLoaderCommandService.ReleasePackagesAsync(
+                    livePackages.Select(package =>
+                        package.PackagePath));
+
+            if (!releaseResult.Success)
+            {
+                throw new InvalidOperationException(
+                    releaseResult.Message);
+            }
+
+            reportProgress?.Invoke(
+                "LOADING MODELS, PORTRAITS AND TEXT",
+                86);
+
+            LiveLoaderCommandResult reloadResult =
+                await _liveLoaderCommandService.ReloadAssetsAsync(
+                    livePackages.Select(package =>
+                        package.ObjectPath));
+
+            if (!reloadResult.Success)
+            {
+                throw new InvalidOperationException(
+                    reloadResult.Message);
+            }
+
+            LiveLoaderCommandResult reapplyResult =
+                await _liveLoaderCommandService.ReapplyCharlieAsync();
+
+            if (!reapplyResult.Success &&
+                !allowDeferredCharlieRefresh)
+            {
+                throw new InvalidOperationException(
+                    reapplyResult.Message);
+            }
+
+            reportProgress?.Invoke(
+                allowDeferredCharlieRefresh &&
+                !reapplyResult.Success
+                    ? "READY: CHARLIE WILL REFRESH WHEN SHE APPEARS"
+                    : "LIVE LOADER READY",
+                100);
+        }
+
         private async void ToggleModRequested(string modId)
         {
+            if (_isLiveModChangeRunning)
+            {
+                return;
+            }
+
             InstalledMod? selectedMod =
                 _settings.InstalledMods.FirstOrDefault(mod =>
                     string.Equals(
@@ -632,6 +1066,53 @@ namespace Limelight
                     selectedMod.Id,
                     StringComparison.OrdinalIgnoreCase);
 
+            bool isGameRunning =
+                _gameProcessService.IsGameRunning(
+                    gameDirectory);
+
+            if (isCurrentlyActive &&
+                isGameRunning)
+            {
+                MessageBox.Show(
+                    "A live-mounted container cannot be removed safely while Dead as Disco is running.\n\n" +
+                    "Close the game to return to the normal Charlie model.",
+                    "Close the game to deactivate",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            _isLiveModChangeRunning = true;
+
+            LiveLoaderStatusText.Text =
+                isGameRunning
+                    ? "SWITCHING"
+                    : LiveLoaderStatusText.Text;
+
+            if (isGameRunning)
+            {
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("CyanBrush");
+            }
+
+            LiveModSwitchingWindow? switchingWindow =
+                null;
+
+            bool previousEnabledState =
+                IsEnabled;
+
+            void CloseSwitchingWindow()
+            {
+                if (switchingWindow is not null)
+                {
+                    switchingWindow.CloseWhenFinished();
+                    switchingWindow = null;
+                }
+
+                IsEnabled = previousEnabledState;
+            }
+
             try
             {
                 if (isCurrentlyActive)
@@ -642,6 +1123,65 @@ namespace Limelight
 
                     _settings.ActiveModId =
                         string.Empty;
+
+                    _settings.PendingDeploymentModId =
+                        string.Empty;
+                }
+                else if (isGameRunning)
+                {
+                    if (!_liveLoaderBridgeService.IsOnline())
+                    {
+                        throw new InvalidOperationException(
+                            "The game is running, but Limelight's Live Loader is not online.");
+                    }
+
+                    LiveLoaderCommandResult safetyCheck =
+                        await _liveLoaderCommandService.CanSwitchModsAsync();
+
+                    if (!safetyCheck.Success)
+                    {
+                        // A model change during world teardown can leave the
+                        // game holding assets that Unreal has already removed.
+                        // Ask the user to wait instead of risking their session.
+                        MessageBox.Show(
+                            safetyCheck.Message +
+                            "\n\nWait until the new level is visible, then select Activate again.",
+                            "Level change in progress",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+
+                        return;
+                    }
+
+                    bool isFirstLiveSwitch =
+                        _nextLiveMountOrder == 1000;
+
+                    switchingWindow =
+                        new LiveModSwitchingWindow(
+                            selectedMod.DisplayName,
+                            isFirstLiveSwitch)
+                        {
+                            Owner = this
+                        };
+
+                    switchingWindow.Show();
+                    IsEnabled = false;
+
+                    await ActivateLiveModAsync(
+                        selectedMod,
+                        gameDirectory,
+                        (phase, progress) =>
+                            switchingWindow?.Report(
+                                phase,
+                                progress));
+
+                    _settings.ActiveModId =
+                        selectedMod.Id;
+
+                    // The live copy is already active. Once the game closes,
+                    // Limelight mirrors the same choice into ~mods for next time.
+                    _settings.PendingDeploymentModId =
+                        selectedMod.Id;
                 }
                 else
                 {
@@ -652,15 +1192,23 @@ namespace Limelight
 
                     _settings.ActiveModId =
                         selectedMod.Id;
+
+                    _settings.PendingDeploymentModId =
+                        string.Empty;
                 }
 
                 _settingsService.Save(_settings);
                 RefreshLibrarySummary();
 
+                CloseSwitchingWindow();
+
                 string message =
                     isCurrentlyActive
                         ? $"{selectedMod.DisplayName} was deactivated."
-                        : $"{selectedMod.DisplayName} was activated on disk.";
+                        : isGameRunning
+                            ? $"{selectedMod.DisplayName} was activated live.\n\n" +
+                              "Its model, materials, textures, portraits, and localization were refreshed without restarting the game."
+                            : $"{selectedMod.DisplayName} was activated on disk.";
 
                 MessageBox.Show(
                     message,
@@ -670,11 +1218,19 @@ namespace Limelight
             }
             catch (Exception exception)
             {
+                CloseSwitchingWindow();
+
                 MessageBox.Show(
                     $"Limelight could not change the active mod.\n\n{exception.Message}",
                     "Mod activation failed",
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
+            }
+            finally
+            {
+                CloseSwitchingWindow();
+                _isLiveModChangeRunning = false;
+                UpdateGameRunningStatus();
             }
         }
 
@@ -710,6 +1266,20 @@ namespace Limelight
                     _settings.ActiveModId,
                     selectedMod.Id,
                     StringComparison.OrdinalIgnoreCase);
+
+            if (isCurrentlyActive &&
+                !string.IsNullOrWhiteSpace(_gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory))
+            {
+                MessageBox.Show(
+                    "Close Dead as Disco before removing the active mod from Limelight.",
+                    "Mod is active in the running game",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
 
             try
             {
@@ -748,6 +1318,15 @@ namespace Limelight
                 _settings.InstalledMods.Remove(
                     selectedMod);
 
+                if (string.Equals(
+                        _settings.PendingDeploymentModId,
+                        selectedMod.Id,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    _settings.PendingDeploymentModId =
+                        string.Empty;
+                }
+
                 _settingsService.Save(_settings);
                 RefreshLibrarySummary();
             }
@@ -776,6 +1355,72 @@ namespace Limelight
                 Visibility.Visible;
 
             SetSelectedNavigation(showMyMods: true);
+        }
+
+        private async void TestLiveLoader_Click(
+    object sender,
+    RoutedEventArgs e)
+        {
+            if (!_liveLoaderBridgeService.IsOnline())
+            {
+                MessageBox.Show(
+                    "Start Dead as Disco and wait for the Live Loader status to show ONLINE.",
+                    "Live Loader is offline",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            LiveLoaderStatusText.Text =
+                "CHECKING";
+
+            LiveLoaderStatusText.Foreground =
+                (Brush)FindResource("CyanBrush");
+
+            try
+            {
+                // Ask the native half of the bridge directly instead of assuming it
+                // loaded just because the Lua heartbeat is alive.
+                LiveLoaderCommandResult result =
+                    await _liveLoaderCommandService.PingNativeAsync();
+
+                LiveLoaderStatusText.Text =
+                    result.Success
+                        ? "ONLINE"
+                        : "NATIVE OFFLINE";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource(
+                        result.Success
+                            ? "CyanBrush"
+                            : "PinkBrush");
+
+                MessageBox.Show(
+                    result.Message,
+                    result.Success
+                        ? "Native bridge online"
+                        : "Native bridge unavailable",
+                    MessageBoxButton.OK,
+                    result.Success
+                        ? MessageBoxImage.Information
+                        : MessageBoxImage.Warning);
+            }
+            catch (Exception exception)
+            {
+                LiveLoaderStatusText.Text =
+                    "TEST FAILED";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("PinkBrush");
+
+                MessageBox.Show(
+                    "Limelight could not contact its native bridge.\n\n" +
+                    exception.Message,
+                    "Native bridge test failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
 
         private void ShowDashboard_Click(
@@ -909,7 +1554,10 @@ namespace Limelight
 
                 MessageBox.Show(
                     $"{installedMod.DisplayName} was added to your library.\n\n" +
-                    $"Package files: {installedMod.PackageFiles.Count}",
+                    $"Package files: {installedMod.PackageFiles.Count}\n" +
+                    $"Assets detected: {installedMod.AssetPackages.Count}\n" +
+                    $"Live-refreshable: " +
+                    $"{installedMod.AssetPackages.Count(package => package.IsSafeForLiveReload)}",
                     "Mod imported",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -1006,7 +1654,7 @@ namespace Limelight
                 $"{installedCount} READY";
         }
 
-        private void LaunchGame_Click(
+        private async void LaunchGame_Click(
     object sender,
     RoutedEventArgs e)
         {
@@ -1094,6 +1742,12 @@ namespace Limelight
 
                 // Ask Steam to launch its registered Dead as Disco installation.
                 Process.Start(startInfo);
+
+                // Keep Limelight locked while the runtime comes online and the
+                // active mod is mounted. This removes the tempting-but-unsafe
+                // window where a user can switch mods during LoadMap.
+                await InitialiseLiveLoaderForRunningGameAsync(
+                    waitForGameProcess: true);
             }
             catch (Exception exception)
             {

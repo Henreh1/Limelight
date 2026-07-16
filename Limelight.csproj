@@ -6,6 +6,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <!-- CUE4Parse keeps its native helper in the same NuGet folder as the
+         managed assembly. MSBuild may inspect that helper as managed code;
+         the resulting notice is harmless because it is loaded natively. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3246</MSBuildWarningsAsMessages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CUE4Parse"
+                      Version="1.2.2" />
+  </ItemGroup>
 
 </Project>

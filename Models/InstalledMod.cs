@@ -17,6 +17,11 @@ namespace Limelight.Models
         public List<string> PackageFiles { get; set; } =
             new List<string>();
 
+        public List<ModAssetPackage> AssetPackages { get; set; } =
+            new List<ModAssetPackage>();
+
+        public int AssetManifestVersion { get; set; }
+
         public DateTimeOffset InstalledAt { get; set; } =
             DateTimeOffset.Now;
 

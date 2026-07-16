@@ -1,0 +1,103 @@
+<Window x:Class="Limelight.Views.LiveLoaderInitializingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Live Loader Initialising"
+        Width="560"
+        Height="390"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Bahnschrift, Segoe UI"
+        Foreground="{StaticResource TextBrush}">
+
+    <Border Padding="1"
+            Background="{StaticResource BorderBrush}"
+            CornerRadius="16">
+
+        <Border Padding="36"
+                Background="{StaticResource BackgroundBrush}"
+                CornerRadius="15">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="LIVE LOADER"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <TextBlock Text="SETTING THE STAGE"
+                               Margin="0,9,0,0"
+                               FontSize="29"
+                               FontWeight="Black"/>
+
+                    <Rectangle Width="76"
+                               Height="4"
+                               Margin="0,14,0,0"
+                               HorizontalAlignment="Left"
+                               Fill="{StaticResource PinkBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1"
+                            Margin="0,28,0,0">
+
+                    <Border Padding="22"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="11">
+
+                        <StackPanel>
+                            <TextBlock x:Name="PhaseText"
+                                       Text="WAITING FOR DEAD AS DISCO"
+                                       FontSize="15"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+
+                            <TextBlock x:Name="DetailText"
+                                       Text="Limelight is waiting for the game and UE4SS runtime bridge to become ready."
+                                       Margin="0,9,0,0"
+                                       FontSize="13"
+                                       LineHeight="20"
+                                       TextWrapping="Wrap"
+                                       Foreground="#C8C6D8"/>
+
+                            <ProgressBar x:Name="InitialisationProgress"
+                                         Minimum="0"
+                                         Maximum="100"
+                                         Value="8"
+                                         Height="10"
+                                         Margin="0,22,0,0"
+                                         Background="#252943"
+                                         Foreground="{StaticResource CyanBrush}"
+                                         BorderThickness="0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Text="Please leave Limelight open while the loader mounts and verifies the active mod. Live switching will unlock automatically."
+                               Margin="2,18,2,0"
+                               FontSize="12"
+                               LineHeight="18"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="2"
+                           Text="&#x25C6;  INITIALISING SAFELY"
+                           Margin="0,24,0,0"
+                           HorizontalAlignment="Right"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PinkBrush}"/>
+            </Grid>
+        </Border>
+    </Border>
+</Window>

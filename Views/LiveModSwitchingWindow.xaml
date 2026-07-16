@@ -1,0 +1,139 @@
+<Window x:Class="Limelight.Views.LiveModSwitchingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Live Mod Switching"
+        Width="590"
+        Height="440"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        FontFamily="Bahnschrift, Segoe UI"
+        Foreground="{StaticResource TextBrush}">
+
+    <Border Padding="1"
+            Background="{StaticResource BorderBrush}"
+            CornerRadius="16">
+
+        <Border Padding="36"
+                Background="{StaticResource BackgroundBrush}"
+                CornerRadius="15">
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="LIVE LOADER"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <TextBlock Text="SWITCHING THE SPOTLIGHT"
+                               Margin="0,9,0,0"
+                               FontSize="28"
+                               FontWeight="Black"/>
+
+                    <Rectangle Width="86"
+                               Height="4"
+                               Margin="0,14,0,0"
+                               HorizontalAlignment="Left"
+                               Fill="{StaticResource PinkBrush}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1"
+                            Margin="0,26,0,0">
+
+                    <Border Padding="22"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="11">
+
+                        <StackPanel>
+                            <TextBlock x:Name="ModNameText"
+                                       Text="PREPARING ACTIVE MOD"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource PinkBrush}"/>
+
+                            <TextBlock x:Name="PhaseText"
+                                       Text="CHECKING MOD PACKAGE"
+                                       Margin="0,8,0,0"
+                                       FontSize="16"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+
+                            <TextBlock x:Name="DetailText"
+                                       Text="Limelight is preparing the selected mod for a safe live change."
+                                       Margin="0,8,0,0"
+                                       FontSize="13"
+                                       LineHeight="20"
+                                       TextWrapping="Wrap"
+                                       Foreground="#C8C6D8"/>
+
+                            <ProgressBar x:Name="SwitchProgress"
+                                         Minimum="0"
+                                         Maximum="100"
+                                         Value="12"
+                                         Height="10"
+                                         Margin="0,22,0,0"
+                                         Background="#252943"
+                                         Foreground="{StaticResource CyanBrush}"
+                                         BorderThickness="0"/>
+
+                            <Grid Margin="0,13,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="ESTIMATED TIME REMAINING"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                                    <TextBlock x:Name="EtaText"
+                                               Text="CALCULATING"
+                                               Margin="0,3,0,0"
+                                               FontSize="14"
+                                               FontWeight="Bold"/>
+                                </StackPanel>
+
+                                <TextBlock x:Name="ProgressText"
+                                           Grid.Column="1"
+                                           Text="12%"
+                                           VerticalAlignment="Bottom"
+                                           FontSize="14"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource CyanBrush}"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock x:Name="TimingNoteText"
+                               Text="The first live switch performs the full package scan and normally takes the longest."
+                               Margin="2,17,2,0"
+                               FontSize="12"
+                               LineHeight="18"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+                </StackPanel>
+
+                <TextBlock Grid.Row="2"
+                           Text="&#x25C6;  LIVE CHANGE IN PROGRESS"
+                           Margin="0,22,0,0"
+                           HorizontalAlignment="Right"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PinkBrush}"/>
+            </Grid>
+        </Border>
+    </Border>
+</Window>

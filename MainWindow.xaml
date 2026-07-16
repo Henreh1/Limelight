@@ -340,21 +340,37 @@
             BorderBrush="{StaticResource BorderBrush}"
             BorderThickness="1"
             CornerRadius="11">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
 
-                            <StackPanel>
-                                <TextBlock Text="LIVE LOADER"
-                       FontSize="11"
-                       FontWeight="Bold"
-                       Foreground="{StaticResource MutedTextBrush}"/>
+                                <StackPanel>
+                                    <TextBlock Text="LIVE LOADER"
+                   FontSize="11"
+                   FontWeight="Bold"
+                   Foreground="{StaticResource MutedTextBrush}"/>
 
-                                <TextBlock x:Name="LiveLoaderStatusText"
-                       Text="NOT INSTALLED"
-                       Margin="0,8,0,0"
-                       FontSize="18"
-                       FontWeight="Bold"
-                       TextTrimming="CharacterEllipsis"
-                       Foreground="{StaticResource PinkBrush}"/>
-                            </StackPanel>
+                                    <TextBlock x:Name="LiveLoaderStatusText"
+                   Text="NOT INSTALLED"
+                   Margin="0,8,0,0"
+                   FontSize="18"
+                   FontWeight="Bold"
+                   TextTrimming="CharacterEllipsis"
+                   Foreground="{StaticResource PinkBrush}"/>
+                                </StackPanel>
+
+                                <Button Grid.Column="1"
+            Content="NATIVE TEST"
+            Width="96"
+            Height="32"
+            Margin="8,0,0,0"
+            Padding="0"
+            VerticalAlignment="Center"
+            Click="TestLiveLoader_Click"
+            Style="{StaticResource SecondaryButton}"/>
+                            </Grid>
                         </Border>
                     </UniformGrid>
 
