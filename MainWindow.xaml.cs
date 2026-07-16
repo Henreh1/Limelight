@@ -23,6 +23,7 @@ namespace Limelight
         {
             Dashboard,
             MyMods,
+            BrowseNexus,
             Settings
         }
 
@@ -41,6 +42,24 @@ namespace Limelight
         private readonly LiveModStagingService _liveModStagingService;
         private readonly LiveSessionService _liveSessionService;
         private readonly DiagnosticReportService _diagnosticReportService;
+        private readonly NexusApiService _nexusApiService;
+        private readonly NexusCredentialService _nexusCredentialService;
+
+        private NexusAccount? _nexusAccount;
+
+        private string _nexusApiKey =
+            string.Empty;
+        private readonly List<NexusModSummary> _nexusBrowseMods =
+    new();
+
+        private string _nexusSearchQuery =
+            string.Empty;
+
+        private string _nexusCategoryFilter =
+            string.Empty;
+
+        private bool _isNexusBrowseLoading;
+        private bool _hasLoadedNexusBrowseMods;
         private readonly DispatcherTimer _gameStatusTimer;
         private bool _hasHandledLiveLoaderPrompt;
         private bool _isLiveLoaderSetupRunning;
@@ -103,6 +122,12 @@ namespace Limelight
             _diagnosticReportService =
                 new DiagnosticReportService();
 
+            _nexusApiService =
+                new NexusApiService();
+
+            _nexusCredentialService =
+                new NexusCredentialService();
+
             _settings =
                 _settingsService.Load();
 
@@ -122,6 +147,25 @@ namespace Limelight
 
             SettingsPageControl.ChangeGameFolderRequested +=
                 ChangeGameFolderRequested;
+
+            SettingsPageControl.NexusConnectRequested +=
+                NexusConnectRequested;
+
+            SettingsPageControl.NexusDisconnectRequested +=
+                NexusDisconnectRequested;
+
+            BrowseNexusPageControl.SearchRequested +=
+                NexusSearchRequested;
+
+            BrowseNexusPageControl.SortChanged +=
+                NexusSortChanged;
+
+            BrowseNexusPageControl.CategoryChanged +=
+                NexusCategoryChanged;
+
+            BrowseNexusPageControl.RefreshRequested +=
+                NexusRefreshRequested;
+
 
             // Checking every two seconds keeps the display responsive without
             // constantly asking Windows for its process list.
@@ -168,6 +212,7 @@ namespace Limelight
             }
 
             RefreshSettingsPage();
+            await RestoreNexusConnectionAsync();
 
             // Finish any existing-mod migration before opening another modal window.
             await CheckForExistingMods();
@@ -1601,6 +1646,9 @@ namespace Limelight
             DashboardPage.Visibility =
                 Visibility.Collapsed;
 
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
             SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -1686,6 +1734,9 @@ namespace Limelight
             SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
             DashboardPage.Visibility =
                 Visibility.Visible;
 
@@ -1697,6 +1748,9 @@ namespace Limelight
             MouseButtonEventArgs e)
         {
             DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
                 Visibility.Collapsed;
 
             MyModsPageControl.Visibility =
@@ -1712,15 +1766,18 @@ namespace Limelight
         }
 
         private void SetSelectedNavigation(
-            bool showMyMods,
-            bool showSettings = false)
+    bool showMyMods,
+    bool showSettings = false,
+    bool showBrowseNexus = false)
         {
             _selectedNavigationPage =
                 showSettings
                     ? NavigationPage.Settings
-                    : showMyMods
-                        ? NavigationPage.MyMods
-                        : NavigationPage.Dashboard;
+                    : showBrowseNexus
+                        ? NavigationPage.BrowseNexus
+                        : showMyMods
+                            ? NavigationPage.MyMods
+                            : NavigationPage.Dashboard;
 
             ApplyNavigationAppearance();
         }
@@ -1740,6 +1797,12 @@ namespace Limelight
                 MyModsNavigationIcon,
                 MyModsNavigationText,
                 _selectedNavigationPage == NavigationPage.MyMods);
+
+            ApplyNavigationItemAppearance(
+                BrowseNexusNavigation,
+                BrowseNexusNavigationIcon,
+                BrowseNexusNavigationText,
+                _selectedNavigationPage == NavigationPage.BrowseNexus);
 
             ApplyNavigationItemAppearance(
                 SettingsNavigation,
@@ -1841,7 +1904,9 @@ namespace Limelight
                 (navigation == MyModsNavigation &&
                  _selectedNavigationPage == NavigationPage.MyMods) ||
                 (navigation == SettingsNavigation &&
-                 _selectedNavigationPage == NavigationPage.Settings);
+                 _selectedNavigationPage == NavigationPage.Settings) ||
+                (navigation == BrowseNexusNavigation &&
+                 _selectedNavigationPage == NavigationPage.BrowseNexus);
         }
 
         private void GetNavigationParts(
@@ -1863,6 +1928,13 @@ namespace Limelight
                 return;
             }
 
+            if (navigation == BrowseNexusNavigation)
+            {
+                icon = BrowseNexusNavigationIcon;
+                label = BrowseNexusNavigationText;
+                return;
+            }
+
             if (navigation == SettingsNavigation)
             {
                 icon = SettingsNavigationIcon;
@@ -1874,6 +1946,181 @@ namespace Limelight
             label = null;
         }
 
+        private async void NexusConnectRequested(
+    string apiKey)
+        {
+            await ConnectNexusAsync(
+                apiKey,
+                isRestoring: false);
+        }
+
+        private void NexusDisconnectRequested()
+        {
+            ClearNexusCredentials();
+
+            SettingsPageControl.ShowNexusStatus(
+                isConnected: false,
+                accountName: null);
+
+            ShowNotification(
+                "NEXUS DISCONNECTED",
+                "Your Nexus Mods account has been disconnected from Limelight.",
+                isError: false);
+        }
+
+        private async Task RestoreNexusConnectionAsync()
+        {
+            string apiKey =
+                _nexusCredentialService.Unprotect(
+                    _settings.ProtectedNexusApiKey);
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                // A protected value that cannot be opened probably came from
+                // another Windows account or a damaged settings file.
+                if (!string.IsNullOrWhiteSpace(
+                        _settings.ProtectedNexusApiKey))
+                {
+                    ClearNexusCredentials();
+                }
+
+                SettingsPageControl.ShowNexusStatus(
+                    isConnected: false,
+                    accountName: null);
+
+                return;
+            }
+
+            await ConnectNexusAsync(
+                apiKey,
+                isRestoring: true);
+        }
+
+        private async Task ConnectNexusAsync(
+            string apiKey,
+            bool isRestoring)
+        {
+            SettingsPageControl.ShowNexusStatus(
+                isConnected: false,
+                accountName: null,
+                isBusy: true);
+
+            try
+            {
+                NexusAccount account =
+                    await _nexusApiService.ValidateApiKeyAsync(
+                        apiKey);
+
+                _nexusApiKey =
+                    apiKey.Trim();
+
+                _nexusAccount =
+                    account;
+
+                _settings.ProtectedNexusApiKey =
+                    _nexusCredentialService.Protect(
+                        _nexusApiKey);
+
+                _settings.NexusAccountName =
+                    account.Name;
+
+                _settingsService.Save(
+                    _settings);
+
+                SettingsPageControl.ShowNexusStatus(
+                    isConnected: true,
+                    accountName: CreateNexusAccountLabel(account));
+
+                if (!isRestoring)
+                {
+                    ShowNotification(
+                        "NEXUS CONNECTED",
+                        $"{account.Name} is now connected to Limelight.",
+                        isError: false);
+                }
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                _nexusApiKey =
+                    string.Empty;
+
+                _nexusAccount =
+                    null;
+
+                if (isRestoring)
+                {
+                    ClearNexusCredentials();
+                }
+
+                SettingsPageControl.ShowNexusStatus(
+                    isConnected: false,
+                    accountName: null);
+
+                if (!isRestoring)
+                {
+                    ShowNotification(
+                        "NEXUS CONNECTION FAILED",
+                        exception.Message,
+                        isError: true);
+                }
+            }
+            catch (Exception exception)
+            {
+                _nexusApiKey =
+                    string.Empty;
+
+                _nexusAccount =
+                    null;
+
+                // A temporary network failure should not erase a previously
+                // accepted key. Limelight can try it again next time it opens.
+                SettingsPageControl.ShowNexusStatus(
+                    isConnected: false,
+                    accountName: null);
+
+                if (!isRestoring)
+                {
+                    ShowNotification(
+                        "NEXUS IS UNAVAILABLE",
+                        exception.Message,
+                        isError: true);
+                }
+            }
+        }
+
+        private void ClearNexusCredentials()
+        {
+            _nexusApiKey =
+                string.Empty;
+
+            _nexusAccount =
+                null;
+
+            _settings.ProtectedNexusApiKey =
+                string.Empty;
+
+            _settings.NexusAccountName =
+                string.Empty;
+
+            _settingsService.Save(
+                _settings);
+        }
+
+        private static string CreateNexusAccountLabel(
+            NexusAccount account)
+        {
+            if (account.IsPremium)
+            {
+                return $"{account.Name} (Premium)";
+            }
+
+            if (account.IsSupporter)
+            {
+                return $"{account.Name} (Supporter)";
+            }
+
+            return account.Name;
+        }
         private void RefreshSettingsPage()
         {
             string? gameDirectory =
@@ -2075,6 +2322,598 @@ namespace Limelight
             }
         }
 
+        private void ShowBrowseNexus_Click(
+    object sender,
+    MouseButtonEventArgs e)
+        {
+            ShowBrowseNexusPage();
+        }
+
+        private void BrowseNexus_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            ShowBrowseNexusPage();
+        }
+
+        private void ShowBrowseNexusPage()
+        {
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
+                Visibility.Visible;
+
+            bool isConnected =
+                _nexusAccount is not null &&
+                !string.IsNullOrWhiteSpace(_nexusApiKey);
+
+            BrowseNexusPageControl.ShowConnection(
+                isConnected);
+
+            SetSelectedNavigation(
+                showMyMods: false,
+                showBrowseNexus: true);
+
+            // The first visit loads Nexus automatically. Later visits keep the
+            // existing cards in place until the user asks for a refresh.
+            if (isConnected &&
+                !_hasLoadedNexusBrowseMods &&
+                !_isNexusBrowseLoading)
+            {
+                _ = LoadNexusModsAsync(
+                    BrowseNexusPageControl.SelectedSortKey);
+            }
+        }
+
+        private async void NexusSearchRequested(
+            string query)
+        {
+            _nexusSearchQuery =
+                query.Trim();
+
+            if (TryReadNexusModId(
+                    _nexusSearchQuery,
+                    out long modId))
+            {
+                await SearchNexusModByIdAsync(
+                    modId);
+
+                return;
+            }
+
+            ApplyNexusSearch();
+        }
+
+        private async void NexusSortChanged(
+            string sortKey)
+        {
+            await LoadNexusModsAsync(
+                sortKey);
+        }
+
+        private void NexusCategoryChanged(
+            string category)
+        {
+            _nexusCategoryFilter =
+                category.Trim();
+
+            ApplyNexusSearch();
+        }
+
+        private async void NexusRefreshRequested()
+        {
+            await LoadNexusModsAsync(
+                BrowseNexusPageControl.SelectedSortKey,
+                forceRefresh: true);
+        }
+
+        private async Task LoadNexusModsAsync(
+            string sortKey,
+            bool forceRefresh = false)
+        {
+            if (_isNexusBrowseLoading)
+            {
+                return;
+            }
+
+            if (_nexusAccount is null ||
+                string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                BrowseNexusPageControl.ShowConnection(
+                    isConnected: false);
+
+                return;
+            }
+
+            _isNexusBrowseLoading =
+                true;
+
+            BrowseNexusPageControl.ShowLoading(
+                isLoading: true);
+
+            try
+            {
+                IReadOnlyList<NexusModSummary> mods =
+                    await _nexusApiService.GetModsAsync(
+                        _nexusApiKey,
+                        sortKey,
+                        forceRefresh);
+
+                _nexusBrowseMods.Clear();
+                _nexusBrowseMods.AddRange(mods);
+
+                BrowseNexusPageControl.ShowCategories(
+                    _nexusBrowseMods.Select(mod =>
+                        mod.CategoryName));
+
+                _hasLoadedNexusBrowseMods =
+                    true;
+
+                ApplyNexusSearch();
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                _hasLoadedNexusBrowseMods =
+                    false;
+
+                BrowseNexusPageControl.ShowError(
+                    exception.Message);
+            }
+            catch (Exception exception)
+            {
+                _hasLoadedNexusBrowseMods =
+                    false;
+
+                BrowseNexusPageControl.ShowError(
+                    "Limelight could not load the Dead as Disco mod library. " +
+                    exception.Message);
+            }
+            finally
+            {
+                _isNexusBrowseLoading =
+                    false;
+
+                BrowseNexusPageControl.ShowLoading(
+                    isLoading: false);
+            }
+        }
+
+        private void ApplyNexusSearch()
+        {
+            IEnumerable<NexusModSummary> matches =
+                _nexusBrowseMods;
+
+            // Category and title filters work together, just like the Nexus
+            // catalogue, so a character search stays inside Characters.
+            if (!string.IsNullOrWhiteSpace(
+                    _nexusCategoryFilter))
+            {
+                matches =
+                    matches.Where(mod =>
+                        mod.CategoryName.Equals(
+                            _nexusCategoryFilter,
+                            StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!string.IsNullOrWhiteSpace(
+                    _nexusSearchQuery))
+            {
+                string normalisedQuery =
+                    string.Join(
+                        " ",
+                        _nexusSearchQuery.Split(
+                            ' ',
+                            StringSplitOptions.RemoveEmptyEntries |
+                            StringSplitOptions.TrimEntries));
+
+                string[] searchTerms =
+                    normalisedQuery.Split(
+                        ' ',
+                        StringSplitOptions.RemoveEmptyEntries);
+
+                matches =
+                    matches
+                        .Select(mod =>
+                            new
+                            {
+                                Mod = mod,
+                                Score = GetNexusSearchScore(
+                                    mod,
+                                    normalisedQuery,
+                                    searchTerms)
+                            })
+                        .Where(result =>
+                            result.Score < int.MaxValue)
+                        .OrderBy(result => result.Score)
+                        .ThenByDescending(result =>
+                            result.Mod.Endorsements)
+                        .ThenBy(result =>
+                            result.Mod.Name)
+                        .Select(result => result.Mod);
+            }
+
+            BrowseNexusPageControl.ShowMods(
+                matches.ToList());
+        }
+
+        private static int GetNexusSearchScore(
+            NexusModSummary mod,
+            string query,
+            IReadOnlyCollection<string> searchTerms)
+        {
+            if (mod.Name.Equals(
+                    query,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 0;
+            }
+
+            if (mod.Name.StartsWith(
+                    query,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 10;
+            }
+
+            if (mod.Name.Contains(
+                    query,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 20;
+            }
+
+            // Matching every word in the title allows searches such as
+            // "urara haru" while keeping title results above everything else.
+            if (AllSearchTermsMatch(
+                    mod.Name,
+                    searchTerms))
+            {
+                return 30;
+            }
+
+            int fuzzyTitleDistance =
+                GetFuzzyTitleDistance(
+                    mod.Name,
+                    searchTerms);
+
+            if (fuzzyTitleDistance < int.MaxValue)
+            {
+                return 40 +
+                    fuzzyTitleDistance;
+            }
+
+            if (AllSearchTermsMatch(
+                    mod.Author,
+                    searchTerms))
+            {
+                return 100;
+            }
+
+            if (AllSearchTermsMatch(
+                    mod.Summary,
+                    searchTerms))
+            {
+                return 200;
+            }
+
+            string combinedDetails =
+                $"{mod.Name} {mod.Author} {mod.Summary}";
+
+            return AllSearchTermsMatch(
+                    combinedDetails,
+                    searchTerms)
+                ? 300
+                : int.MaxValue;
+        }
+
+        private static int GetFuzzyTitleDistance(
+            string title,
+            IReadOnlyCollection<string> searchTerms)
+        {
+            string[] titleWords =
+                GetSearchWords(title);
+
+            string[] queryWords =
+                GetSearchWords(
+                    string.Join(
+                        " ",
+                        searchTerms));
+
+            if (titleWords.Length == 0 ||
+                queryWords.Length == 0)
+            {
+                return int.MaxValue;
+            }
+
+            int totalDistance = 0;
+
+            foreach (string queryWord in queryWords)
+            {
+                int bestDistance =
+                    titleWords
+                        .Select(titleWord =>
+                            GetFuzzyWordDistance(
+                                queryWord,
+                                titleWord))
+                        .DefaultIfEmpty(int.MaxValue)
+                        .Min();
+
+                int allowedDistance =
+                    queryWord.Length switch
+                    {
+                        <= 2 => 0,
+                        <= 5 => 1,
+                        <= 9 => 2,
+                        _ => 3
+                    };
+
+                if (bestDistance > allowedDistance)
+                {
+                    return int.MaxValue;
+                }
+
+                totalDistance +=
+                    bestDistance;
+            }
+
+            return totalDistance;
+        }
+
+        private static int GetFuzzyWordDistance(
+            string queryWord,
+            string titleWord)
+        {
+            // A partial word is useful while someone is still typing, while
+            // the distance check below catches missing or swapped letters.
+            if (titleWord.Contains(
+                    queryWord,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return 0;
+            }
+
+            return GetDamerauLevenshteinDistance(
+                queryWord,
+                titleWord);
+        }
+
+        private static string[] GetSearchWords(
+            string value)
+        {
+            string lettersAndSpaces =
+                new string(
+                    value
+                        .Select(character =>
+                            char.IsLetterOrDigit(character)
+                                ? char.ToLowerInvariant(character)
+                                : ' ')
+                        .ToArray());
+
+            return lettersAndSpaces.Split(
+                ' ',
+                StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries);
+        }
+
+        private static int GetDamerauLevenshteinDistance(
+            string source,
+            string target)
+        {
+            var distances =
+                new int[
+                    source.Length + 1,
+                    target.Length + 1];
+
+            for (int sourceIndex = 0;
+                sourceIndex <= source.Length;
+                sourceIndex++)
+            {
+                distances[sourceIndex, 0] =
+                    sourceIndex;
+            }
+
+            for (int targetIndex = 0;
+                targetIndex <= target.Length;
+                targetIndex++)
+            {
+                distances[0, targetIndex] =
+                    targetIndex;
+            }
+
+            for (int sourceIndex = 1;
+                sourceIndex <= source.Length;
+                sourceIndex++)
+            {
+                for (int targetIndex = 1;
+                    targetIndex <= target.Length;
+                    targetIndex++)
+                {
+                    int substitutionCost =
+                        source[sourceIndex - 1] ==
+                        target[targetIndex - 1]
+                            ? 0
+                            : 1;
+
+                    distances[sourceIndex, targetIndex] =
+                        Math.Min(
+                            Math.Min(
+                                distances[sourceIndex - 1, targetIndex] + 1,
+                                distances[sourceIndex, targetIndex - 1] + 1),
+                            distances[sourceIndex - 1, targetIndex - 1] +
+                            substitutionCost);
+
+                    if (sourceIndex > 1 &&
+                        targetIndex > 1 &&
+                        source[sourceIndex - 1] ==
+                        target[targetIndex - 2] &&
+                        source[sourceIndex - 2] ==
+                        target[targetIndex - 1])
+                    {
+                        distances[sourceIndex, targetIndex] =
+                            Math.Min(
+                                distances[sourceIndex, targetIndex],
+                                distances[sourceIndex - 2, targetIndex - 2] +
+                                substitutionCost);
+                    }
+                }
+            }
+
+            return distances[
+                source.Length,
+                target.Length];
+        }
+
+        private static bool AllSearchTermsMatch(
+            string value,
+            IReadOnlyCollection<string> searchTerms)
+        {
+            return searchTerms.Count > 0 &&
+                searchTerms.All(term =>
+                    value.Contains(
+                        term,
+                        StringComparison.OrdinalIgnoreCase));
+        }
+
+        private async Task SearchNexusModByIdAsync(
+            long modId)
+        {
+            if (_isNexusBrowseLoading ||
+                _nexusAccount is null ||
+                string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                return;
+            }
+
+            _isNexusBrowseLoading =
+                true;
+
+            BrowseNexusPageControl.ShowLoading(
+                isLoading: true);
+
+            try
+            {
+                NexusModSummary mod =
+                    await _nexusApiService.GetModAsync(
+                        _nexusApiKey,
+                        modId);
+
+                _nexusBrowseMods.RemoveAll(
+                    existingMod =>
+                        existingMod.ModId == mod.ModId);
+
+                _nexusBrowseMods.Insert(
+                    0,
+                    mod);
+
+                BrowseNexusPageControl.ShowCategories(
+                    _nexusBrowseMods.Select(existingMod =>
+                        existingMod.CategoryName));
+
+                _hasLoadedNexusBrowseMods =
+                    true;
+
+                BrowseNexusPageControl.ShowMods(
+                    new[] { mod });
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                BrowseNexusPageControl.ShowError(
+                    exception.Message);
+            }
+            catch (Exception exception)
+            {
+                BrowseNexusPageControl.ShowError(
+                    "Limelight could not find that Dead as Disco mod. " +
+                    exception.Message);
+            }
+            finally
+            {
+                _isNexusBrowseLoading =
+                    false;
+
+                BrowseNexusPageControl.ShowLoading(
+                    isLoading: false);
+            }
+        }
+
+        private static bool TryReadNexusModId(
+            string query,
+            out long modId)
+        {
+            modId = 0;
+
+            string trimmedQuery =
+                query.Trim();
+
+            if (long.TryParse(
+                    trimmedQuery,
+                    out modId) &&
+                modId > 0)
+            {
+                return true;
+            }
+
+            if (!Uri.TryCreate(
+                    trimmedQuery,
+                    UriKind.Absolute,
+                    out Uri? uri))
+            {
+                modId = 0;
+                return false;
+            }
+
+            bool isNexusHost =
+                uri.Host.Equals(
+                    "nexusmods.com",
+                    StringComparison.OrdinalIgnoreCase) ||
+                uri.Host.EndsWith(
+                    ".nexusmods.com",
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (!isNexusHost)
+            {
+                modId = 0;
+                return false;
+            }
+
+            string[] pathParts =
+                uri.AbsolutePath.Split(
+                    '/',
+                    StringSplitOptions.RemoveEmptyEntries);
+
+            int modsIndex =
+                Array.FindIndex(
+                    pathParts,
+                    part => part.Equals(
+                        "mods",
+                        StringComparison.OrdinalIgnoreCase));
+
+            bool isDeadAsDiscoMod =
+                modsIndex > 0 &&
+                modsIndex + 1 < pathParts.Length &&
+                pathParts[modsIndex - 1].Equals(
+                    "deadasdisco",
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (!isDeadAsDiscoMod ||
+                !long.TryParse(
+                    pathParts[modsIndex + 1],
+                    out modId) ||
+                modId <= 0)
+            {
+                modId = 0;
+                return false;
+            }
+
+            return true;
+        }
         private async void ImportMod_Click(
             object sender,
             RoutedEventArgs e)

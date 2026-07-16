@@ -12,6 +12,8 @@ namespace Limelight.Views
         public event Action? ExportDiagnosticsRequested;
         public event Action? ChangeGameFolderRequested;
         public event Action? NativeTestRequested;
+        public event Action<string>? NexusConnectRequested;
+        public event Action? NexusDisconnectRequested;
 
         public SettingsPage()
         {
@@ -108,6 +110,76 @@ namespace Limelight.Views
                     : 0.45;
         }
 
+        public void ShowNexusStatus(
+    bool isConnected,
+    string? accountName,
+    bool isBusy = false)
+        {
+            bool healthy =
+                isConnected ||
+                isBusy;
+
+            NexusConnectionStatusText.Text =
+                isBusy
+                    ? "CONNECTING"
+                    : isConnected
+                        ? "CONNECTED"
+                        : "NOT CONNECTED";
+
+            NexusConnectionStatusText.Foreground =
+                StatusBrush(healthy);
+
+            string displayName =
+                string.IsNullOrWhiteSpace(accountName)
+                    ? "Your Nexus account"
+                    : accountName;
+
+            NexusAccountDetailText.Text =
+                isBusy
+                    ? "Limelight is checking your Nexus API key."
+                    : isConnected
+                        ? $"{displayName} is connected. Nexus browsing and downloads are ready."
+                        : "Connect a personal API key to test browsing and downloads inside Limelight.";
+
+            NexusApiKeyBox.IsEnabled =
+                !isConnected &&
+                !isBusy;
+
+            NexusConnectButton.IsEnabled =
+                !isConnected &&
+                !isBusy;
+
+            NexusDisconnectButton.IsEnabled =
+                isConnected &&
+                !isBusy;
+
+            NexusConnectButton.Opacity =
+                NexusConnectButton.IsEnabled
+                    ? 1
+                    : 0.45;
+
+            NexusDisconnectButton.Opacity =
+                NexusDisconnectButton.IsEnabled
+                    ? 1
+                    : 0.45;
+
+            NexusAccessBadgeText.Text =
+                isBusy
+                    ? "CHECKING"
+                    : isConnected
+                        ? "API READY"
+                        : "TESTING ACCESS";
+
+            NexusAccessBadgeText.Foreground =
+                StatusBrush(healthy);
+
+            if (isConnected)
+            {
+                // Once the key has been accepted there is no reason to leave it visible.
+                NexusApiKeyBox.Password =
+                    string.Empty;
+            }
+        }
         private string CreateSessionDetail(
             LiveSessionState session,
             bool isGameRunning)
@@ -177,6 +249,41 @@ namespace Limelight.Views
             ExportDiagnosticsRequested?.Invoke();
         }
 
+        private void NexusConnectButton_Click(
+    object sender,
+    RoutedEventArgs e)
+        {
+            string apiKey =
+                NexusApiKeyBox.Password.Trim();
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                NexusConnectionStatusText.Text =
+                    "API KEY REQUIRED";
+
+                NexusConnectionStatusText.Foreground =
+                    StatusBrush(isHealthy: false);
+
+                NexusAccountDetailText.Text =
+                    "Paste your personal Nexus Mods API key before connecting.";
+
+                return;
+            }
+
+            ShowNexusStatus(
+                isConnected: false,
+                accountName: null,
+                isBusy: true);
+
+            NexusConnectRequested?.Invoke(apiKey);
+        }
+
+        private void NexusDisconnectButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            NexusDisconnectRequested?.Invoke();
+        }
         private void ChangeGameFolderButton_Click(
             object sender,
             RoutedEventArgs e)

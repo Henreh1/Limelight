@@ -110,8 +110,32 @@
                         </StackPanel>
                     </Border>
 
-                    <Button Content="◇    Browse Nexus"
-            Style="{StaticResource NavigationButton}"/>
+                    <Border x:Name="BrowseNexusNavigation"
+                            Margin="8,3"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            BorderBrush="Transparent"
+                            BorderThickness="3,0,0,0"
+                            MouseLeftButtonDown="ShowBrowseNexus_Click"
+                            MouseEnter="Navigation_MouseEnter"
+                            MouseLeave="Navigation_MouseLeave"
+                            Cursor="Hand">
+
+                        <StackPanel Margin="16,13"
+                                    Orientation="Horizontal">
+
+                            <TextBlock x:Name="BrowseNexusNavigationIcon"
+                                       Text="◇"
+                                       Width="26"
+                                       FontSize="13"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+
+                            <TextBlock x:Name="BrowseNexusNavigationText"
+                                       Text="Browse Nexus"
+                                       FontSize="14"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </StackPanel>
+                    </Border>
 
                     <Button Content="◇    Downloads"
             Style="{StaticResource NavigationButton}"/>
@@ -281,6 +305,7 @@
 
                                     <Button Content="BROWSE NEXUS"
                                             Margin="10,0,0,0"
+                                            Click="BrowseNexus_Click"
                                             Style="{StaticResource SecondaryButton}"/>
                                 </StackPanel>
                             </StackPanel>
@@ -503,6 +528,11 @@
         <views:MyModsPage x:Name="MyModsPageControl"
                           Grid.Column="1"
                           Visibility="Collapsed"/>
+
+        <!-- Nexus browsing has its own page so downloading does not crowd the dashboard. -->
+        <views:BrowseNexusPage x:Name="BrowseNexusPageControl"
+                               Grid.Column="1"
+                               Visibility="Collapsed"/>
 
         <!-- Recovery and diagnostics live here so the dashboard stays simple. -->
         <views:SettingsPage x:Name="SettingsPageControl"

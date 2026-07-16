@@ -17,6 +17,12 @@ namespace Limelight.Models
         public string DismissedLiveLoaderPromptForGameDirectory { get; set; } =
             string.Empty;
 
+        public string ProtectedNexusApiKey { get; set; } =
+    string.Empty;
+
+        public string NexusAccountName { get; set; } =
+            string.Empty;
+
         public List<InstalledMod> InstalledMods { get; set; } =
             new List<InstalledMod>();
     }
