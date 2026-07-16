@@ -47,6 +47,26 @@ namespace Limelight.Services
             " }";
 
         private readonly HttpClient _httpClient;
+        private readonly object _usageLock =
+    new();
+
+        private int _requestsThisSession;
+
+        private NexusApiUsageSnapshot _usageSnapshot =
+            new();
+
+        public event Action<NexusApiUsageSnapshot>? UsageChanged;
+
+        public NexusApiUsageSnapshot UsageSnapshot
+        {
+            get
+            {
+                lock (_usageLock)
+                {
+                    return _usageSnapshot;
+                }
+            }
+        }
 
         private const int MaximumRecentModDetails = 60;
 
@@ -91,7 +111,7 @@ namespace Limelight.Services
                     apiKey);
 
             using HttpResponseMessage response =
-                await _httpClient.SendAsync(
+                await SendRequestAsync(
                     request,
                     cancellationToken);
 
@@ -214,7 +234,7 @@ namespace Limelight.Services
                     apiKey);
 
             using HttpResponseMessage response =
-                await _httpClient.SendAsync(
+                await SendRequestAsync(
                     request,
                     cancellationToken);
 
@@ -436,7 +456,7 @@ namespace Limelight.Services
                     apiKey);
 
             using HttpResponseMessage response =
-                await _httpClient.SendAsync(
+                await SendRequestAsync(
                     request,
                     cancellationToken);
 
@@ -497,7 +517,7 @@ namespace Limelight.Services
                         offset);
 
                 using HttpResponseMessage response =
-                    await _httpClient.SendAsync(
+                    await SendRequestAsync(
                         request,
                         cancellationToken);
 
@@ -654,7 +674,7 @@ namespace Limelight.Services
                     apiKey);
 
             using HttpResponseMessage response =
-                await _httpClient.SendAsync(
+                await SendRequestAsync(
                     request,
                     cancellationToken);
 
@@ -695,7 +715,7 @@ namespace Limelight.Services
                     apiKey);
 
             using HttpResponseMessage response =
-                await _httpClient.SendAsync(
+                await SendRequestAsync(
                     request,
                     cancellationToken);
 
@@ -741,7 +761,7 @@ namespace Limelight.Services
                     apiKey);
 
             using HttpResponseMessage response =
-                await _httpClient.SendAsync(
+                await SendRequestAsync(
                     request,
                     cancellationToken);
 
@@ -925,6 +945,162 @@ namespace Limelight.Services
             };
         }
 
+        private async Task<HttpResponseMessage> SendRequestAsync(
+    HttpRequestMessage request,
+    CancellationToken cancellationToken)
+        {
+            if (UsageSnapshot.ShouldPauseRequests)
+            {
+                throw new InvalidOperationException(
+                    "Limelight paused Nexus API testing because the connected account's remaining request quota is low.");
+            }
+
+            HttpResponseMessage? response =
+                null;
+
+            try
+            {
+                response =
+                    await _httpClient.SendAsync(
+                        request,
+                        cancellationToken);
+
+                return response;
+            }
+            finally
+            {
+                RecordNexusRequest(
+                    request,
+                    response);
+            }
+        }
+
+        private void RecordNexusRequest(
+            HttpRequestMessage request,
+            HttpResponseMessage? response)
+        {
+            int? dailyRemaining =
+                ReadQuotaHeader(
+                    response,
+                    "x-rl-daily-remaining");
+
+            int? hourlyRemaining =
+                ReadQuotaHeader(
+                    response,
+                    "x-rl-hourly-remaining");
+
+            NexusApiUsageSnapshot snapshot;
+
+            lock (_usageLock)
+            {
+                _requestsThisSession++;
+
+                snapshot =
+                    new NexusApiUsageSnapshot
+                    {
+                        RequestsThisSession =
+                            _requestsThisSession,
+
+                        DailyRemaining =
+                            dailyRemaining ??
+                            _usageSnapshot.DailyRemaining,
+
+                        HourlyRemaining =
+                            hourlyRemaining ??
+                            _usageSnapshot.HourlyRemaining,
+
+                        LastRequestUtc =
+                            DateTimeOffset.UtcNow,
+
+                        LastRequestKind =
+                            DescribeRequest(request)
+                    };
+
+                _usageSnapshot =
+                    snapshot;
+            }
+
+            try
+            {
+                UsageChanged?.Invoke(
+                    snapshot);
+            }
+            catch
+            {
+                // I never let the testing display interfere with a completed Nexus request.
+            }
+        }
+
+        private static int? ReadQuotaHeader(
+            HttpResponseMessage? response,
+            string headerName)
+        {
+            if (response is null ||
+                !response.Headers.TryGetValues(
+                    headerName,
+                    out IEnumerable<string>? values))
+            {
+                return null;
+            }
+
+            string? value =
+                values.FirstOrDefault();
+
+            return int.TryParse(
+                    value,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out int parsedValue)
+                ? parsedValue
+                : null;
+        }
+
+        private static string DescribeRequest(
+            HttpRequestMessage request)
+        {
+            string path =
+                request.RequestUri?
+                    .AbsolutePath
+                    .ToLowerInvariant() ??
+                string.Empty;
+
+            if (path.Contains(
+                    "/users/validate",
+                    StringComparison.Ordinal))
+            {
+                return "ACCOUNT VALIDATION";
+            }
+
+            if (path.Contains(
+                    "/download_link",
+                    StringComparison.Ordinal))
+            {
+                return "DOWNLOAD LINK";
+            }
+
+            if (path.EndsWith(
+                    "/files.json",
+                    StringComparison.Ordinal))
+            {
+                return "FILE LIST";
+            }
+
+            if (path.Contains(
+                    "/graphql",
+                    StringComparison.Ordinal))
+            {
+                return "CATALOGUE";
+            }
+
+            if (path.Contains(
+                    "/mods/",
+                    StringComparison.Ordinal))
+            {
+                return "MOD DETAILS";
+            }
+
+            return "CATALOGUE";
+        }
         private static HttpRequestMessage CreateRequest(
             string endpoint,
             string apiKey)

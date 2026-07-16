@@ -180,6 +180,51 @@ namespace Limelight.Views
                     string.Empty;
             }
         }
+
+        public void ShowNexusUsage(
+    NexusApiUsageSnapshot snapshot)
+        {
+            ArgumentNullException.ThrowIfNull(snapshot);
+
+            NexusSessionRequestCountText.Text =
+                snapshot.RequestsThisSession.ToString("N0");
+
+            NexusHourlyRemainingText.Text =
+                snapshot.HourlyRemaining?.ToString("N0") ??
+                "UNKNOWN";
+
+            NexusDailyRemainingText.Text =
+                snapshot.DailyRemaining?.ToString("N0") ??
+                "UNKNOWN";
+
+            NexusLastRequestText.Text =
+                snapshot.LastRequestUtc.HasValue
+                    ? $"{snapshot.LastRequestKind} • " +
+                      $"{snapshot.LastRequestUtc.Value.ToLocalTime():dd MMM yyyy HH:mm:ss}"
+                    : "NONE YET";
+
+            bool testingIsSafe =
+                snapshot.HasQuotaInformation &&
+                !snapshot.ShouldPauseRequests;
+
+            NexusTestingStatusText.Text =
+                snapshot.ShouldPauseRequests
+                    ? "REQUESTS PAUSED"
+                    : snapshot.HasQuotaInformation
+                        ? "WITHIN TEST LIMITS"
+                        : "WAITING FOR QUOTA";
+
+            // I use the same colour language as the rest of Limelight.
+            // Cyan means testing is safe, while pink needs attention.
+            NexusTestingStatusText.Foreground =
+                StatusBrush(testingIsSafe);
+
+            NexusHourlyRemainingText.Foreground =
+                StatusBrush(testingIsSafe);
+
+            NexusDailyRemainingText.Foreground =
+                StatusBrush(testingIsSafe);
+        }
         private string CreateSessionDetail(
             LiveSessionState session,
             bool isGameRunning)

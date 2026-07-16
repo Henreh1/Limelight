@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "bridgeVersion": "0.1.0",
+  "minimumLimelightVersion": "0.1.0",
+  "ue4ssVersion": "3.0.1-1009",
+  "ue4ssCommit": "c2ac246447a8bcd92541070cb474044e7a2bbbe6",
+  "targetModName": "LimelightNativeBridge",
+  "targetRelativePath": "dlls/main.dll",
+  "payloadFileName": "LimelightNativeBridge.dll",
+  "payloadSize": 154112,
+  "payloadSha256": "C93876CDF6B6A6DAEBBF9D7F7528703DAD2C26F2845B98D2F95B5B23EC3A60AB"
+}

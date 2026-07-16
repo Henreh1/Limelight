@@ -19,7 +19,7 @@
         <SolidColorBrush x:Key="TextBrush" Color="#F7F5FF"/>
         <SolidColorBrush x:Key="MutedTextBrush" Color="#9296AF"/>
 
-        <!-- Nexus pages share one slim scrollbar so catalogue, details and files feel like one place. -->
+        <!-- Nexus pages share one slim scrollbar so catalogue, details and files feel like one place. I love branding ! -->
         <Style x:Key="NexusScrollThumbStyle"
                TargetType="Thumb">
             <Setter Property="MinHeight" Value="34"/>

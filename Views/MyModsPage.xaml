@@ -63,6 +63,11 @@
                        Foreground="{StaticResource MutedTextBrush}"/>
 
             <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer.Resources>
+                    <Style TargetType="ScrollBar"
+                           BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+                </ScrollViewer.Resources>
+
                 <ItemsControl x:Name="ModsList">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>

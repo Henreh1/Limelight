@@ -41,6 +41,7 @@ namespace Limelight
         private readonly LiveLoaderCommandService _liveLoaderCommandService;
         private readonly LiveModStagingService _liveModStagingService;
         private readonly LiveSessionService _liveSessionService;
+        private readonly NativeBridgeInstallerService _nativeBridgeInstallerService;
         private readonly DiagnosticReportService _diagnosticReportService;
         private readonly NexusApiService _nexusApiService;
         private readonly NexusCredentialService _nexusCredentialService;
@@ -109,6 +110,9 @@ namespace Limelight
 
             _liveLoaderBridgeService =
                 new LiveLoaderBridgeService();
+
+            _nativeBridgeInstallerService =
+                new NativeBridgeInstallerService();
 
             _liveLoaderCommandService =
                 new LiveLoaderCommandService();
@@ -325,8 +329,10 @@ namespace Limelight
                     gameDirectory);
 
             if (!loader.IsInstalled ||
-                !_ue4ssConfigurationService.IsConfigured(loader) ||
-                !_liveLoaderBridgeService.IsInstalled(loader))
+    !_ue4ssConfigurationService.IsConfigured(loader) ||
+    !_liveLoaderBridgeService.IsInstalled(loader) ||
+    !_nativeBridgeInstallerService.IsCurrentVersionInstalled(
+        loader))
             {
                 // The optional loader has not been accepted yet. The normal
                 // dashboard and setup prompt remain available.
@@ -580,6 +586,17 @@ namespace Limelight
                 return;
             }
 
+            if (!_nativeBridgeInstallerService.IsCurrentVersionInstalled(
+        loader))
+            {
+                SetLiveLoaderDisplay(
+                    "NATIVE BRIDGE NEEDED",
+                    "Limelight's native companion is missing or does not match this version. Use Repair Live Loader in Settings.",
+                    isHealthy: false);
+
+                return;
+            }
+
             if (!isGameRunning)
             {
                 SetLiveLoaderDisplay(
@@ -737,6 +754,9 @@ namespace Limelight
 
                     _liveLoaderBridgeService.EnsureInstalled(
                         currentInstallation);
+
+                    _nativeBridgeInstallerService.EnsureInstalled(
+    currentInstallation);
                 }
                 catch
                 {
@@ -746,10 +766,12 @@ namespace Limelight
             }
 
             if (currentInstallation.IsInstalled &&
-                _ue4ssConfigurationService.IsConfigured(
-                    currentInstallation) &&
-                _liveLoaderBridgeService.IsInstalled(
-                    currentInstallation))
+     _ue4ssConfigurationService.IsConfigured(
+         currentInstallation) &&
+     _liveLoaderBridgeService.IsInstalled(
+         currentInstallation) &&
+     _nativeBridgeInstallerService.IsCurrentVersionInstalled(
+         currentInstallation))
             {
                 if (!isGameRunning)
                 {
@@ -900,6 +922,24 @@ namespace Limelight
                 {
                     throw new InvalidOperationException(
                         "The Limelight runtime bridge could not be verified.");
+                }
+
+                LiveLoaderStatusText.Text =
+ "ADDING NATIVE BRIDGE";
+
+                LiveLoaderStatusText.Foreground =
+                    (Brush)FindResource("CyanBrush");
+
+                // I install the native companion only after UE4SS and the Lua bridge
+                // have both passed their checks.
+                _nativeBridgeInstallerService.EnsureInstalled(
+                    installedLoader);
+
+                if (!_nativeBridgeInstallerService.IsCurrentVersionInstalled(
+                        installedLoader))
+                {
+                    throw new InvalidOperationException(
+                        "The Limelight native bridge could not be verified.");
                 }
 
                 _settings.DismissedLiveLoaderPromptForGameDirectory =
@@ -2298,6 +2338,9 @@ namespace Limelight
 
                     _liveLoaderBridgeService.EnsureInstalled(
                         loader);
+
+                    _nativeBridgeInstallerService.EnsureInstalled(
+    loader);
                 });
 
                 UpdateGameRunningStatus();
@@ -3269,6 +3312,8 @@ namespace Limelight
                         // Limelight was already open.
                         _ue4ssConfigurationService.Apply(loader);
                         _liveLoaderBridgeService.EnsureInstalled(loader);
+                        _nativeBridgeInstallerService.EnsureInstalled(
+    loader);
                     }
                     catch
                     {
