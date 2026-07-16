@@ -17,7 +17,9 @@ namespace Limelight.Views
         public event Action<string>? SortChanged;
         public event Action<string>? CategoryChanged;
         public event Action? RefreshRequested;
+        public event Action<NexusModSummary>? ViewModRequested;
         public event Action<NexusModSummary>? ViewFilesRequested;
+        public event Action<NexusModFile>? DownloadRequested;
 
         private bool _isUpdatingCategories;
 
@@ -29,6 +31,60 @@ namespace Limelight.Views
         public BrowseNexusPage()
         {
             InitializeComponent();
+
+            NexusModDetailsViewControl.BackRequested +=
+                ShowCatalogue;
+
+            NexusModDetailsViewControl.ViewFilesRequested +=
+                ShowFilesForMod;
+
+            NexusModFilesViewControl.BackRequested +=
+                ReturnToModDetails;
+
+            NexusModFilesViewControl.DownloadRequested +=
+                file => DownloadRequested?.Invoke(file);
+        }
+
+        public void ShowModDetails(
+            NexusModSummary mod)
+        {
+            NexusModDetailsViewControl.ShowDetails(
+                mod);
+
+            NexusModFilesViewControl.Visibility =
+                Visibility.Collapsed;
+
+            NexusModDetailsViewControl.Visibility =
+                Visibility.Visible;
+        }
+
+        public void ShowModDetailsError(
+            string message)
+        {
+            NexusModDetailsViewControl.ShowError(
+                message);
+        }
+
+        public void ShowModFiles(
+            NexusModSummary mod,
+            IEnumerable<NexusModFile> files)
+        {
+            NexusModFilesViewControl.ShowFiles(
+                mod,
+                files);
+
+            NexusModDetailsViewControl.Visibility =
+                Visibility.Collapsed;
+
+            NexusModFilesViewControl.Visibility =
+                Visibility.Visible;
+        }
+
+        public void ShowModFilesError(
+            string message)
+        {
+            NexusModFilesViewControl.ShowError(
+                message);
         }
 
         public string SelectedSortKey =>
@@ -437,8 +493,52 @@ namespace Limelight.Views
             if (sender is Button button &&
                 button.Tag is NexusModSummary mod)
             {
-                ViewFilesRequested?.Invoke(mod);
+                NexusModFilesViewControl.Visibility =
+                    Visibility.Collapsed;
+
+                NexusModDetailsViewControl.Visibility =
+                    Visibility.Visible;
+
+                NexusModDetailsViewControl.ShowLoading(
+                    mod);
+
+                ViewModRequested?.Invoke(mod);
             }
+        }
+
+        private void ShowFilesForMod(
+            NexusModSummary mod)
+        {
+            NexusModDetailsViewControl.Visibility =
+                Visibility.Collapsed;
+
+            NexusModFilesViewControl.Visibility =
+                Visibility.Visible;
+
+            NexusModFilesViewControl.ShowLoading(
+                mod);
+
+            ViewFilesRequested?.Invoke(
+                mod);
+        }
+
+        private void ReturnToModDetails()
+        {
+            NexusModFilesViewControl.Visibility =
+                Visibility.Collapsed;
+
+            NexusModDetailsViewControl.Visibility =
+                Visibility.Visible;
+        }
+
+        private void ShowCatalogue()
+        {
+            // The catalogue was never rebuilt, so this returns to the same search and page instantly.
+            NexusModFilesViewControl.Visibility =
+                Visibility.Collapsed;
+
+            NexusModDetailsViewControl.Visibility =
+                Visibility.Collapsed;
         }
 
         private Brush StatusBrush(

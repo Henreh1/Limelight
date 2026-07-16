@@ -190,6 +190,86 @@ namespace Limelight.Services
             return mod;
         }
 
+        public async Task<IReadOnlyList<NexusModFile>> GetModFilesAsync(
+            string apiKey,
+            long modId,
+            CancellationToken cancellationToken = default)
+        {
+            ValidateApiKey(apiKey);
+
+            if (modId <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(modId),
+                    "A Nexus mod ID must be greater than zero.");
+            }
+
+            string endpoint =
+                DeadAsDiscoModsEndpoint +
+                $"{modId}/files.json";
+
+            using HttpRequestMessage request =
+                CreateRequest(
+                    endpoint,
+                    apiKey);
+
+            using HttpResponseMessage response =
+                await _httpClient.SendAsync(
+                    request,
+                    cancellationToken);
+
+            EnsureSuccessfulResponse(response);
+
+            string json =
+                await response.Content.ReadAsStringAsync(
+                    cancellationToken);
+
+            NexusModFilesResponse? result =
+                JsonSerializer.Deserialize<NexusModFilesResponse>(
+                    json);
+
+            if (result?.Files is null)
+            {
+                return Array.Empty<NexusModFile>();
+            }
+
+            return result.Files
+                .Where(file =>
+                    file.FileId > 0)
+                .Select(file =>
+                    new NexusModFile
+                    {
+                        ModId = modId,
+                        FileId = file.FileId,
+                        CategoryId = file.CategoryId,
+                        CategoryName = FirstAvailable(
+                            file.CategoryName,
+                            "FILE").ToUpperInvariant(),
+                        FileName = FirstAvailable(
+                            file.Name,
+                            file.FileName,
+                            "Unnamed file"),
+                        ArchiveName =
+                            file.FileName?.Trim() ??
+                            string.Empty,
+                        Description = FirstAvailable(
+                            file.Description,
+                            "No description was provided for this file."),
+                        Version =
+                            file.Version?.Trim() ??
+                            string.Empty,
+                        SizeKilobytes =
+                            Math.Max(
+                                file.SizeKilobytes,
+                                file.Size),
+                        UploadedTimestamp =
+                            file.UploadedTimestamp,
+                        IsPrimary =
+                            file.IsPrimary
+                    })
+                .ToList();
+        }
+
         private async Task RefreshCatalogueAsync(
             string apiKey,
             CancellationToken cancellationToken)
@@ -750,6 +830,8 @@ namespace Limelight.Services
                 Name = result.Name.Trim(),
                 Summary = result.Summary?.Trim() ??
                     "No description has been provided.",
+                Description = result.Description?.Trim() ??
+                    string.Empty,
                 Author = FirstAvailable(
                     result.Author,
                     result.UploadedBy,
@@ -1004,6 +1086,9 @@ namespace Limelight.Services
             [JsonPropertyName("summary")]
             public string? Summary { get; set; }
 
+            [JsonPropertyName("description")]
+            public string? Description { get; set; }
+
             [JsonPropertyName("author")]
             public string? Author { get; set; }
 
@@ -1025,6 +1110,48 @@ namespace Limelight.Services
             [JsonPropertyName("available")]
             public bool Available { get; set; } =
                 true;
+        }
+
+        private sealed class NexusModFilesResponse
+        {
+            [JsonPropertyName("files")]
+            public List<NexusModFileResponse>? Files { get; set; }
+        }
+
+        private sealed class NexusModFileResponse
+        {
+            [JsonPropertyName("file_id")]
+            public int FileId { get; set; }
+
+            [JsonPropertyName("category_id")]
+            public int CategoryId { get; set; }
+
+            [JsonPropertyName("category_name")]
+            public string? CategoryName { get; set; }
+
+            [JsonPropertyName("name")]
+            public string? Name { get; set; }
+
+            [JsonPropertyName("file_name")]
+            public string? FileName { get; set; }
+
+            [JsonPropertyName("description")]
+            public string? Description { get; set; }
+
+            [JsonPropertyName("version")]
+            public string? Version { get; set; }
+
+            [JsonPropertyName("size")]
+            public long Size { get; set; }
+
+            [JsonPropertyName("size_kb")]
+            public long SizeKilobytes { get; set; }
+
+            [JsonPropertyName("uploaded_timestamp")]
+            public long UploadedTimestamp { get; set; }
+
+            [JsonPropertyName("is_primary")]
+            public bool IsPrimary { get; set; }
         }
 
         private sealed class NexusRecentUpdateResponse
@@ -1101,6 +1228,9 @@ namespace Limelight.Services
 
             [JsonPropertyName("summary")]
             public string? Summary { get; set; }
+
+            [JsonPropertyName("description")]
+            public string? Description { get; set; }
 
             [JsonPropertyName("author")]
             public string? Author { get; set; }

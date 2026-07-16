@@ -166,6 +166,15 @@ namespace Limelight
             BrowseNexusPageControl.RefreshRequested +=
                 NexusRefreshRequested;
 
+            BrowseNexusPageControl.ViewModRequested +=
+                NexusViewModRequested;
+
+            BrowseNexusPageControl.ViewFilesRequested +=
+                NexusViewFilesRequested;
+
+            BrowseNexusPageControl.DownloadRequested +=
+                NexusDownloadRequested;
+
 
             // Checking every two seconds keeps the display responsive without
             // constantly asking Windows for its process list.
@@ -2106,6 +2115,75 @@ namespace Limelight
                 _settings);
         }
 
+        private async void NexusViewModRequested(
+            NexusModSummary mod)
+        {
+            if (string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                BrowseNexusPageControl.ShowModDetailsError(
+                    "Connect your Nexus Mods account in Settings before opening a mod page.");
+
+                return;
+            }
+
+            try
+            {
+                // Catalogue cards are deliberately light. This request brings in
+                // the author's complete description only when somebody opens it.
+                NexusModSummary fullMod =
+                    await _nexusApiService.GetModAsync(
+                        _nexusApiKey,
+                        mod.ModId);
+
+                BrowseNexusPageControl.ShowModDetails(
+                    fullMod);
+            }
+            catch (Exception ex)
+            {
+                BrowseNexusPageControl.ShowModDetailsError(
+                    ex.Message);
+            }
+        }
+
+        private async void NexusViewFilesRequested(
+            NexusModSummary mod)
+        {
+            if (string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                BrowseNexusPageControl.ShowModFilesError(
+                    "Connect your Nexus Mods account in Settings before loading files.");
+
+                return;
+            }
+
+            try
+            {
+                IReadOnlyList<NexusModFile> files =
+                    await _nexusApiService.GetModFilesAsync(
+                        _nexusApiKey,
+                        mod.ModId);
+
+                BrowseNexusPageControl.ShowModFiles(
+                    mod,
+                    files);
+            }
+            catch (Exception ex)
+            {
+                BrowseNexusPageControl.ShowModFilesError(
+                    ex.Message);
+            }
+        }
+
+        private void NexusDownloadRequested(
+            NexusModFile file)
+        {
+            // The picker now hands one exact Nexus file to the download stage.
+            // The authenticated download and install queue is the next connection.
+            ShowNotification(
+                "DOWNLOAD READY",
+                $"{file.FileName} is selected and ready for the download stage.",
+                isError: false);
+        }
         private static string CreateNexusAccountLabel(
             NexusAccount account)
         {

@@ -1,0 +1,663 @@
+<Window x:Class="Limelight.Views.NexusModDetailsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Nexus mod details"
+        Width="1160"
+        Height="800"
+        MinWidth="980"
+        MinHeight="680"
+        WindowStartupLocation="CenterOwner"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="True"
+        ShowInTaskbar="False"
+        Background="Transparent"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Bahnschrift, Segoe UI"
+        TextOptions.TextFormattingMode="Display">
+
+    <Window.Resources>
+        <Style x:Key="DetailsScrollThumbStyle"
+               TargetType="Thumb">
+            <Setter Property="MinHeight" Value="38"/>
+            <Setter Property="Background" Value="#343A59"/>
+            <Setter Property="Cursor" Value="Hand"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border x:Name="ThumbBackground"
+                                Margin="2,1"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="4"/>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="ThumbBackground"
+                                        Property="Background"
+                                        Value="#9A2B76"/>
+                            </Trigger>
+
+                            <Trigger Property="IsDragging"
+                                     Value="True">
+                                <Setter TargetName="ThumbBackground"
+                                        Property="Background"
+                                        Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DetailsScrollBarStyle"
+               TargetType="ScrollBar">
+            <Setter Property="Width" Value="11"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="Background" Value="#0E1121"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ScrollBar">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <Track x:Name="PART_Track"
+                                   Focusable="False"
+                                   IsDirectionReversed="True"
+                                   Orientation="Vertical">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageUpCommand}"
+                                                  Focusable="False"
+                                                  Opacity="0"/>
+                                </Track.DecreaseRepeatButton>
+
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource DetailsScrollThumbStyle}"/>
+                                </Track.Thumb>
+
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.PageDownCommand}"
+                                                  Focusable="False"
+                                                  Opacity="0"/>
+                                </Track.IncreaseRepeatButton>
+                            </Track>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DetailsIconButton"
+               TargetType="Button">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="Cursor" Value="Hand"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="IconBackground"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="5">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="IconBackground"
+                                        Property="Background"
+                                        Value="#2A203C"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DetailStatCard"
+               TargetType="Border">
+            <Setter Property="Padding" Value="18,15"/>
+            <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="8"/>
+        </Style>
+
+        <Style x:Key="CarouselArrowButton"
+               TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="64"/>
+            <Setter Property="Background" Value="#D9141728"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderBrush" Value="#80343A59"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="30"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ArrowBackground"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="ArrowBackground"
+                                        Property="Background"
+                                        Value="#F02A203C"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="BorderBrush"
+                                        Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CarouselThumbnailButton"
+               TargetType="Button">
+            <Setter Property="Width" Value="124"/>
+            <Setter Property="Height" Value="70"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="{StaticResource RaisedPanelBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ThumbnailBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7"
+                                ClipToBounds="True">
+                            <ContentPresenter/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="ThumbnailBorder"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource PinkBrush}"/>
+                                <Setter Property="BorderThickness"
+                                        Value="2"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border Margin="18"
+            Background="{StaticResource BackgroundBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28"
+                              Direction="270"
+                              ShadowDepth="7"
+                              Color="#000000"
+                              Opacity="0.55"/>
+        </Border.Effect>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="48"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border x:Name="TitleBar"
+                    Grid.Row="0"
+                    Padding="18,0,10,0"
+                    Background="{StaticResource SidebarBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="12,12,0,0">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Width="22"
+                            Height="22"
+                            VerticalAlignment="Center"
+                            Background="#22263F"
+                            CornerRadius="5">
+                        <TextBlock Text="◆"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="10"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                    </Border>
+
+                    <TextBlock Grid.Column="1"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               Text="NEXUS MOD SPOTLIGHT"
+                               FontSize="12"
+                               FontWeight="Bold"/>
+
+                    <Button x:Name="CloseButton"
+                            Grid.Column="2"
+                            Content="×"
+                            ToolTip="Close"
+                            Style="{StaticResource DetailsIconButton}"/>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <!-- The loading view appears immediately while Limelight fetches the full description. -->
+                <StackPanel x:Name="LoadingPanel"
+                            Width="450"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="SETTING THE STAGE"
+                               HorizontalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="Bold"/>
+
+                    <TextBlock Margin="0,8,0,18"
+                               Text="Limelight is getting the full mod page from Nexus."
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <ProgressBar Height="7"
+                                 IsIndeterminate="True"
+                                 Background="{StaticResource RaisedPanelBrush}"
+                                 BorderThickness="0"
+                                 Foreground="{StaticResource PinkBrush}"/>
+                </StackPanel>
+
+                <StackPanel x:Name="ErrorPanel"
+                            Width="560"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed">
+                    <TextBlock Text="◇"
+                               HorizontalAlignment="Center"
+                               FontSize="36"
+                               Foreground="{StaticResource PinkBrush}"/>
+
+                    <TextBlock Margin="0,8,0,0"
+                               Text="THE MOD PAGE MISSED ITS CUE"
+                               HorizontalAlignment="Center"
+                               FontSize="18"
+                               FontWeight="Bold"/>
+
+                    <TextBlock x:Name="ErrorText"
+                               Margin="0,9,0,20"
+                               HorizontalAlignment="Center"
+                               Text="Limelight could not load this mod."
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <Button x:Name="ErrorCloseButton"
+                            MinWidth="110"
+                            HorizontalAlignment="Center"
+                            Content="CLOSE"
+                            Style="{StaticResource SecondaryButton}"/>
+                </StackPanel>
+
+                <ScrollViewer x:Name="DetailsScrollViewer"
+                              Visibility="Collapsed"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+
+                    <ScrollViewer.Resources>
+                        <Style TargetType="ScrollBar"
+                               BasedOn="{StaticResource DetailsScrollBarStyle}"/>
+                    </ScrollViewer.Resources>
+
+                    <StackPanel Margin="28,24,28,32">
+                        <!-- The hero keeps the mod identity visible before the user reaches its description. -->
+                        <Border Height="280"
+                                Background="{StaticResource RaisedPanelBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                ClipToBounds="True">
+
+                            <Grid>
+                                <TextBlock Text="L"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontSize="88"
+                                           FontWeight="Black"
+                                           FontStyle="Italic"
+                                           Foreground="#343A59"/>
+
+                                <Image x:Name="HeroImage"
+                                       Stretch="UniformToFill"/>
+
+                                <Rectangle VerticalAlignment="Bottom"
+                                           Height="190">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0.5,0"
+                                                             EndPoint="0.5,1">
+                                            <GradientStop Offset="0"
+                                                          Color="#00101322"/>
+                                            <GradientStop Offset="0.55"
+                                                          Color="#CC101322"/>
+                                            <GradientStop Offset="1"
+                                                          Color="#FF101322"/>
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+
+                                <Border Margin="22"
+                                        Padding="10,6"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        Background="#E61A1E35"
+                                        BorderBrush="{StaticResource CyanBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="5">
+                                    <TextBlock x:Name="CategoryText"
+                                               Text="DEAD AS DISCO"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource CyanBrush}"/>
+                                </Border>
+
+                                <StackPanel Margin="28,0,28,25"
+                                            VerticalAlignment="Bottom">
+                                    <TextBlock x:Name="ModNameText"
+                                               Text="NEXUS MOD"
+                                               FontSize="30"
+                                               FontWeight="Bold"
+                                               TextTrimming="CharacterEllipsis"/>
+
+                                    <TextBlock x:Name="ModMetaText"
+                                               Margin="0,7,0,0"
+                                               Text="BY UNKNOWN AUTHOR  •  VERSION UNKNOWN"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+                                </StackPanel>
+
+                                <Button x:Name="PreviousImageButton"
+                                        Margin="18,0,0,0"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        Panel.ZIndex="4"
+                                        Content="&#x2039;"
+                                        ToolTip="Previous image"
+                                        Style="{StaticResource CarouselArrowButton}"/>
+
+                                <Button x:Name="NextImageButton"
+                                        Margin="0,0,18,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Panel.ZIndex="4"
+                                        Content="&#x203A;"
+                                        ToolTip="Next image"
+                                        Style="{StaticResource CarouselArrowButton}"/>
+
+                                <Border Margin="0,0,22,20"
+                                        Padding="10,5"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        Panel.ZIndex="4"
+                                        Background="#E6141728"
+                                        BorderBrush="#80343A59"
+                                        BorderThickness="1"
+                                        CornerRadius="5">
+                                    <TextBlock x:Name="ImageCounterText"
+                                               Text="1 / 1"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource TextBrush}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- The strip gives the gallery the same quick browsing rhythm as Nexus. -->
+                        <Border x:Name="CarouselPanel"
+                                Margin="0,12,0,0"
+                                Padding="12"
+                                Background="{StaticResource PanelBrush}"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Visibility="Collapsed">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          PanningMode="HorizontalOnly">
+                                <ItemsControl x:Name="CarouselThumbnailsList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Tag="{Binding}"
+                                                    Style="{StaticResource CarouselThumbnailButton}">
+                                                <Image Source="{Binding}"
+                                                       Stretch="UniformToFill"/>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <Grid Margin="0,18,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Margin="0,0,6,0"
+                                    Style="{StaticResource DetailStatCard}">
+                                <StackPanel>
+                                    <TextBlock Text="DOWNLOADS"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+                                    <TextBlock x:Name="DownloadCountText"
+                                               Margin="0,5,0,0"
+                                               Text="0"
+                                               FontSize="19"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource CyanBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="1"
+                                    Margin="6,0"
+                                    Style="{StaticResource DetailStatCard}">
+                                <StackPanel>
+                                    <TextBlock Text="ENDORSEMENTS"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+                                    <TextBlock x:Name="EndorsementCountText"
+                                               Margin="0,5,0,0"
+                                               Text="0"
+                                               FontSize="19"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource CyanBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2"
+                                    Margin="6,0,0,0"
+                                    Style="{StaticResource DetailStatCard}">
+                                <StackPanel>
+                                    <TextBlock Text="MOD ID"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+                                    <TextBlock x:Name="ModIdText"
+                                               Margin="0,5,0,0"
+                                               Text="0"
+                                               FontSize="19"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource PinkBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <Grid Margin="0,22,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="300"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Margin="0,0,16,0"
+                                    Padding="24"
+                                    Background="{StaticResource PanelBrush}"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="9">
+
+                                <StackPanel>
+                                    <TextBlock Text="ABOUT THIS MOD"
+                                               FontSize="14"
+                                               FontWeight="Bold"/>
+
+                                    <TextBlock x:Name="SummaryText"
+                                               Margin="0,12,0,0"
+                                               TextWrapping="Wrap"
+                                               FontSize="13"
+                                               LineHeight="20"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                                    <Border Height="1"
+                                            Margin="0,20"
+                                            Background="{StaticResource BorderBrush}"/>
+
+                                    <!-- Code-behind adds cleaned paragraphs and description images here. -->
+                                    <StackPanel x:Name="DescriptionContentPanel"/>
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Grid.Column="1">
+                                <Border Padding="20"
+                                        Background="{StaticResource PanelBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+
+                                    <StackPanel>
+                                        <TextBlock Text="REQUIREMENTS"
+                                                   FontSize="13"
+                                                   FontWeight="Bold"/>
+
+                                        <TextBlock x:Name="NoRequirementsText"
+                                                   Margin="0,10,0,0"
+                                                   Text="No additional requirements were listed."
+                                                   TextWrapping="Wrap"
+                                                   FontSize="12"
+                                                   LineHeight="18"
+                                                   Foreground="{StaticResource MutedTextBrush}"/>
+
+                                        <ItemsControl x:Name="RequirementsList"
+                                                      Margin="0,8,0,0"
+                                                      Visibility="Collapsed">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,0,8"
+                                                            Padding="10"
+                                                            Background="{StaticResource RaisedPanelBrush}"
+                                                            CornerRadius="6">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="◆"
+                                                                       Margin="0,1,8,0"
+                                                                       FontSize="8"
+                                                                       Foreground="{StaticResource PinkBrush}"/>
+                                                            <TextBlock Text="{Binding}"
+                                                                       TextWrapping="Wrap"
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource TextBrush}"/>
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Margin="0,14,0,0"
+                                        Padding="20"
+                                        Background="{StaticResource PanelBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="9">
+                                    <StackPanel>
+                                        <TextBlock Text="READY TO INSTALL?"
+                                                   FontSize="13"
+                                                   FontWeight="Bold"/>
+
+                                        <TextBlock Margin="0,8,0,16"
+                                                   Text="Review the available versions before choosing a download."
+                                                   TextWrapping="Wrap"
+                                                   FontSize="11"
+                                                   LineHeight="17"
+                                                   Foreground="{StaticResource MutedTextBrush}"/>
+
+                                        <Button x:Name="ViewFilesButton"
+                                                Content="VIEW FILES"
+                                                Style="{StaticResource PrimaryButton}"/>
+
+                                        <Button x:Name="OpenNexusButton"
+                                                Margin="0,9,0,0"
+                                                Content="OPEN ON NEXUS"
+                                                Style="{StaticResource SecondaryButton}"/>
+
+                                        <Button x:Name="OpenGalleryButton"
+                                                Margin="0,9,0,0"
+                                                Content="OPEN FULL GALLERY"
+                                                Style="{StaticResource SecondaryButton}"/>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

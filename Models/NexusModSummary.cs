@@ -10,6 +10,9 @@
         public string Summary { get; init; } =
             string.Empty;
 
+        public string Description { get; init; } =
+            string.Empty;
+
         public string Author { get; init; } =
             string.Empty;
 

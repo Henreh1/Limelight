@@ -1,6 +1,7 @@
 <UserControl x:Class="Limelight.Views.BrowseNexusPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:Limelight.Views"
              Background="{StaticResource BackgroundBrush}"
              Foreground="{StaticResource TextBrush}"
              FontFamily="Bahnschrift, Segoe UI">
@@ -488,7 +489,7 @@
                                                 </StackPanel>
 
                                                 <Button Grid.Column="1"
-                                                        Content="VIEW FILES"
+                                                        Content="VIEW MOD"
                                                         Padding="14,8"
                                                         Tag="{Binding}"
                                                         Click="ViewFilesButton_Click"
@@ -621,5 +622,16 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+        <!-- These pages sit over the catalogue, leaving search, filters and pagination exactly as they were. -->
+        <views:NexusModDetailsView x:Name="NexusModDetailsViewControl"
+                                   Grid.RowSpan="2"
+                                   Panel.ZIndex="10"
+                                   Visibility="Collapsed"/>
+
+        <views:NexusModFilesView x:Name="NexusModFilesViewControl"
+                                 Grid.RowSpan="2"
+                                 Panel.ZIndex="11"
+                                 Visibility="Collapsed"/>
     </Grid>
 </UserControl>
