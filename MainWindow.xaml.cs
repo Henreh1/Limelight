@@ -8,8 +8,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.Diagnostics;
 
@@ -17,6 +19,13 @@ namespace Limelight
 {
     public partial class MainWindow : Window
     {
+        private enum NavigationPage
+        {
+            Dashboard,
+            MyMods,
+            Settings
+        }
+
         private readonly SettingsService _settingsService;
         private readonly ModLibraryService _modLibraryService;
         private readonly AppSettings _settings;
@@ -30,6 +39,8 @@ namespace Limelight
         private readonly LiveLoaderBridgeService _liveLoaderBridgeService;
         private readonly LiveLoaderCommandService _liveLoaderCommandService;
         private readonly LiveModStagingService _liveModStagingService;
+        private readonly LiveSessionService _liveSessionService;
+        private readonly DiagnosticReportService _diagnosticReportService;
         private readonly DispatcherTimer _gameStatusTimer;
         private bool _hasHandledLiveLoaderPrompt;
         private bool _isLiveLoaderSetupRunning;
@@ -40,6 +51,9 @@ namespace Limelight
         private bool _isApplyingPendingDeployment;
         private bool _pendingDeploymentAttempted;
         private int _nextLiveMountOrder = 1000;
+        private int _notificationSequence;
+        private NavigationPage _selectedNavigationPage =
+            NavigationPage.Dashboard;
 
         private string? _gameDirectory;
 
@@ -83,6 +97,12 @@ namespace Limelight
             _liveModStagingService =
                 new LiveModStagingService();
 
+            _liveSessionService =
+                new LiveSessionService();
+
+            _diagnosticReportService =
+                new DiagnosticReportService();
+
             _settings =
                 _settingsService.Load();
 
@@ -93,6 +113,15 @@ namespace Limelight
 
             MyModsPageControl.RemoveModRequested +=
                 RemoveModRequested;
+
+            SettingsPageControl.RepairRequested +=
+                RepairLiveLoaderRequested;
+
+            SettingsPageControl.ExportDiagnosticsRequested +=
+                ExportDiagnosticsRequested;
+
+            SettingsPageControl.ChangeGameFolderRequested +=
+                ChangeGameFolderRequested;
 
             // Checking every two seconds keeps the display responsive without
             // constantly asking Windows for its process list.
@@ -120,6 +149,26 @@ namespace Limelight
         {
             UpdateGameRunningStatus();
 
+            bool isGameRunning =
+                !string.IsNullOrWhiteSpace(_gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory);
+
+            if (!isGameRunning &&
+                !string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                string gameDirectory =
+                    _gameDirectory;
+
+                // A previous crash can leave staged containers behind. They
+                // are safe to remove once Windows confirms the game is closed.
+                await Task.Run(() =>
+                    _liveSessionService.RecoverClosedGame(
+                        gameDirectory));
+            }
+
+            RefreshSettingsPage();
+
             // Finish any existing-mod migration before opening another modal window.
             await CheckForExistingMods();
             await ApplyPendingDeploymentIfPossible();
@@ -134,6 +183,9 @@ namespace Limelight
 
             if (_wasGameRunning)
             {
+                _liveSessionService.EnsureSession(
+                    _gameDirectory!);
+
                 await InitialiseLiveLoaderForRunningGameAsync(
                     waitForGameProcess: false);
             }
@@ -152,23 +204,44 @@ namespace Limelight
                 isGameRunning &&
                 !_wasGameRunning;
 
-            if (!isGameRunning &&
-                _wasGameRunning)
+            bool gameJustStopped =
+                !isGameRunning &&
+                _wasGameRunning;
+
+            // Update this before awaiting cleanup so another timer tick cannot
+            // mistake the same shutdown for a second one.
+            _wasGameRunning = isGameRunning;
+
+            if (gameJustStopped)
             {
                 _hasInitialisedCurrentGameSession = false;
                 _nextLiveMountOrder = 1000;
-            }
 
-            _wasGameRunning = isGameRunning;
+                string gameDirectory =
+                    _gameDirectory!;
+
+                // Give Unreal a moment to release the last file handles before
+                // clearing Limelight's private staging folder.
+                await Task.Delay(750);
+
+                await Task.Run(() =>
+                    _liveSessionService.RecoverClosedGame(
+                        gameDirectory));
+            }
 
             UpdateGameRunningStatus();
             await ApplyPendingDeploymentIfPossible();
 
             if (gameJustStarted)
             {
+                _liveSessionService.EnsureSession(
+                    _gameDirectory!);
+
                 await InitialiseLiveLoaderForRunningGameAsync(
                     waitForGameProcess: false);
             }
+
+            RefreshSettingsPage();
         }
 
         private void MainWindow_Closed(
@@ -378,11 +451,10 @@ namespace Limelight
                 GameProcessStatusText.Foreground =
                     (Brush)FindResource("MutedTextBrush");
 
-                LiveLoaderStatusText.Text =
-                    "NOT CONNECTED";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("MutedTextBrush");
+                SetLiveLoaderDisplay(
+                    "NOT CONNECTED",
+                    "Connect Dead as Disco before setting up live character switching.",
+                    isHealthy: false);
 
                 return;
             }
@@ -416,77 +488,97 @@ namespace Limelight
 
             if (loader.IsPartiallyInstalled)
             {
-                LiveLoaderStatusText.Text =
-                    "REPAIR NEEDED";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("PinkBrush");
+                SetLiveLoaderDisplay(
+                    "REPAIR NEEDED",
+                    "The loader installation is incomplete. Close the game and use Repair Live Loader in Settings.",
+                    isHealthy: false);
 
                 return;
             }
 
             if (!loader.IsInstalled)
             {
-                LiveLoaderStatusText.Text =
-                    "NOT INSTALLED";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("PinkBrush");
+                SetLiveLoaderDisplay(
+                    "NOT INSTALLED",
+                    "Set up the Live Loader to switch character mods without restarting the game.",
+                    isHealthy: false);
 
                 return;
             }
 
             if (!_ue4ssConfigurationService.IsConfigured(loader))
             {
-                LiveLoaderStatusText.Text =
-                    "SETUP NEEDED";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("PinkBrush");
+                SetLiveLoaderDisplay(
+                    "SETUP NEEDED",
+                    "Limelight needs to finish configuring the loader for Dead as Disco.",
+                    isHealthy: false);
 
                 return;
             }
 
             if (!_liveLoaderBridgeService.IsInstalled(loader))
             {
-                LiveLoaderStatusText.Text =
-                    "BRIDGE NEEDED";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("PinkBrush");
+                SetLiveLoaderDisplay(
+                    "BRIDGE NEEDED",
+                    "Limelight's communication bridge is missing and can be restored from Settings.",
+                    isHealthy: false);
 
                 return;
             }
 
             if (!isGameRunning)
             {
-                LiveLoaderStatusText.Text =
-                    "READY";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("CyanBrush");
+                SetLiveLoaderDisplay(
+                    "READY",
+                    "The Live Loader is installed and will come online when Dead as Disco starts.",
+                    isHealthy: true);
 
                 return;
             }
 
             if (_liveLoaderBridgeService.IsOnline())
             {
-                LiveLoaderStatusText.Text =
-                    "ONLINE";
-
-                LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("CyanBrush");
+                SetLiveLoaderDisplay(
+                    "ONLINE",
+                    "Live character switching is available for the current game session.",
+                    isHealthy: true);
 
                 return;
             }
 
             // UE4SS is installed and the game exists, but the Lua bridge has not
             // produced a recent heartbeat.
+            SetLiveLoaderDisplay(
+                "OFFLINE",
+                "Dead as Disco is running, but Limelight has not received a loader heartbeat yet.",
+                isHealthy: false);
+        }
+
+        private void SetLiveLoaderDisplay(
+            string status,
+            string description,
+            bool isHealthy)
+        {
+            Brush statusBrush =
+                (Brush)FindResource(
+                    isHealthy
+                        ? "CyanBrush"
+                        : "PinkBrush");
+
             LiveLoaderStatusText.Text =
-                "OFFLINE";
+                status;
 
             LiveLoaderStatusText.Foreground =
-                (Brush)FindResource("PinkBrush");
+                statusBrush;
+
+            LiveLoaderStatusDescriptionText.Text =
+                description;
+
+            LiveLoaderStatusDot.Fill =
+                statusBrush;
+
+            LiveLoaderStatusRing.Stroke =
+                statusBrush;
         }
 
         private async Task ApplyPendingDeploymentIfPossible()
@@ -930,101 +1022,149 @@ namespace Limelight
             Action<string, int>? reportProgress = null,
             bool allowDeferredCharlieRefresh = false)
         {
-            reportProgress?.Invoke(
-                "SCANNING MOD CONTENT",
-                35);
+            int upcomingContainerCount =
+                _liveModStagingService.CountContainers(
+                    mod);
 
-            List<ModAssetPackage> livePackages =
-                await GetLivePackagesAsync(mod);
-
-            if (livePackages.Count == 0)
+            if (upcomingContainerCount == 0)
             {
                 throw new InvalidDataException(
-                    "This mod does not contain any assets Limelight can safely refresh live.");
+                    $"{mod.DisplayName} does not contain a complete pak, utoc, and ucas set.");
             }
 
-            if (!livePackages.Any(package =>
-                    package.IsCharlieMesh))
+            if (!_liveSessionService.CanStageContainers(
+                    gameDirectory,
+                    upcomingContainerCount,
+                    out string limitMessage))
             {
-                throw new InvalidDataException(
-                    "This mod does not replace SK_Charlie, so Limelight will not live-mount it automatically.");
+                throw new InvalidOperationException(
+                    limitMessage);
             }
 
-            reportProgress?.Invoke(
-                "STAGING MOD CONTAINER",
-                48);
+            _liveSessionService.BeginActivation(
+                mod,
+                gameDirectory);
 
-            LiveModStageResult stageResult =
-                await Task.Run(() =>
-                    _liveModStagingService.Stage(
-                        mod,
-                        gameDirectory));
-
-            reportProgress?.Invoke(
-                "MOUNTING MOD CONTENT",
-                60);
-
-            foreach (string pakPath in
-                     stageResult.PakPaths)
+            try
             {
-                LiveLoaderCommandResult mountResult =
-                    await _liveLoaderCommandService.MountPakAsync(
+                reportProgress?.Invoke(
+                    "SCANNING MOD CONTENT",
+                    35);
+
+                List<ModAssetPackage> livePackages =
+                    await GetLivePackagesAsync(mod);
+
+                if (livePackages.Count == 0)
+                {
+                    throw new InvalidDataException(
+                        "This mod does not contain any assets Limelight can safely refresh live.");
+                }
+
+                if (!livePackages.Any(package =>
+                        package.IsCharlieMesh))
+                {
+                    throw new InvalidDataException(
+                        "This mod does not replace SK_Charlie, so Limelight will not live-mount it automatically.");
+                }
+
+                reportProgress?.Invoke(
+                    "STAGING MOD CONTAINER",
+                    48);
+
+                LiveModStageResult stageResult =
+                    await Task.Run(() =>
+                        _liveModStagingService.Stage(
+                            mod,
+                            gameDirectory));
+
+                _liveSessionService.RecordStagedContainers(
+                    mod,
+                    stageResult.PakPaths,
+                    gameDirectory);
+
+                reportProgress?.Invoke(
+                    "MOUNTING MOD CONTENT",
+                    60);
+
+                foreach (string pakPath in
+                         stageResult.PakPaths)
+                {
+                    int mountOrder =
+                        _nextLiveMountOrder++;
+
+                    LiveLoaderCommandResult mountResult =
+                        await _liveLoaderCommandService.MountPakAsync(
+                            pakPath,
+                            mountOrder);
+
+                    if (!mountResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            mountResult.Message);
+                    }
+
+                    _liveSessionService.RecordMountedContainer(
                         pakPath,
-                        _nextLiveMountOrder++);
+                        mountOrder);
+                }
 
-                if (!mountResult.Success)
+                reportProgress?.Invoke(
+                    "REFRESHING OVERRIDDEN PACKAGES",
+                    74);
+
+                LiveLoaderCommandResult releaseResult =
+                    await _liveLoaderCommandService.ReleasePackagesAsync(
+                        livePackages.Select(package =>
+                            package.PackagePath));
+
+                if (!releaseResult.Success)
                 {
                     throw new InvalidOperationException(
-                        mountResult.Message);
+                        releaseResult.Message);
                 }
+
+                reportProgress?.Invoke(
+                    "LOADING MODELS, PORTRAITS AND TEXT",
+                    86);
+
+                LiveLoaderCommandResult reloadResult =
+                    await _liveLoaderCommandService.ReloadAssetsAsync(
+                        livePackages.Select(package =>
+                            package.ObjectPath));
+
+                if (!reloadResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        reloadResult.Message);
+                }
+
+                LiveLoaderCommandResult reapplyResult =
+                    await _liveLoaderCommandService.ReapplyCharlieAsync();
+
+                if (!reapplyResult.Success &&
+                    !allowDeferredCharlieRefresh)
+                {
+                    throw new InvalidOperationException(
+                        reapplyResult.Message);
+                }
+
+                reportProgress?.Invoke(
+                    allowDeferredCharlieRefresh &&
+                    !reapplyResult.Success
+                        ? "READY: CHARLIE WILL REFRESH WHEN SHE APPEARS"
+                        : "LIVE LOADER READY",
+                    100);
+
+                _liveSessionService.CompleteActivation(
+                    mod);
             }
-
-            reportProgress?.Invoke(
-                "REFRESHING OVERRIDDEN PACKAGES",
-                74);
-
-            LiveLoaderCommandResult releaseResult =
-                await _liveLoaderCommandService.ReleasePackagesAsync(
-                    livePackages.Select(package =>
-                        package.PackagePath));
-
-            if (!releaseResult.Success)
+            catch (Exception exception)
             {
-                throw new InvalidOperationException(
-                    releaseResult.Message);
+                _liveSessionService.FailActivation(
+                    exception);
+
+                throw;
             }
-
-            reportProgress?.Invoke(
-                "LOADING MODELS, PORTRAITS AND TEXT",
-                86);
-
-            LiveLoaderCommandResult reloadResult =
-                await _liveLoaderCommandService.ReloadAssetsAsync(
-                    livePackages.Select(package =>
-                        package.ObjectPath));
-
-            if (!reloadResult.Success)
-            {
-                throw new InvalidOperationException(
-                    reloadResult.Message);
-            }
-
-            LiveLoaderCommandResult reapplyResult =
-                await _liveLoaderCommandService.ReapplyCharlieAsync();
-
-            if (!reapplyResult.Success &&
-                !allowDeferredCharlieRefresh)
-            {
-                throw new InvalidOperationException(
-                    reapplyResult.Message);
-            }
-
-            reportProgress?.Invoke(
-                allowDeferredCharlieRefresh &&
-                !reapplyResult.Success
-                    ? "READY: CHARLIE WILL REFRESH WHEN SHE APPEARS"
-                    : "LIVE LOADER READY",
-                100);
         }
 
         private async void ToggleModRequested(string modId)
@@ -1048,11 +1188,10 @@ namespace Limelight
 
             if (string.IsNullOrWhiteSpace(_gameDirectory))
             {
-                MessageBox.Show(
+                ShowNotification(
+                    "GAME NOT CONNECTED",
                     "Connect the Dead as Disco installation before activating a mod.",
-                    "Game not connected",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                    isError: true);
 
                 return;
             }
@@ -1073,12 +1212,10 @@ namespace Limelight
             if (isCurrentlyActive &&
                 isGameRunning)
             {
-                MessageBox.Show(
-                    "A live-mounted container cannot be removed safely while Dead as Disco is running.\n\n" +
-                    "Close the game to return to the normal Charlie model.",
-                    "Close the game to deactivate",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowNotification(
+                    "CLOSE THE GAME TO DEACTIVATE",
+                    "The active live container cannot be removed safely while Dead as Disco is running.",
+                    isError: true);
 
                 return;
             }
@@ -1143,12 +1280,11 @@ namespace Limelight
                         // A model change during world teardown can leave the
                         // game holding assets that Unreal has already removed.
                         // Ask the user to wait instead of risking their session.
-                        MessageBox.Show(
+                        ShowNotification(
+                            "LEVEL CHANGE IN PROGRESS",
                             safetyCheck.Message +
-                            "\n\nWait until the new level is visible, then select Activate again.",
-                            "Level change in progress",
-                            MessageBoxButton.OK,
-                            MessageBoxImage.Information);
+                            " Wait until the new level is visible, then select Activate again.",
+                            isError: true);
 
                         return;
                     }
@@ -1202,35 +1338,144 @@ namespace Limelight
 
                 CloseSwitchingWindow();
 
-                string message =
+                string notificationTitle =
                     isCurrentlyActive
-                        ? $"{selectedMod.DisplayName} was deactivated."
-                        : isGameRunning
-                            ? $"{selectedMod.DisplayName} was activated live.\n\n" +
-                              "Its model, materials, textures, portraits, and localization were refreshed without restarting the game."
-                            : $"{selectedMod.DisplayName} was activated on disk.";
+                        ? "MOD DEACTIVATED"
+                        : "MOD ACTIVE";
 
-                MessageBox.Show(
-                    message,
-                    "Limelight",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                string notificationMessage =
+                    isCurrentlyActive
+                        ? $"{selectedMod.DisplayName} is no longer active."
+                        : isGameRunning
+                            ? $"{selectedMod.DisplayName} is now active live."
+                            : $"{selectedMod.DisplayName} is active and ready for the next launch.";
+
+                ShowNotification(
+                    notificationTitle,
+                    notificationMessage,
+                    isError: false);
             }
             catch (Exception exception)
             {
                 CloseSwitchingWindow();
 
-                MessageBox.Show(
-                    $"Limelight could not change the active mod.\n\n{exception.Message}",
-                    "Mod activation failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowNotification(
+                    "MOD ACTIVATION FAILED",
+                    exception.Message,
+                    isError: true);
             }
             finally
             {
                 CloseSwitchingWindow();
                 _isLiveModChangeRunning = false;
                 UpdateGameRunningStatus();
+            }
+        }
+
+        private async void ShowNotification(
+            string title,
+            string message,
+            bool isError)
+        {
+            int sequence =
+                ++_notificationSequence;
+
+            Brush statusBrush =
+                (Brush)FindResource(
+                    isError
+                        ? "PinkBrush"
+                        : "CyanBrush");
+
+            NotificationToastTitle.Text =
+                title.ToUpperInvariant();
+
+            NotificationToastMessage.Text =
+                message;
+
+            NotificationToastAccent.Background =
+                statusBrush;
+
+            NotificationToastTitle.Foreground =
+                statusBrush;
+
+            NotificationToastIcon.Foreground =
+                statusBrush;
+
+            NotificationToastIcon.Text =
+                isError
+                    ? "!"
+                    : "◆";
+
+            // Clear an older animation first so a new message appears at full
+            // strength even when the previous toast was fading away.
+            NotificationToast.BeginAnimation(
+                OpacityProperty,
+                null);
+
+            NotificationToastTransform.BeginAnimation(
+                TranslateTransform.YProperty,
+                null);
+
+            NotificationToast.Opacity = 0;
+            NotificationToastTransform.Y = 16;
+            NotificationToast.Visibility =
+                Visibility.Visible;
+
+            var entranceEase =
+                new CubicEase
+                {
+                    EasingMode = EasingMode.EaseOut
+                };
+
+            NotificationToast.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(
+                    0,
+                    1,
+                    TimeSpan.FromMilliseconds(180)));
+
+            NotificationToastTransform.BeginAnimation(
+                TranslateTransform.YProperty,
+                new DoubleAnimation(
+                    16,
+                    0,
+                    TimeSpan.FromMilliseconds(230))
+                {
+                    EasingFunction = entranceEase
+                });
+
+            await Task.Delay(
+                isError
+                    ? 6500
+                    : 4200);
+
+            if (sequence != _notificationSequence ||
+                !IsLoaded)
+            {
+                return;
+            }
+
+            NotificationToast.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(
+                    1,
+                    0,
+                    TimeSpan.FromMilliseconds(220)));
+
+            NotificationToastTransform.BeginAnimation(
+                TranslateTransform.YProperty,
+                new DoubleAnimation(
+                    0,
+                    10,
+                    TimeSpan.FromMilliseconds(220)));
+
+            await Task.Delay(230);
+
+            if (sequence == _notificationSequence &&
+                IsLoaded)
+            {
+                NotificationToast.Visibility =
+                    Visibility.Collapsed;
             }
         }
 
@@ -1344,11 +1589,19 @@ namespace Limelight
     object sender,
     MouseButtonEventArgs e)
         {
+            ShowMyModsPage();
+        }
+
+        private void ShowMyModsPage()
+        {
             // Refresh before displaying the page so newly imported
             // mods appear without restarting Limelight.
             RefreshLibrarySummary();
 
             DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
             MyModsPageControl.Visibility =
@@ -1430,20 +1683,77 @@ namespace Limelight
             MyModsPageControl.Visibility =
                 Visibility.Collapsed;
 
+            SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
             DashboardPage.Visibility =
                 Visibility.Visible;
 
             SetSelectedNavigation(showMyMods: false);
         }
 
-        private void SetSelectedNavigation(bool showMyMods)
+        private void ShowSettings_Click(
+            object sender,
+            MouseButtonEventArgs e)
         {
-            // Keep both borders the same size and only swap their colours.
-            // This prevents the navigation text from shifting when selected.
-            Brush activeBackground =
-                new SolidColorBrush(
-                    Color.FromRgb(37, 32, 59));
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
 
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Visible;
+
+            RefreshSettingsPage();
+            SetSelectedNavigation(
+                showMyMods: false,
+                showSettings: true);
+        }
+
+        private void SetSelectedNavigation(
+            bool showMyMods,
+            bool showSettings = false)
+        {
+            _selectedNavigationPage =
+                showSettings
+                    ? NavigationPage.Settings
+                    : showMyMods
+                        ? NavigationPage.MyMods
+                        : NavigationPage.Dashboard;
+
+            ApplyNavigationAppearance();
+        }
+
+        private void ApplyNavigationAppearance()
+        {
+            // The icon is kept separate from the label so the selected page
+            // can fill its diamond without moving the text beside it.
+            ApplyNavigationItemAppearance(
+                DashboardNavigation,
+                DashboardNavigationIcon,
+                DashboardNavigationText,
+                _selectedNavigationPage == NavigationPage.Dashboard);
+
+            ApplyNavigationItemAppearance(
+                MyModsNavigation,
+                MyModsNavigationIcon,
+                MyModsNavigationText,
+                _selectedNavigationPage == NavigationPage.MyMods);
+
+            ApplyNavigationItemAppearance(
+                SettingsNavigation,
+                SettingsNavigationIcon,
+                SettingsNavigationText,
+                _selectedNavigationPage == NavigationPage.Settings);
+        }
+
+        private void ApplyNavigationItemAppearance(
+            Border navigation,
+            TextBlock icon,
+            TextBlock label,
+            bool isSelected)
+        {
             Brush pink =
                 (Brush)FindResource("PinkBrush");
 
@@ -1453,35 +1763,316 @@ namespace Limelight
             Brush mutedText =
                 (Brush)FindResource("MutedTextBrush");
 
-            DashboardNavigation.Background =
-                showMyMods
-                    ? Brushes.Transparent
-                    : activeBackground;
-
-            DashboardNavigation.BorderBrush =
-                showMyMods
-                    ? Brushes.Transparent
-                    : pink;
-
-            DashboardNavigationText.Foreground =
-                showMyMods
-                    ? mutedText
-                    : normalText;
-
-            MyModsNavigation.Background =
-                showMyMods
-                    ? activeBackground
+            navigation.Background =
+                isSelected
+                    ? new SolidColorBrush(
+                        Color.FromRgb(37, 32, 59))
                     : Brushes.Transparent;
 
-            MyModsNavigation.BorderBrush =
-                showMyMods
+            navigation.BorderBrush =
+                isSelected
                     ? pink
                     : Brushes.Transparent;
 
-            MyModsNavigationText.Foreground =
-                showMyMods
+            icon.Text =
+                isSelected
+                    ? "◆"
+                    : "◇";
+
+            icon.Foreground =
+                isSelected
+                    ? pink
+                    : mutedText;
+
+            label.Foreground =
+                isSelected
                     ? normalText
                     : mutedText;
+        }
+
+        private void Navigation_MouseEnter(
+            object sender,
+            MouseEventArgs e)
+        {
+            if (sender is not Border navigation ||
+                IsSelectedNavigation(navigation))
+            {
+                return;
+            }
+
+            // Hover uses a neutral grey panel and keeps the diamond hollow.
+            // The pink filled icon is reserved for the page that is open.
+            navigation.Background =
+                new SolidColorBrush(
+                    Color.FromRgb(27, 30, 43));
+
+            GetNavigationParts(
+                navigation,
+                out TextBlock? icon,
+                out TextBlock? label);
+
+            if (icon is not null)
+            {
+                icon.Text = "◇";
+                icon.Foreground =
+                    (Brush)FindResource("MutedTextBrush");
+            }
+
+            if (label is not null)
+            {
+                label.Foreground =
+                    (Brush)FindResource("TextBrush");
+            }
+        }
+
+        private void Navigation_MouseLeave(
+            object sender,
+            MouseEventArgs e)
+        {
+            ApplyNavigationAppearance();
+        }
+
+        private bool IsSelectedNavigation(
+            Border navigation)
+        {
+            return
+                (navigation == DashboardNavigation &&
+                 _selectedNavigationPage == NavigationPage.Dashboard) ||
+                (navigation == MyModsNavigation &&
+                 _selectedNavigationPage == NavigationPage.MyMods) ||
+                (navigation == SettingsNavigation &&
+                 _selectedNavigationPage == NavigationPage.Settings);
+        }
+
+        private void GetNavigationParts(
+            Border navigation,
+            out TextBlock? icon,
+            out TextBlock? label)
+        {
+            if (navigation == DashboardNavigation)
+            {
+                icon = DashboardNavigationIcon;
+                label = DashboardNavigationText;
+                return;
+            }
+
+            if (navigation == MyModsNavigation)
+            {
+                icon = MyModsNavigationIcon;
+                label = MyModsNavigationText;
+                return;
+            }
+
+            if (navigation == SettingsNavigation)
+            {
+                icon = SettingsNavigationIcon;
+                label = SettingsNavigationText;
+                return;
+            }
+
+            icon = null;
+            label = null;
+        }
+
+        private void RefreshSettingsPage()
+        {
+            string? gameDirectory =
+                _gameDirectory;
+
+            bool isGameRunning =
+                !string.IsNullOrWhiteSpace(gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    gameDirectory);
+
+            LiveSessionState session =
+                _liveSessionService.Load();
+
+            LiveSessionCleanupResult stagingSnapshot =
+                string.IsNullOrWhiteSpace(gameDirectory)
+                    ? new LiveSessionCleanupResult()
+                    : _liveSessionService.GetStagingSnapshot(
+                        gameDirectory);
+
+            SettingsPageControl.ShowStatus(
+                gameDirectory,
+                isGameRunning,
+                session,
+                stagingSnapshot);
+        }
+
+        private async void RepairLiveLoaderRequested()
+        {
+            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                MessageBox.Show(
+                    "Connect Limelight to Dead as Disco before repairing the Live Loader.",
+                    "Game not connected",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            string gameDirectory =
+                _gameDirectory;
+
+            if (_gameProcessService.IsGameRunning(gameDirectory))
+            {
+                MessageBox.Show(
+                    "Close Dead as Disco before repairing the Live Loader.",
+                    "Game is running",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
+
+            MessageBoxResult confirmation =
+                MessageBox.Show(
+                    "Repair Limelight's managed Live Loader files?\n\n" +
+                    "This clears stale live staging files, refreshes the Dead as Disco configuration, and reinstalls Limelight's bridge. Your imported mods are not removed.",
+                    "Repair Live Loader",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+
+            if (confirmation != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            try
+            {
+                LiveSessionCleanupResult cleanup =
+                    await Task.Run(() =>
+                        _liveSessionService.RepairClosedSession(
+                            gameDirectory));
+
+                Ue4ssDetectionResult loader =
+                    _ue4ssDetectionService.Detect(
+                        gameDirectory);
+
+                if (!loader.IsInstalled ||
+                    !_ue4ssConfigurationService.IsRuntimeCompatible(loader))
+                {
+                    // The normal setup flow already knows how to fetch the
+                    // verified build, so let it handle a missing runtime too.
+                    _hasHandledLiveLoaderPrompt = false;
+                    _settings.DismissedLiveLoaderPromptForGameDirectory =
+                        string.Empty;
+
+                    _settingsService.Save(_settings);
+                    await ShowLiveLoaderSetupPromptIfNeeded();
+                    RefreshSettingsPage();
+                    return;
+                }
+
+                await Task.Run(() =>
+                {
+                    _ue4ssConfigurationService.Apply(
+                        loader);
+
+                    _liveLoaderBridgeService.EnsureInstalled(
+                        loader);
+                });
+
+                UpdateGameRunningStatus();
+                RefreshSettingsPage();
+
+                string warning =
+                    cleanup.Errors.Count == 0
+                        ? string.Empty
+                        : $"\n\n{cleanup.Errors.Count} file(s) could not be removed. The diagnostic report will include the session details.";
+
+                MessageBox.Show(
+                    "The Live Loader repair is complete.\n\n" +
+                    $"Limelight cleared {cleanup.DeletedFileCount} staged file(s) and refreshed its bridge.{warning}",
+                    "Repair complete",
+                    MessageBoxButton.OK,
+                    cleanup.Errors.Count == 0
+                        ? MessageBoxImage.Information
+                        : MessageBoxImage.Warning);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    "Limelight could not complete the Live Loader repair.\n\n" +
+                    exception.Message,
+                    "Repair failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
+        private async void ExportDiagnosticsRequested()
+        {
+            var fileDialog =
+                new SaveFileDialog
+                {
+                    Title = "Save Limelight diagnostic report",
+                    Filter = "Text files (*.txt)|*.txt",
+                    FileName =
+                        $"Limelight-Diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+                    AddExtension = true,
+                    DefaultExt = ".txt"
+                };
+
+            if (fileDialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                string? gameDirectory =
+                    _gameDirectory;
+
+                bool isGameRunning =
+                    !string.IsNullOrWhiteSpace(gameDirectory) &&
+                    _gameProcessService.IsGameRunning(
+                        gameDirectory);
+
+                Ue4ssDetectionResult loader =
+                    _ue4ssDetectionService.Detect(
+                        gameDirectory);
+
+                LiveSessionState session =
+                    _liveSessionService.Load();
+
+                LiveSessionCleanupResult stagingSnapshot =
+                    string.IsNullOrWhiteSpace(gameDirectory)
+                        ? new LiveSessionCleanupResult()
+                        : _liveSessionService.GetStagingSnapshot(
+                            gameDirectory);
+
+                string report =
+                    await Task.Run(() =>
+                        _diagnosticReportService.CreateReport(
+                            _settings,
+                            session,
+                            gameDirectory,
+                            isGameRunning,
+                            loader,
+                            stagingSnapshot));
+
+                await File.WriteAllTextAsync(
+                    fileDialog.FileName,
+                    report);
+
+                MessageBox.Show(
+                    "The diagnostic report was saved. Personal and installation paths were replaced with private labels.",
+                    "Report exported",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    "Limelight could not export the diagnostic report.\n\n" +
+                    exception.Message,
+                    "Export failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
 
         private async void ImportMod_Click(
@@ -1496,10 +2087,9 @@ namespace Limelight
             };
 
             if (fileDialog.ShowDialog() != true)
-                if (fileDialog.ShowDialog() != true)
-                {
-                    return;
-                }
+            {
+                return;
+            }
 
             string archiveName =
                 Path.GetFileNameWithoutExtension(
@@ -1632,6 +2222,8 @@ namespace Limelight
                         ? "PinkBrush"
                         : "CyanBrush");
 
+            UpdateSpotlightBanner(activeMod);
+
             if (installedCount == 0)
             {
                 LibrarySummaryText.Text =
@@ -1652,6 +2244,47 @@ namespace Limelight
 
             LibraryStatusText.Text =
                 $"{installedCount} READY";
+        }
+
+        private void UpdateSpotlightBanner(
+            InstalledMod? activeMod)
+        {
+            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                SpotlightTitleText.Text =
+                    "READY FOR THE SPOTLIGHT?";
+
+                SpotlightDescriptionText.Text =
+                    "Connect your game directory, install a character mod, and take control of the stage.";
+
+                ConnectGameButton.Content =
+                    "CONNECT GAME";
+
+                return;
+            }
+
+            if (activeMod is null)
+            {
+                SpotlightTitleText.Text =
+                    "CHOOSE YOUR HEADLINER";
+
+                SpotlightDescriptionText.Text =
+                    "Dead as Disco is connected. Choose a character model to take the spotlight.";
+
+                ConnectGameButton.Content =
+                    "CHOOSE MODEL";
+
+                return;
+            }
+
+            SpotlightTitleText.Text =
+                $"{activeMod.DisplayName.ToUpperInvariant()} HAS THE SPOTLIGHT";
+
+            SpotlightDescriptionText.Text =
+                "Your selected character is installed and ready for the next performance.";
+
+            ConnectGameButton.Content =
+                "SWITCH MODEL";
         }
 
         private async void LaunchGame_Click(
@@ -1763,6 +2396,22 @@ namespace Limelight
             object sender,
             RoutedEventArgs e)
         {
+            if (!string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                ShowMyModsPage();
+                return;
+            }
+
+            await ChooseGameDirectoryAsync();
+        }
+
+        private async void ChangeGameFolderRequested()
+        {
+            await ChooseGameDirectoryAsync();
+        }
+
+        private async Task ChooseGameDirectoryAsync()
+        {
             // Ask for the main installation folder instead of making
             // the user locate the internal Paks directory.
             var folderDialog = new OpenFolderDialog
@@ -1854,8 +2503,8 @@ namespace Limelight
             GameStatusDescription.Text =
                 selectedDirectory;
 
-            ConnectGameButton.Content =
-                "CHANGE FOLDER";
+            RefreshSettingsPage();
+            RefreshLibrarySummary();
 
             return true;
         }

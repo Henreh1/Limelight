@@ -1,0 +1,176 @@
+<UserControl x:Class="Limelight.Views.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}"
+             Foreground="{StaticResource TextBrush}"
+             FontFamily="Bahnschrift, Segoe UI">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="38,30">
+            <TextBlock Text="SETTINGS"
+                       FontSize="12"
+                       FontWeight="Bold"
+                       Foreground="{StaticResource CyanBrush}"/>
+
+            <TextBlock Text="KEEP THE SHOW RUNNING"
+                       Margin="0,5,0,0"
+                       FontSize="27"
+                       FontWeight="Bold"/>
+
+            <TextBlock Text="Check Limelight's live session, repair managed loader files, or prepare a private diagnostic report."
+                       Margin="0,8,0,0"
+                       FontSize="13"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource MutedTextBrush}"/>
+
+            <Border Margin="0,28,0,0"
+                    Padding="24"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Text="GAME CONNECTION"
+                                   FontSize="12"
+                                   FontWeight="Bold"/>
+
+                        <TextBlock x:Name="GameConnectionStatusText"
+                                   Text="NOT CONNECTED"
+                                   Margin="0,10,0,0"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+
+                        <TextBlock x:Name="GameConnectionDetailText"
+                                   Text="Choose the Dead as Disco installation folder."
+                                   Margin="0,7,20,0"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+
+                        <Button x:Name="ChangeGameFolderButton"
+                                Content="CHANGE GAME FOLDER"
+                                Margin="0,16,0,0"
+                                HorizontalAlignment="Left"
+                                Click="ChangeGameFolderButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            Padding="13,8"
+                            VerticalAlignment="Top"
+                            Background="#1A1E35"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+
+                        <TextBlock x:Name="GameRunningBadgeText"
+                                   Text="NOT RUNNING"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                    </Border>
+                </Grid>
+            </Border>
+
+            <Border Margin="0,16,0,0"
+                    Padding="24"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Text="LIVE SESSION"
+                                       FontSize="12"
+                                       FontWeight="Bold"/>
+
+                            <TextBlock x:Name="SessionStatusText"
+                                       Text="IDLE"
+                                       Margin="0,10,0,0"
+                                       FontSize="18"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource PinkBrush}"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="MountedContainerText"
+                                   Grid.Column="1"
+                                   Text="0 / 12 CONTAINERS"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource CyanBrush}"/>
+                    </Grid>
+
+                    <TextBlock x:Name="SessionDetailText"
+                               Text="Start the game to begin a live session."
+                               Margin="0,10,0,0"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <TextBlock x:Name="StagingText"
+                               Text="No staged files are waiting for cleanup."
+                               Margin="0,7,0,0"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+                </StackPanel>
+            </Border>
+
+            <Border Margin="0,16,0,0"
+                    Padding="24"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+
+                <StackPanel>
+                    <TextBlock Text="RECOVERY TOOLS"
+                               FontSize="12"
+                               FontWeight="Bold"/>
+
+                    <TextBlock Text="Repair refreshes Limelight's managed bridge and clears stale staging files. It is only available while the game is closed."
+                               Margin="0,10,0,0"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <StackPanel Margin="0,18,0,0"
+                                Orientation="Horizontal">
+
+                        <Button x:Name="RepairButton"
+                                Content="REPAIR LIVE LOADER"
+                                Click="RepairButton_Click"
+                                Style="{StaticResource PrimaryButton}"/>
+
+                        <Button Content="EXPORT DIAGNOSTIC REPORT"
+                                Margin="12,0,0,0"
+                                Click="ExportButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+
+                        <Button x:Name="NativeTestButton"
+                                Content="NATIVE TEST"
+                                Margin="12,0,0,0"
+                                Click="NativeTestButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

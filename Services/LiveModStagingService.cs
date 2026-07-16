@@ -7,6 +7,9 @@ namespace Limelight.Services
     {
         public List<string> PakPaths { get; init; } =
             new List<string>();
+
+        public List<string> StagedFiles { get; init; } =
+            new List<string>();
     }
 
     public sealed class LiveModStagingService
@@ -49,6 +52,9 @@ namespace Limelight.Services
             var stagedPaks =
                 new List<string>();
 
+            var stagedFiles =
+                new List<string>();
+
             int containerNumber = 0;
 
             foreach (Dictionary<string, string> files in
@@ -76,6 +82,8 @@ namespace Limelight.Services
                         temporaryPath,
                         destinationPath);
 
+                    stagedFiles.Add(destinationPath);
+
                     if (extension == ".pak")
                     {
                         stagedPaks.Add(destinationPath);
@@ -85,8 +93,17 @@ namespace Limelight.Services
 
             return new LiveModStageResult
             {
-                PakPaths = stagedPaks
+                PakPaths = stagedPaks,
+                StagedFiles = stagedFiles
             };
+        }
+
+        public int CountContainers(
+            InstalledMod mod)
+        {
+            // Count before copying so the session limit can stop a switch
+            // without leaving half of a container in the staging folder.
+            return FindContainers(mod).Count;
         }
 
         private static void CopyAtomically(
