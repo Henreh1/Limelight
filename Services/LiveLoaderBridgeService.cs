@@ -837,17 +837,22 @@ namespace Limelight.Services
                         requestId,
                         false,
                         "Mounted asset reload failed: " ..
-                        tostring(reloadSucceeded))
-                else
-                   if reloadSucceeded then
-        automaticCharlieRefreshEnabled = true
+                    else
+            if reloadSucceeded then
+                automaticCharlieRefreshEnabled = true
 
-        -- I keep the complete active asset list so a newly loaded world
-        -- can request fresh portrait, interface, and localization objects.
-        activeObjectPathsText =
-            command.objectPaths
-    end
-            end)
+                -- I keep the complete active asset list so a newly loaded world
+                -- can request fresh portrait, interface, and localization objects.
+                activeObjectPathsText =
+                    command.objectPaths
+            end
+
+            writeResponse(
+                requestId,
+                reloadSucceeded,
+                reloadMessage)
+        end
+    end)
         else
             writeResponse(
                 requestId,
