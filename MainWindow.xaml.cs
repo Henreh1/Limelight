@@ -255,6 +255,14 @@ namespace Limelight
             }
         }
 
+        private void CloseLevelTransitionBlocker_Click(
+    object sender,
+    RoutedEventArgs e)
+        {
+            LevelTransitionBlocker.Visibility =
+                Visibility.Collapsed;
+        }
+
         private void NexusUsageChanged(
     NexusApiUsageSnapshot snapshot)
         {
@@ -1455,14 +1463,14 @@ namespace Limelight
 
                     if (!safetyCheck.Success)
                     {
-                        // A model change during world teardown can leave the
-                        // game holding assets that Unreal has already removed.
-                        // Ask the user to wait instead of risking their session.
-                        ShowNotification(
-                            "LEVEL CHANGE IN PROGRESS",
+                        // I stop here before Limelight stages, mounts, unloads, or
+                        // refreshes anything while Unreal is replacing its world.
+                        LevelTransitionBlockerMessage.Text =
                             safetyCheck.Message +
-                            " Wait until the new level is visible, then select Activate again.",
-                            isError: true);
+                            " Wait until the new level is fully visible, then select Activate again.";
+
+                        LevelTransitionBlocker.Visibility =
+                            Visibility.Visible;
 
                         return;
                     }

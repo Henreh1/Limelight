@@ -40,6 +40,7 @@ namespace Limelight.Services
     local transitionGeneration = 0
     local automaticCharlieRefreshEnabled = false
     local activeCharliePortrait = nil
+    local activeObjectPathsText = nil
     local portraitRefreshPassesRemaining = 0
     local lastPortraitRefreshSecond = 0
 
@@ -838,15 +839,14 @@ namespace Limelight.Services
                         "Mounted asset reload failed: " ..
                         tostring(reloadSucceeded))
                 else
-                    if reloadSucceeded then
-                        automaticCharlieRefreshEnabled = true
-                    end
+                   if reloadSucceeded then
+        automaticCharlieRefreshEnabled = true
 
-                    writeResponse(
-                        requestId,
-                        reloadSucceeded,
-                        reloadMessage)
-                end
+        -- I keep the complete active asset list so a newly loaded world
+        -- can request fresh portrait, interface, and localization objects.
+        activeObjectPathsText =
+            command.objectPaths
+    end
             end)
         else
             writeResponse(
@@ -876,19 +876,49 @@ namespace Limelight.Services
                     return
                 end
 
-                local callSucceeded,
+                local assetReloadCallSucceeded = true
+                local assetsReloaded = true
+                local assetReloadMessage =
+                    "No active asset paths were saved."
+
+                if activeObjectPathsText ~= nil and
+                   activeObjectPathsText ~= "" then
+
+                    -- The old world may have released interface and localization
+                    -- objects. I load the active packages again before touching
+                    -- any of the newly created widgets.
+                    assetReloadCallSucceeded,
+                    assetsReloaded,
+                    assetReloadMessage =
+                        pcall(function()
+                            return reloadAssets(
+                                activeObjectPathsText)
+                        end)
+                end
+
+                local reapplyCallSucceeded,
                       refreshSucceeded,
                       refreshMessage =
                     pcall(reapplyCharlie)
 
-                if callSucceeded and refreshSucceeded then
+                if assetReloadCallSucceeded and
+                   assetsReloaded and
+                   reapplyCallSucceeded and
+                   refreshSucceeded then
+
                     print(
                         "[LimelightBridge] Automatic post-load refresh: " ..
+                        tostring(assetReloadMessage) ..
+                        " " ..
                         tostring(refreshMessage) ..
                         "\n")
                 else
                     print(
-                        "[LimelightBridge] Automatic post-load refresh is still waiting for Charlie.\n")
+                        "[LimelightBridge] Automatic post-load refresh is still waiting. Assets: " ..
+                        tostring(assetReloadMessage) ..
+                        " Character: " ..
+                        tostring(refreshMessage) ..
+                        "\n")
                 end
             end)
     end
