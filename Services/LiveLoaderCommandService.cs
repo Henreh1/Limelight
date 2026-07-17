@@ -121,6 +121,22 @@ namespace Limelight.Services
                 cancellationToken);
         }
 
+        public Task<LiveLoaderCommandResult> UnmountPakAsync(
+            string pakPath,
+            CancellationToken cancellationToken = default)
+        {
+            return SendAsync(
+                "unmount_pak",
+                "native-command.txt",
+                "native-response.txt",
+                new Dictionary<string, string>
+                {
+                    ["pakPath"] = pakPath
+                },
+                TimeSpan.FromSeconds(30),
+                cancellationToken);
+        }
+
         public Task<LiveLoaderCommandResult> ReleasePackagesAsync(
             IEnumerable<string> packagePaths,
             CancellationToken cancellationToken = default)

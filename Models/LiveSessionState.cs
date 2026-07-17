@@ -15,6 +15,9 @@ namespace Limelight.Models
 
     public sealed class LiveSessionMountRecord
     {
+        public string GenerationId { get; set; } =
+            string.Empty;
+
         public string ModId { get; set; } =
             string.Empty;
 
@@ -28,10 +31,17 @@ namespace Limelight.Models
 
         public bool WasMounted { get; set; }
 
+        public bool WasUnmounted { get; set; }
+
         public DateTimeOffset StagedAt { get; set; } =
             DateTimeOffset.UtcNow;
 
         public DateTimeOffset? MountedAt { get; set; }
+
+        public DateTimeOffset? UnmountedAt { get; set; }
+
+        public string RetirementError { get; set; } =
+            string.Empty;
     }
 
     public sealed class LiveSessionState
@@ -59,10 +69,16 @@ namespace Limelight.Models
         public string ActiveModName { get; set; } =
             string.Empty;
 
+        public string ActiveGenerationId { get; set; } =
+            string.Empty;
+
         public string PendingModId { get; set; } =
             string.Empty;
 
         public string PendingModName { get; set; } =
+            string.Empty;
+
+        public string PendingGenerationId { get; set; } =
             string.Empty;
 
         public int SuccessfulSwitches { get; set; }

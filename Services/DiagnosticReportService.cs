@@ -59,7 +59,8 @@ namespace Limelight.Services
             report.AppendLine($"Status: {session.Status}");
             report.AppendLine($"Activation in progress: {session.ActivationInProgress}");
             report.AppendLine($"Successful switches: {session.SuccessfulSwitches}");
-            report.AppendLine($"Mounted containers recorded: {session.Mounts.Count(record => record.WasMounted)}");
+            report.AppendLine($"Currently mounted containers: {LiveSessionService.CountMountedContainers(session)}");
+            report.AppendLine($"Retired containers: {session.Mounts.Count(record => record.WasUnmounted)}");
             report.AppendLine($"Staged files: {stagingSnapshot.DeletedFileCount}");
             report.AppendLine($"Staged bytes: {stagingSnapshot.DeletedBytes}");
             report.AppendLine($"Last error: {ValueOrNone(session.LastError)}");
@@ -69,7 +70,10 @@ namespace Limelight.Services
             {
                 report.AppendLine(
                     $"  Container: mod={mount.ModName}; file={Path.GetFileName(mount.PakPath)}; " +
-                    $"order={mount.MountOrder}; mounted={mount.WasMounted}; time={mount.MountedAt:O}");
+                    $"generation={ShortSessionId(mount.GenerationId)}; order={mount.MountOrder}; " +
+                    $"mounted={mount.WasMounted}; unmounted={mount.WasUnmounted}; " +
+                    $"mountedAt={mount.MountedAt:O}; unmountedAt={mount.UnmountedAt:O}; " +
+                    $"retirementError={ValueOrNone(mount.RetirementError)}");
             }
 
             report.AppendLine();

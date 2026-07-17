@@ -256,6 +256,7 @@ namespace Limelight.Services
 
                     activeCharliePortrait = asset
                     portraitRefreshPassesRemaining = 20
+    lastPortraitRefreshSecond = 0
 
                     local refreshedCount =
                         refreshCharliePortraitWidgets()
@@ -904,6 +905,15 @@ namespace Limelight.Services
     RegisterLoadMapPostHook(function()
         worldTransitioning = false
 
+            if activeCharliePortrait ~= nil and
+       activeCharliePortrait:IsValid() then
+
+        -- A new map creates fresh widgets, so I give the portrait another
+        -- chance to reach screens constructed after the transition.
+        portraitRefreshPassesRemaining = 20
+        lastPortraitRefreshSecond = 0
+    end
+
         -- The map callback fires before every streamed actor and component is
         -- guaranteed to exist, so allow the new world to settle first.
         scheduleAutomaticCharlieRefresh(
@@ -962,6 +972,29 @@ namespace Limelight.Services
             lastHeartbeatSecond =
                 currentSecond
         end
+
+            if portraitRefreshPassesRemaining > 0 and
+       currentSecond ~= lastPortraitRefreshSecond and
+       not worldTransitioning then
+
+        -- Portrait widgets are often created after the texture loads. I
+        -- retry briefly so newly opened screens receive the active image.
+        local refreshedCount =
+            refreshCharliePortraitWidgets()
+
+        portraitRefreshPassesRemaining =
+            portraitRefreshPassesRemaining - 1
+
+        lastPortraitRefreshSecond =
+            currentSecond
+
+        if refreshedCount > 0 then
+            print(
+                "[LimelightBridge] Refreshed " ..
+                tostring(refreshedCount) ..
+                " Charlie portrait widget(s).\n")
+        end
+    end
 
         processCommand()
 

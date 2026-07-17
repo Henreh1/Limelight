@@ -64,14 +64,14 @@ namespace Limelight.Services
                 List<string> packageFiles =
                     FindPackageFiles(stagingDirectory);
 
-                List<ModAssetPackage> assetPackages =
-                    _assetScanner.Scan(stagingDirectory);
-
-                // Moving the finished folder keeps half-imported mods out
-                // of the user's main library.
-                Directory.Move(
+                // I settle the extracted files into their permanent location before
+                // CUE4Parse opens the containers and begins reading their indexes.
+                MoveDirectoryWithRetry(
                     stagingDirectory,
                     finalDirectory);
+
+                List<ModAssetPackage> assetPackages =
+                    _assetScanner.Scan(finalDirectory);
 
                 return new InstalledMod
                 {
@@ -87,15 +87,68 @@ namespace Limelight.Services
             }
             catch
             {
-                // Failed imports should not leave temporary files behind.
-                if (Directory.Exists(stagingDirectory))
-                {
-                    Directory.Delete(
-                        stagingDirectory,
-                        recursive: true);
-                }
+                // I make cleanup best-effort so it never hides the original
+                // import error that the user actually needs to see.
+                TryDeleteDirectory(
+                    stagingDirectory);
+
+                TryDeleteDirectory(
+                    finalDirectory);
 
                 throw;
+            }
+        }
+
+        private static void MoveDirectoryWithRetry(
+    string sourceDirectory,
+    string destinationDirectory)
+        {
+            const int maximumAttempts = 6;
+
+            for (int attempt = 1;
+                 attempt <= maximumAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    Directory.Move(
+                        sourceDirectory,
+                        destinationDirectory);
+
+                    return;
+                }
+                catch (UnauthorizedAccessException)
+                    when (attempt < maximumAttempts)
+                {
+                    // Windows Security may inspect newly extracted package files
+                    // for a moment, so I give it time to release the folder.
+                    Thread.Sleep(
+                        attempt * 250);
+                }
+                catch (IOException)
+                    when (attempt < maximumAttempts)
+                {
+                    Thread.Sleep(
+                        attempt * 250);
+                }
+            }
+        }
+
+        private static void TryDeleteDirectory(
+            string directory)
+        {
+            try
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(
+                        directory,
+                        recursive: true);
+                }
+            }
+            catch
+            {
+                // Cleanup is helpful, but I preserve the original import error.
             }
         }
 
@@ -109,44 +162,83 @@ namespace Limelight.Services
         }
 
         private static void ExtractArchiveSafely(
-            string archivePath,
-            string destinationDirectory)
+    string archivePath,
+    string destinationDirectory)
         {
             using ZipArchive archive =
                 ZipFile.OpenRead(archivePath);
 
             string safeRoot =
-                Path.GetFullPath(destinationDirectory) +
+                Path.GetFullPath(destinationDirectory)
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
+
+            string safeRootPrefix =
+                safeRoot +
                 Path.DirectorySeparatorChar;
 
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
-                // Entries with no filename represent folders.
-                if (string.IsNullOrWhiteSpace(entry.Name))
+                string entryPath =
+                    entry.FullName.Trim();
+
+                // Some ZIP tools add "." as an entry for the archive root.
+                // I skip it because the destination folder already represents it.
+                if (string.IsNullOrWhiteSpace(entryPath) ||
+                    entryPath.Equals(
+                        ".",
+                        StringComparison.Ordinal) ||
+                    entryPath.Equals(
+                        "./",
+                        StringComparison.Ordinal) ||
+                    entryPath.Equals(
+                        @".\",
+                        StringComparison.Ordinal))
                 {
                     continue;
                 }
 
-                string targetPath = Path.GetFullPath(
-                    Path.Combine(
-                        destinationDirectory,
-                        entry.FullName));
+                string targetPath =
+                    Path.GetFullPath(
+                        Path.Combine(
+                            destinationDirectory,
+                            entry.FullName));
 
-                // Never allow a ZIP entry to escape Limelight's library.
+                // I keep every extracted file inside Limelight's private library.
                 if (!targetPath.StartsWith(
-                        safeRoot,
+                        safeRootPrefix,
                         StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidDataException(
                         "The archive contains an unsafe file path.");
                 }
 
+                bool isDirectory =
+                    string.IsNullOrWhiteSpace(entry.Name) ||
+                    entryPath.EndsWith(
+                        "/",
+                        StringComparison.Ordinal) ||
+                    entryPath.EndsWith(
+                        "\\",
+                        StringComparison.Ordinal);
+
+                if (isDirectory)
+                {
+                    Directory.CreateDirectory(
+                        targetPath);
+
+                    continue;
+                }
+
                 string? targetFolder =
-                    Path.GetDirectoryName(targetPath);
+                    Path.GetDirectoryName(
+                        targetPath);
 
                 if (targetFolder != null)
                 {
-                    Directory.CreateDirectory(targetFolder);
+                    Directory.CreateDirectory(
+                        targetFolder);
                 }
 
                 entry.ExtractToFile(

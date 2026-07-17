@@ -129,6 +129,12 @@ namespace Limelight
             _nexusApiService =
                 new NexusApiService();
 
+            _nexusApiService.UsageChanged +=
+    NexusUsageChanged;
+
+            SettingsPageControl.ShowNexusUsage(
+                _nexusApiService.UsageSnapshot);
+
             _nexusCredentialService =
                 new NexusCredentialService();
 
@@ -247,6 +253,17 @@ namespace Limelight
                 await InitialiseLiveLoaderForRunningGameAsync(
                     waitForGameProcess: false);
             }
+        }
+
+        private void NexusUsageChanged(
+    NexusApiUsageSnapshot snapshot)
+        {
+            // I return to the UI thread because Nexus requests may finish
+            // in the background while the Settings page is open.
+            Dispatcher.BeginInvoke(
+                new Action(
+                    () => SettingsPageControl.ShowNexusUsage(
+                        snapshot)));
         }
 
         private async void GameStatusTimer_Tick(
@@ -1110,6 +1127,66 @@ namespace Limelight
                 .ToList();
         }
 
+        private async Task RetireStaleLiveContainersAsync(
+            string gameDirectory,
+            Action<string, int>? reportProgress)
+        {
+            List<LiveSessionMountRecord> staleContainers =
+                _liveSessionService.GetRetirableMountedContainers(
+                    gameDirectory);
+
+            if (staleContainers.Count == 0)
+            {
+                return;
+            }
+
+            reportProgress?.Invoke(
+                "RETIRING PREVIOUS CONTAINER",
+                20);
+
+            foreach (LiveSessionMountRecord staleContainer in
+                     staleContainers)
+            {
+                LiveLoaderCommandResult unmountResult =
+                    await _liveLoaderCommandService.UnmountPakAsync(
+                        staleContainer.PakPath);
+
+                if (!unmountResult.Success)
+                {
+                    _liveSessionService.RecordRetirementFailure(
+                        staleContainer.PakPath,
+                        unmountResult.Message);
+
+                    // I keep the old container counted when Unreal refuses
+                    // the unmount. Starting another switch would only hide
+                    // the problem behind a newer priority.
+                    throw new InvalidOperationException(
+                        "Limelight could not retire the previous live container. " +
+                        unmountResult.Message +
+                        " Close and reopen Dead as Disco before switching again.");
+                }
+
+                _liveSessionService.RecordUnmountedContainer(
+                    staleContainer.PakPath);
+
+                LiveSessionCleanupResult cleanup =
+                    _liveSessionService.DeleteRetiredContainerFiles(
+                        staleContainer.PakPath,
+                        gameDirectory);
+
+                if (cleanup.Errors.Count > 0)
+                {
+                    // The slot is already safe to reuse. Any file which is
+                    // still busy can wait for the normal closed-game cleanup.
+                    _liveSessionService.RecordRetirementFailure(
+                        staleContainer.PakPath,
+                        string.Join(
+                            "; ",
+                            cleanup.Errors));
+                }
+            }
+        }
+
         private async Task ActivateLiveModAsync(
             InstalledMod mod,
             string gameDirectory,
@@ -1126,6 +1203,10 @@ namespace Limelight
                     $"{mod.DisplayName} does not contain a complete pak, utoc, and ucas set.");
             }
 
+            await RetireStaleLiveContainersAsync(
+                gameDirectory,
+                reportProgress);
+
             if (!_liveSessionService.CanStageContainers(
                     gameDirectory,
                     upcomingContainerCount,
@@ -1135,7 +1216,8 @@ namespace Limelight
                     limitMessage);
             }
 
-            _liveSessionService.BeginActivation(
+            string generationId =
+                _liveSessionService.BeginActivation(
                 mod,
                 gameDirectory);
 
@@ -1174,7 +1256,8 @@ namespace Limelight
                 _liveSessionService.RecordStagedContainers(
                     mod,
                     stageResult.PakPaths,
-                    gameDirectory);
+                    gameDirectory,
+                    generationId);
 
                 reportProgress?.Invoke(
                     "MOUNTING MOD CONTENT",
@@ -1250,7 +1333,8 @@ namespace Limelight
                     100);
 
                 _liveSessionService.CompleteActivation(
-                    mod);
+                    mod,
+                    generationId);
             }
             catch (Exception exception)
             {

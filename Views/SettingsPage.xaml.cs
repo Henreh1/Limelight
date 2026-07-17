@@ -1,4 +1,4 @@
-using Limelight.Models;
+﻿using Limelight.Models;
 using Limelight.Services;
 using System.Windows;
 using System.Windows.Controls;
@@ -62,7 +62,8 @@ namespace Limelight.Views
                 StatusBrush(sessionHealthy);
 
             int mountedContainers =
-                session.Mounts.Count;
+                LiveSessionService.CountMountedContainers(
+                    session);
 
             MountedContainerText.Text =
                 $"{mountedContainers} / {LiveSessionService.MaximumMountedContainers} CONTAINERS";
@@ -199,7 +200,7 @@ namespace Limelight.Views
 
             NexusLastRequestText.Text =
                 snapshot.LastRequestUtc.HasValue
-                    ? $"{snapshot.LastRequestKind} � " +
+                    ? $"{snapshot.LastRequestKind} • " +
                       $"{snapshot.LastRequestUtc.Value.ToLocalTime():dd MMM yyyy HH:mm:ss}"
                     : "NONE YET";
 

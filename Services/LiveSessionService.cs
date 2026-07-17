@@ -113,7 +113,7 @@ namespace Limelight.Services
             int mountedContainers =
                 belongsToCurrentGame &&
                 state.Status is not LiveSessionStatus.Closed
-                    ? state.Mounts.Count
+                    ? CountMountedContainers(state)
                     : 0;
 
             if (mountedContainers + upcomingContainerCount >
@@ -131,26 +131,40 @@ namespace Limelight.Services
             return true;
         }
 
-        public void BeginActivation(
+        public static int CountMountedContainers(
+            LiveSessionState state)
+        {
+            return state.Mounts.Count(record =>
+                record.WasMounted &&
+                !record.WasUnmounted);
+        }
+
+        public string BeginActivation(
             InstalledMod mod,
             string gameDirectory)
         {
             LiveSessionState state =
                 EnsureSession(gameDirectory);
 
+            string generationId =
+                Guid.NewGuid().ToString("N");
+
             state.Status = LiveSessionStatus.Switching;
             state.ActivationInProgress = true;
             state.PendingModId = mod.Id;
             state.PendingModName = mod.DisplayName;
+            state.PendingGenerationId = generationId;
             state.LastError = string.Empty;
 
             Save(state);
+            return generationId;
         }
 
         public void RecordStagedContainers(
             InstalledMod mod,
             IEnumerable<string> pakPaths,
-            string gameDirectory)
+            string gameDirectory,
+            string generationId)
         {
             LiveSessionState state =
                 EnsureSession(gameDirectory);
@@ -160,6 +174,7 @@ namespace Limelight.Services
                 state.Mounts.Add(
                     new LiveSessionMountRecord
                     {
+                        GenerationId = generationId,
                         ModId = mod.Id,
                         ModName = mod.DisplayName,
                         PakPath = pakPath
@@ -194,8 +209,161 @@ namespace Limelight.Services
             Save(state);
         }
 
+        public List<LiveSessionMountRecord>
+            GetRetirableMountedContainers(
+                string gameDirectory)
+        {
+            LiveSessionState state =
+                Load();
+
+            bool belongsToCurrentGame =
+                string.Equals(
+                    state.GameDirectory,
+                    gameDirectory,
+                    StringComparison.OrdinalIgnoreCase) &&
+                state.Status is not LiveSessionStatus.Closed;
+
+            if (!belongsToCurrentGame)
+            {
+                return new List<LiveSessionMountRecord>();
+            }
+
+            return state.Mounts
+                .Where(record =>
+                    record.WasMounted &&
+                    !record.WasUnmounted &&
+                    (string.IsNullOrWhiteSpace(
+                         state.ActiveGenerationId) ||
+                     !string.Equals(
+                         record.GenerationId,
+                         state.ActiveGenerationId,
+                         StringComparison.OrdinalIgnoreCase)))
+                .OrderBy(record =>
+                    record.MountedAt)
+                .ToList();
+        }
+
+        public void RecordUnmountedContainer(
+            string pakPath)
+        {
+            LiveSessionState state =
+                Load();
+
+            LiveSessionMountRecord? record =
+                state.Mounts.LastOrDefault(candidate =>
+                    string.Equals(
+                        candidate.PakPath,
+                        pakPath,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    candidate.WasMounted &&
+                    !candidate.WasUnmounted);
+
+            if (record is not null)
+            {
+                record.WasUnmounted = true;
+                record.UnmountedAt = DateTimeOffset.UtcNow;
+                record.RetirementError = string.Empty;
+            }
+
+            Save(state);
+        }
+
+        public void RecordRetirementFailure(
+            string pakPath,
+            string error)
+        {
+            LiveSessionState state =
+                Load();
+
+            LiveSessionMountRecord? record =
+                state.Mounts.LastOrDefault(candidate =>
+                    string.Equals(
+                        candidate.PakPath,
+                        pakPath,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    candidate.WasMounted);
+
+            if (record is not null)
+            {
+                record.RetirementError = error;
+            }
+
+            Save(state);
+        }
+
+        public LiveSessionCleanupResult DeleteRetiredContainerFiles(
+            string pakPath,
+            string gameDirectory)
+        {
+            string stagingDirectory =
+                Path.GetFullPath(
+                    GetStagingDirectory(
+                        gameDirectory))
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar) +
+                Path.DirectorySeparatorChar;
+
+            string fullPakPath =
+                Path.GetFullPath(pakPath);
+
+            if (!fullPakPath.StartsWith(
+                    stagingDirectory,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return new LiveSessionCleanupResult
+                {
+                    Errors = new List<string>
+                    {
+                        "The retired container was outside Limelight's staging directory."
+                    }
+                };
+            }
+
+            int deletedFileCount = 0;
+            long deletedBytes = 0;
+            var errors = new List<string>();
+
+            foreach (string extension in
+                     new[] { ".pak", ".utoc", ".ucas" })
+            {
+                string path =
+                    Path.ChangeExtension(
+                        fullPakPath,
+                        extension);
+
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    long length =
+                        new FileInfo(path).Length;
+
+                    File.Delete(path);
+                    deletedFileCount++;
+                    deletedBytes += length;
+                }
+                catch (Exception exception)
+                {
+                    errors.Add(
+                        $"{Path.GetFileName(path)}: {exception.Message}");
+                }
+            }
+
+            return new LiveSessionCleanupResult
+            {
+                DeletedFileCount = deletedFileCount,
+                DeletedBytes = deletedBytes,
+                Errors = errors
+            };
+        }
+
         public void CompleteActivation(
-            InstalledMod mod)
+            InstalledMod mod,
+            string generationId)
         {
             LiveSessionState state =
                 Load();
@@ -204,8 +372,10 @@ namespace Limelight.Services
             state.ActivationInProgress = false;
             state.ActiveModId = mod.Id;
             state.ActiveModName = mod.DisplayName;
+            state.ActiveGenerationId = generationId;
             state.PendingModId = string.Empty;
             state.PendingModName = string.Empty;
+            state.PendingGenerationId = string.Empty;
             state.SuccessfulSwitches++;
             state.LastError = string.Empty;
 
@@ -222,6 +392,7 @@ namespace Limelight.Services
             state.ActivationInProgress = false;
             state.PendingModId = string.Empty;
             state.PendingModName = string.Empty;
+            state.PendingGenerationId = string.Empty;
             state.LastError = exception.Message;
 
             Save(state);
@@ -263,8 +434,10 @@ namespace Limelight.Services
             state.ActivationInProgress = false;
             state.ActiveModId = string.Empty;
             state.ActiveModName = string.Empty;
+            state.ActiveGenerationId = string.Empty;
             state.PendingModId = string.Empty;
             state.PendingModName = string.Empty;
+            state.PendingGenerationId = string.Empty;
             state.Mounts.Clear();
             state.LastRecoveryMessage = message;
 
@@ -295,8 +468,10 @@ namespace Limelight.Services
             state.ActivationInProgress = false;
             state.ActiveModId = string.Empty;
             state.ActiveModName = string.Empty;
+            state.ActiveGenerationId = string.Empty;
             state.PendingModId = string.Empty;
             state.PendingModName = string.Empty;
+            state.PendingGenerationId = string.Empty;
             state.Mounts.Clear();
             state.LastRecoveryMessage =
                 $"Live Loader repair removed {cleanup.DeletedFileCount} staged file(s).";
