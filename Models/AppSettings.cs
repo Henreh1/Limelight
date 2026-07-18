@@ -25,6 +25,10 @@ namespace Limelight.Models
         // before Limelight shares any activity with the desktop client.
         public bool DiscordRichPresenceEnabled { get; set; }
 
+        // The resource overlay is optional, so I leave it hidden
+        // until the user chooses to monitor Limelight.
+        public bool ResourceOverlayEnabled { get; set; }
+
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 

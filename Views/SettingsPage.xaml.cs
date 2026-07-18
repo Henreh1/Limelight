@@ -12,6 +12,8 @@ namespace Limelight.Views
     {
         private bool _isCapturingX19Hotkey;
         private bool _discordPresenceEnabled;
+        private bool _resourceOverlayEnabled;
+        private bool _isUpdatingResourceOverlay;
 
         public event Action? RepairRequested;
         public event Action? ExportDiagnosticsRequested;
@@ -21,6 +23,7 @@ namespace Limelight.Views
         public event Action? NexusDisconnectRequested;
         public event Action<string>? X19HotkeyChanged;
         public event Action<bool>? DiscordPresenceChanged;
+        public event Action<bool>? ResourceOverlayChanged;
 
         public SettingsPage()
         {
@@ -64,6 +67,51 @@ namespace Limelight.Views
                 enabled
                     ? "DISABLE PRESENCE"
                     : "ENABLE PRESENCE";
+        }
+
+        public void ShowResourceOverlay(
+    bool enabled)
+        {
+            _isUpdatingResourceOverlay = true;
+            _resourceOverlayEnabled = enabled;
+
+            ResourceOverlayToggleButton.IsChecked =
+                enabled;
+
+            ResourceOverlayStatusText.Text =
+                enabled
+                    ? "VISIBLE"
+                    : "DISABLED";
+
+            ResourceOverlayStatusText.Foreground =
+                StatusBrush(enabled);
+
+            _isUpdatingResourceOverlay = false;
+        }
+
+        private void ResourceOverlayToggleButton_Changed(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (_isUpdatingResourceOverlay)
+            {
+                return;
+            }
+
+            bool enabled =
+                ResourceOverlayToggleButton.IsChecked == true;
+
+            _resourceOverlayEnabled = enabled;
+
+            ResourceOverlayStatusText.Text =
+                enabled
+                    ? "VISIBLE"
+                    : "DISABLED";
+
+            ResourceOverlayStatusText.Foreground =
+                StatusBrush(enabled);
+
+            ResourceOverlayChanged?.Invoke(enabled);
         }
 
         private void CaptureX19Hotkey_Click(

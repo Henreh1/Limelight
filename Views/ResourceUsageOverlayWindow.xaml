@@ -1,0 +1,78 @@
+﻿<Window x:Class="Limelight.Views.ResourceUsageOverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Limelight Resource Usage"
+        Width="286"
+        Height="118"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Focusable="False"
+        IsHitTestVisible="False"
+        FontFamily="Bahnschrift, Segoe UI">
+
+    <Border Padding="15"
+            Background="#EC101426"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="11">
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="54"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Width="44"
+                    Height="44"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Top"
+                    Background="#20253F"
+                    BorderBrush="{StaticResource PinkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                <TextBlock Text="L"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="24"
+                           FontStyle="Italic"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource TextBrush}"/>
+            </Border>
+
+            <StackPanel Grid.Column="1"
+                        VerticalAlignment="Center">
+                <TextBlock Text="LIMELIGHT RESOURCES"
+                           FontSize="10"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource CyanBrush}"/>
+
+                <TextBlock x:Name="MemoryUsageText"
+                           Text="0 MB RAM"
+                           Margin="0,6,0,0"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource TextBrush}"/>
+
+                <StackPanel Margin="0,5,0,0"
+                            Orientation="Horizontal">
+                    <Ellipse Width="7"
+                             Height="7"
+                             Margin="0,0,7,0"
+                             VerticalAlignment="Center"
+                             Fill="{StaticResource PinkBrush}"/>
+                    <TextBlock x:Name="ResourceDetailText"
+                               Text="CURRENT WORKING SET"
+                               VerticalAlignment="Center"
+                               FontSize="9"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

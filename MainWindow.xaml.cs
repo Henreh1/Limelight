@@ -48,6 +48,7 @@ namespace Limelight
         private readonly NexusApiService _nexusApiService;
         private readonly NexusCredentialService _nexusCredentialService;
         private readonly DiscordPresenceService _discordPresenceService;
+        private ResourceUsageOverlayWindow? _resourceUsageOverlayWindow;
 
         private NexusAccount? _nexusAccount;
 
@@ -196,6 +197,9 @@ namespace Limelight
 
             SettingsPageControl.DiscordPresenceChanged +=
                 DiscordPresenceChanged;
+
+            SettingsPageControl.ResourceOverlayChanged +=
+                ResourceOverlayChanged;
 
             BrowseNexusPageControl.SearchRequested +=
                 NexusSearchRequested;
@@ -406,6 +410,8 @@ namespace Limelight
         {
             // The timer belongs to this window, so there is no reason to leave
             // it checking processes after Limelight has closed.
+            _resourceUsageOverlayWindow?.Close();
+            _resourceUsageOverlayWindow = null;
             _gameStatusTimer.Stop();
             _globalHotkeyService.Dispose();
             _discordPresenceService.Dispose();
@@ -2276,6 +2282,51 @@ namespace Limelight
             RefreshLibrarySummary();
         }
 
+        private void ResourceOverlayChanged(
+    bool enabled)
+        {
+            _settings.ResourceOverlayEnabled =
+                enabled;
+
+            _settingsService.Save(_settings);
+
+            ApplyResourceOverlayPreference();
+
+            SettingsPageControl.ShowResourceOverlay(
+                enabled);
+        }
+
+        private void ApplyResourceOverlayPreference()
+        {
+            if (_settings.ResourceOverlayEnabled)
+            {
+                if (_resourceUsageOverlayWindow != null)
+                {
+                    return;
+                }
+
+                _resourceUsageOverlayWindow =
+                    new ResourceUsageOverlayWindow();
+
+                _resourceUsageOverlayWindow.Closed +=
+                    ResourceUsageOverlayWindow_Closed;
+
+                _resourceUsageOverlayWindow.Show();
+
+                return;
+            }
+
+            _resourceUsageOverlayWindow?.Close();
+            _resourceUsageOverlayWindow = null;
+        }
+
+        private void ResourceUsageOverlayWindow_Closed(
+            object? sender,
+            EventArgs e)
+        {
+            _resourceUsageOverlayWindow = null;
+        }
+
         private void DiscordPresenceChanged(
             bool enabled)
         {
@@ -2887,6 +2938,9 @@ namespace Limelight
 
             SettingsPageControl.ShowDiscordPresence(
                 _settings.DiscordRichPresenceEnabled);
+
+            SettingsPageControl.ShowResourceOverlay(
+                _settings.ResourceOverlayEnabled);
         }
 
         private void RefreshDiscordPresence(
@@ -3016,6 +3070,7 @@ namespace Limelight
 
                 UpdateGameRunningStatus();
                 RefreshSettingsPage();
+                ApplyResourceOverlayPreference();
 
                 string warning =
                     cleanup.Errors.Count == 0
