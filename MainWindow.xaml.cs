@@ -25,6 +25,7 @@ namespace Limelight
             MyMods,
             LiveLoaders,
             BrowseNexus,
+            Downloads,
             Settings
         }
 
@@ -46,6 +47,7 @@ namespace Limelight
         private readonly NativeBridgeInstallerService _nativeBridgeInstallerService;
         private readonly DiagnosticReportService _diagnosticReportService;
         private readonly NexusApiService _nexusApiService;
+        private readonly DownloadHistoryService _downloadHistoryService;
         private readonly NexusCredentialService _nexusCredentialService;
         private readonly DiscordPresenceService _discordPresenceService;
         private ResourceUsageOverlayWindow? _resourceUsageOverlayWindow;
@@ -146,6 +148,9 @@ namespace Limelight
             _nexusApiService =
                 new NexusApiService();
 
+            _downloadHistoryService =
+                new DownloadHistoryService();
+
             _nexusApiService.UsageChanged +=
     NexusUsageChanged;
 
@@ -223,6 +228,9 @@ namespace Limelight
             BrowseNexusPageControl.DownloadRequested +=
                 NexusDownloadRequested;
 
+            DownloadsPageControl.ClearFinishedRequested +=
+                ClearFinishedDownloadsRequested;
+
 
             // Checking every two seconds keeps the display responsive without
             // constantly asking Windows for its process list.
@@ -237,6 +245,7 @@ namespace Limelight
 
             RestoreSavedGameDirectory();
             RefreshLibrarySummary();
+            RefreshDownloadsPage();
 
             // Wait until the window is visible before starting timers or
             // showing the existing-mod migration prompt.
@@ -2242,6 +2251,9 @@ namespace Limelight
             BrowseNexusPageControl.Visibility =
                 Visibility.Collapsed;
 
+            DownloadsPageControl.Visibility =
+                Visibility.Collapsed;
+
             SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -2274,6 +2286,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DownloadsPageControl.Visibility =
                 Visibility.Collapsed;
 
             SettingsPageControl.Visibility =
@@ -2311,6 +2326,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DownloadsPageControl.Visibility =
                 Visibility.Collapsed;
 
             LiveLoadersPageControl.Visibility =
@@ -2490,6 +2508,9 @@ namespace Limelight
             BrowseNexusPageControl.Visibility =
                 Visibility.Collapsed;
 
+            DownloadsPageControl.Visibility =
+                Visibility.Collapsed;
+
             LiveLoadersPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -2509,6 +2530,9 @@ namespace Limelight
             BrowseNexusPageControl.Visibility =
                 Visibility.Collapsed;
 
+            DownloadsPageControl.Visibility =
+                Visibility.Collapsed;
+
             MyModsPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -2522,6 +2546,54 @@ namespace Limelight
             SetSelectedNavigation(
                 showMyMods: false,
                 showSettings: true);
+        }
+
+        private void ShowDownloads_Click(
+            object sender,
+            MouseButtonEventArgs e)
+        {
+            ShowDownloadsPage();
+        }
+
+        private void ShowDownloadsPage()
+        {
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DownloadsPageControl.Visibility =
+                Visibility.Visible;
+
+            RefreshDownloadsPage();
+
+            _selectedNavigationPage =
+                NavigationPage.Downloads;
+
+            ApplyNavigationAppearance();
+            RefreshDiscordPresence();
+        }
+
+        private void ClearFinishedDownloadsRequested()
+        {
+            _downloadHistoryService.ClearFinished();
+            RefreshDownloadsPage();
+        }
+
+        private void RefreshDownloadsPage()
+        {
+            DownloadsPageControl.ShowDownloads(
+                _downloadHistoryService.Records);
         }
 
         private void SetSelectedNavigation(
@@ -2569,6 +2641,12 @@ namespace Limelight
                 BrowseNexusNavigationIcon,
                 BrowseNexusNavigationText,
                 _selectedNavigationPage == NavigationPage.BrowseNexus);
+
+            ApplyNavigationItemAppearance(
+                DownloadsNavigation,
+                DownloadsNavigationIcon,
+                DownloadsNavigationText,
+                _selectedNavigationPage == NavigationPage.Downloads);
 
             ApplyNavigationItemAppearance(
                 SettingsNavigation,
@@ -2671,6 +2749,8 @@ namespace Limelight
                  _selectedNavigationPage == NavigationPage.MyMods) ||
                 (navigation == LiveLoadersNavigation &&
                  _selectedNavigationPage == NavigationPage.LiveLoaders) ||
+                (navigation == DownloadsNavigation &&
+                 _selectedNavigationPage == NavigationPage.Downloads) ||
                 (navigation == SettingsNavigation &&
                  _selectedNavigationPage == NavigationPage.Settings) ||
                 (navigation == BrowseNexusNavigation &&
@@ -2707,6 +2787,13 @@ namespace Limelight
             {
                 icon = BrowseNexusNavigationIcon;
                 label = BrowseNexusNavigationText;
+                return;
+            }
+
+            if (navigation == DownloadsNavigation)
+            {
+                icon = DownloadsNavigationIcon;
+                label = DownloadsNavigationText;
                 return;
             }
 
@@ -2994,6 +3081,13 @@ namespace Limelight
             _isNexusDownloadRunning =
                 true;
 
+            NexusDownloadRecord downloadRecord =
+                _downloadHistoryService.Begin(
+                    file,
+                    displayName);
+
+            RefreshDownloadsPage();
+
             string downloadedArchive =
                 string.Empty;
 
@@ -3004,9 +3098,37 @@ namespace Limelight
                     "REQUESTING A SECURE NEXUS DOWNLOAD",
                     isBusy: true);
 
+                int lastShownPercentage =
+                    -1;
+
+                long lastShownBytes =
+                    0;
+
                 var progress =
                     new Progress<NexusDownloadProgress>(snapshot =>
                     {
+                        _downloadHistoryService.ReportProgress(
+                            downloadRecord.Id,
+                            snapshot);
+
+                        bool shouldRefresh =
+                            snapshot.TotalBytes is > 0
+                                ? snapshot.Percentage != lastShownPercentage
+                                : lastShownBytes == 0 ||
+                                    snapshot.BytesReceived - lastShownBytes >=
+                                        1024L * 1024L;
+
+                        if (!shouldRefresh)
+                        {
+                            return;
+                        }
+
+                        lastShownPercentage =
+                            snapshot.Percentage;
+
+                        lastShownBytes =
+                            snapshot.BytesReceived;
+
                         BrowseNexusPageControl.ShowDownloadState(
                             file,
                             "DOWNLOADING AND CHECKING THE ARCHIVE",
@@ -3014,6 +3136,8 @@ namespace Limelight
                             snapshot.TotalBytes is > 0
                                 ? snapshot.Percentage
                                 : null);
+
+                        RefreshDownloadsPage();
                     });
 
                 downloadedArchive =
@@ -3021,6 +3145,11 @@ namespace Limelight
                         _nexusApiKey,
                         file,
                         progress);
+
+                _downloadHistoryService.MarkInstalling(
+                    downloadRecord.Id);
+
+                RefreshDownloadsPage();
 
                 BrowseNexusPageControl.ShowDownloadState(
                     file,
@@ -3042,7 +3171,12 @@ namespace Limelight
                 _settingsService.Save(
                     _settings);
 
+                _downloadHistoryService.MarkCompleted(
+                    downloadRecord.Id,
+                    installedMod);
+
                 RefreshLibrarySummary();
+                RefreshDownloadsPage();
 
                 BrowseNexusPageControl.ShowDownloadState(
                     file,
@@ -3056,6 +3190,12 @@ namespace Limelight
             }
             catch (Exception exception)
             {
+                _downloadHistoryService.MarkFailed(
+                    downloadRecord.Id,
+                    exception.Message);
+
+                RefreshDownloadsPage();
+
                 BrowseNexusPageControl.ShowDownloadState(
                     file,
                     "THE DOWNLOAD COULD NOT BE INSTALLED.",
@@ -3155,6 +3295,8 @@ namespace Limelight
                         "Configuring the Live Loader",
                     NavigationPage.BrowseNexus =>
                         "Browsing Nexus Mods",
+                    NavigationPage.Downloads =>
+                        "Checking mod downloads",
                     NavigationPage.Settings =>
                         "Adjusting Limelight settings",
                     _ =>
@@ -3377,6 +3519,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DownloadsPageControl.Visibility =
                 Visibility.Collapsed;
 
             LiveLoadersPageControl.Visibility =

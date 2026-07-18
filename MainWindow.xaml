@@ -365,8 +365,32 @@
                             </StackPanel>
                         </Border>
 
-                        <Button Content="◇    Downloads"
-            Style="{StaticResource NavigationButton}"/>
+                        <Border x:Name="DownloadsNavigation"
+                            Margin="8,3"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            BorderBrush="Transparent"
+                            BorderThickness="3,0,0,0"
+                            MouseLeftButtonDown="ShowDownloads_Click"
+                            MouseEnter="Navigation_MouseEnter"
+                            MouseLeave="Navigation_MouseLeave"
+                            Cursor="Hand">
+
+                            <StackPanel Margin="16,13"
+                                        Orientation="Horizontal">
+
+                                <TextBlock x:Name="DownloadsNavigationIcon"
+                                           Text="◇"
+                                           Width="26"
+                                           FontSize="13"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                <TextBlock x:Name="DownloadsNavigationText"
+                                           Text="Downloads"
+                                           FontSize="14"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+                        </Border>
 
                         <Border x:Name="SettingsNavigation"
                             Margin="8,3"
@@ -766,6 +790,11 @@
             <views:BrowseNexusPage x:Name="BrowseNexusPageControl"
                                Grid.Column="1"
                                Visibility="Collapsed"/>
+
+            <!-- Active Nexus transfers and their recent results remain visible here. -->
+            <views:DownloadsPage x:Name="DownloadsPageControl"
+                                 Grid.Column="1"
+                                 Visibility="Collapsed"/>
 
             <!-- Recovery and diagnostics live here so the dashboard stays simple. -->
             <views:SettingsPage x:Name="SettingsPageControl"

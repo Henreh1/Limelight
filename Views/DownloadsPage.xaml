@@ -1,0 +1,284 @@
+<UserControl x:Class="Limelight.Views.DownloadsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}"
+             Foreground="{StaticResource TextBrush}"
+             FontFamily="Bahnschrift, Segoe UI">
+
+    <Grid Margin="38,30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="DOWNLOADS"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource CyanBrush}"/>
+
+                <TextBlock Text="FOLLOW THE DROP"
+                           Margin="0,5,0,0"
+                           FontSize="27"
+                           FontWeight="Bold"/>
+
+                <TextBlock Text="Watch Nexus transfers, installation progress, and recent download results."
+                           Margin="0,8,0,0"
+                           FontSize="13"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Padding="14,8"
+                    VerticalAlignment="Top"
+                    Background="{StaticResource RaisedPanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+
+                <TextBlock x:Name="DownloadCountText"
+                           Text="NO DOWNLOADS"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PinkBrush}"/>
+            </Border>
+        </Grid>
+
+        <Grid Grid.Row="1"
+              Margin="0,25,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="DOWNLOAD ACTIVITY"
+                           FontSize="12"
+                           FontWeight="Bold"/>
+
+                <TextBlock Text="Nexus downloads are checked and installed into My Mods automatically."
+                           Margin="0,5,0,0"
+                           FontSize="12"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+            </StackPanel>
+
+            <Button x:Name="ClearFinishedButton"
+                    Grid.Column="1"
+                    Content="CLEAR FINISHED"
+                    Click="ClearFinished_Click"
+                    VerticalAlignment="Center"
+                    Style="{StaticResource SecondaryButton}"/>
+        </Grid>
+
+        <Grid Grid.Row="2">
+            <Border x:Name="EmptyState"
+                    Padding="36"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="◇"
+                               HorizontalAlignment="Center"
+                               FontSize="30"
+                               Foreground="{StaticResource PinkBrush}"/>
+
+                    <TextBlock Text="THE QUEUE IS QUIET"
+                               Margin="0,16,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="16"
+                               FontWeight="Bold"/>
+
+                    <TextBlock Text="Choose a mod in Browse Nexus and its progress will appear here."
+                               Margin="0,8,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+                </StackPanel>
+            </Border>
+
+            <ScrollViewer x:Name="DownloadActivityScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          Visibility="Collapsed">
+                <ScrollViewer.Resources>
+                    <Style TargetType="ScrollBar"
+                           BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+                </ScrollViewer.Resources>
+
+                <ItemsControl x:Name="DownloadActivityList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Margin="0,0,0,12"
+                                    Padding="20"
+                                    Background="{StaticResource PanelBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="11">
+
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderBrush"
+                                                Value="{StaticResource BorderBrush}"/>
+
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsActive}"
+                                                         Value="True">
+                                                <Setter Property="BorderBrush"
+                                                        Value="{StaticResource PinkBrush}"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="58"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Width="46"
+                                            Height="46"
+                                            VerticalAlignment="Top"
+                                            Background="#28213F"
+                                            BorderBrush="{StaticResource PinkBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="8">
+
+                                        <TextBlock Text="◆"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="17"
+                                                   Foreground="{StaticResource PinkBrush}"/>
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1"
+                                                Margin="0,0,24,0">
+                                        <TextBlock Text="{Binding ModName}"
+                                                   FontSize="16"
+                                                   FontWeight="Bold"
+                                                   TextTrimming="CharacterEllipsis"/>
+
+                                        <TextBlock Text="{Binding FileName}"
+                                                   Margin="0,4,0,0"
+                                                   FontSize="12"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{StaticResource MutedTextBrush}"/>
+
+                                        <TextBlock Text="{Binding VersionLabel}"
+                                                   Margin="0,7,0,0"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource CyanBrush}"/>
+
+                                        <Grid Margin="0,14,0,0">
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
+                                                    <Setter Property="Visibility"
+                                                            Value="Collapsed"/>
+
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}"
+                                                                     Value="True">
+                                                            <Setter Property="Visibility"
+                                                                    Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Grid.Style>
+
+                                            <ProgressBar Height="7"
+                                                         Minimum="0"
+                                                         Maximum="100"
+                                                         Value="{Binding ProgressPercentage, Mode=OneWay}"
+                                                         IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}"
+                                                         Foreground="{StaticResource CyanBrush}"
+                                                         Background="#252943"/>
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding ProgressLabel}"
+                                                   Margin="0,9,0,0"
+                                                   MaxHeight="38"
+                                                   FontSize="11"
+                                                   LineHeight="17"
+                                                   TextWrapping="Wrap"
+                                                   Foreground="{StaticResource MutedTextBrush}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2"
+                                                MinWidth="132"
+                                                HorizontalAlignment="Right">
+                                        <Border Padding="12,7"
+                                                HorizontalAlignment="Right"
+                                                Background="{StaticResource RaisedPanelBrush}"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="7">
+
+                                            <TextBlock Text="{Binding StatusLabel}"
+                                                       FontSize="11"
+                                                       FontWeight="Bold">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground"
+                                                                Value="{StaticResource MutedTextBrush}"/>
+
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding StatusLabel}"
+                                                                         Value="DOWNLOADING">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{StaticResource CyanBrush}"/>
+                                                            </DataTrigger>
+
+                                                            <DataTrigger Binding="{Binding StatusLabel}"
+                                                                         Value="INSTALLING">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{StaticResource PurpleBrush}"/>
+                                                            </DataTrigger>
+
+                                                            <DataTrigger Binding="{Binding StatusLabel}"
+                                                                         Value="INSTALLED">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{StaticResource CyanBrush}"/>
+                                                            </DataTrigger>
+
+                                                            <DataTrigger Binding="{Binding StatusLabel}"
+                                                                         Value="FAILED">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{StaticResource PinkBrush}"/>
+                                                            </DataTrigger>
+
+                                                            <DataTrigger Binding="{Binding StatusLabel}"
+                                                                         Value="INTERRUPTED">
+                                                                <Setter Property="Foreground"
+                                                                        Value="{StaticResource PinkBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+
+                                        <TextBlock Text="{Binding TimeLabel}"
+                                                   Margin="0,10,0,0"
+                                                   HorizontalAlignment="Right"
+                                                   FontSize="10"
+                                                   Foreground="{StaticResource MutedTextBrush}"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>
