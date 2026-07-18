@@ -1460,6 +1460,9 @@ namespace Limelight
             if (_globalHotkeyService.Register(
                     this,
                     _settings.X19HotkeyGesture,
+                    () =>
+                        _gameProcessService.IsGameWindowForeground(
+                            _gameDirectory),
                     out string errorMessage))
             {
                 return;
@@ -1481,6 +1484,8 @@ namespace Limelight
                 _isLiveModChangeRunning ||
                 string.IsNullOrWhiteSpace(_gameDirectory) ||
                 !_gameProcessService.IsGameRunning(
+                    _gameDirectory) ||
+                !_gameProcessService.IsGameWindowForeground(
                     _gameDirectory))
             {
                 return;

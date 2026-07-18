@@ -116,7 +116,7 @@ namespace Limelight.Views
 
             X19HotkeyStatusText.Text =
                 saveChange
-                    ? "The X19 hotkey is ready for the next game session."
+                    ? "The X19 hotkey is ready and will only work while Dead as Disco is selected."
                     : "The existing X19 hotkey was kept.";
 
             if (!saveChange)

@@ -112,7 +112,7 @@
                                    FontWeight="Bold"/>
 
                         <TextBlock x:Name="X19HotkeyStatusText"
-                                   Text="Choose the key that advances to the next character in your X19 group."
+                                   Text="Choose the key that advances to the next character in your X19 group. It is active only while Dead as Disco is selected."
                                    Margin="0,7,24,0"
                                    MaxWidth="650"
                                    FontSize="12"

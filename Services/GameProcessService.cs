@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace Limelight.Services
 {
@@ -45,6 +46,60 @@ namespace Limelight.Services
                     // A process can close while Windows is returning its
                     // information. We can safely try again on the next check.
                 }
+            }
+
+            return false;
+        }
+
+        public bool IsGameWindowForeground(
+            string? gameDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(gameDirectory))
+            {
+                return false;
+            }
+
+            IntPtr foregroundWindow =
+                GetForegroundWindow();
+
+            if (foregroundWindow == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            GetWindowThreadProcessId(
+                foregroundWindow,
+                out uint processId);
+
+            if (processId == 0)
+            {
+                return false;
+            }
+
+            try
+            {
+                using Process foregroundProcess =
+                    Process.GetProcessById(
+                        checked((int)processId));
+
+                string foregroundProcessName =
+                    foregroundProcess.ProcessName;
+
+                foreach (string gameProcessName in
+                         GetPossibleProcessNames(gameDirectory))
+                {
+                    if (string.Equals(
+                            foregroundProcessName,
+                            gameProcessName,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+                // The selected window can close between the two Windows calls.
             }
 
             return false;
@@ -161,5 +216,13 @@ namespace Limelight.Services
 
             return _cachedProcessNames;
         }
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(
+            IntPtr windowHandle,
+            out uint processId);
     }
 }

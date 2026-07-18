@@ -267,7 +267,7 @@
 
                             <TextBlock Grid.Row="1"
                                        Margin="0,18,0,16"
-                                       Text="Build a private character rotation, then move to the next selected mod with the press of a key. Inspired by a dear friend "
+                                       Text="Build a private character rotation, then move to the next selected mod with the press of a key while Dead as Disco is selected. Inspired by a dear friend "
                                        TextWrapping="Wrap"
                                        FontSize="12"
                                        LineHeight="19"

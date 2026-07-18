@@ -2,31 +2,44 @@ using System;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
+using System.Windows.Threading;
 
 namespace Limelight.Services
 {
     public sealed class GlobalHotkeyService : IDisposable
     {
-        private const int HotkeyId = 0x4C19;
-        private const int WmHotkey = 0x0312;
+        private const int WhKeyboardLl = 13;
+        private const int WmKeyDown = 0x0100;
+        private const int WmKeyUp = 0x0101;
+        private const int WmSystemKeyDown = 0x0104;
+        private const int WmSystemKeyUp = 0x0105;
+        private const int VkControl = 0x11;
+        private const int VkMenu = 0x12;
+        private const int VkShift = 0x10;
+        private const int VkLeftWindows = 0x5B;
+        private const int VkRightWindows = 0x5C;
         private const uint ModAlt = 0x0001;
         private const uint ModControl = 0x0002;
         private const uint ModShift = 0x0004;
-        private const uint ModNoRepeat = 0x4000;
 
-        private HwndSource? _windowSource;
-        private IntPtr _windowHandle;
-        private bool _isRegistered;
+        private LowLevelKeyboardProcedure? _keyboardProcedure;
+        private IntPtr _keyboardHook;
+        private Dispatcher? _dispatcher;
+        private Func<bool>? _activationPredicate;
+        private int _virtualKey;
+        private uint _modifiers;
+        private bool _keyHeld;
 
         public event Action? Pressed;
 
         public bool Register(
             Window owner,
             string gesture,
+            Func<bool> activationPredicate,
             out string errorMessage)
         {
             ArgumentNullException.ThrowIfNull(owner);
+            ArgumentNullException.ThrowIfNull(activationPredicate);
 
             Unregister();
 
@@ -41,48 +54,38 @@ namespace Limelight.Services
                 return false;
             }
 
-            WindowInteropHelper helper =
-                new(owner);
+            _dispatcher =
+                owner.Dispatcher;
 
-            _windowHandle =
-                helper.EnsureHandle();
+            _activationPredicate =
+                activationPredicate;
 
-            _windowSource =
-                HwndSource.FromHwnd(
-                    _windowHandle);
+            _virtualKey =
+                KeyInterop.VirtualKeyFromKey(key);
 
-            if (_windowSource is null)
+            _modifiers =
+                modifiers;
+
+            _keyboardProcedure =
+                KeyboardMessageReceived;
+
+            _keyboardHook =
+                SetWindowsHookEx(
+                    WhKeyboardLl,
+                    _keyboardProcedure,
+                    GetModuleHandle(null),
+                    0);
+
+            if (_keyboardHook == IntPtr.Zero)
             {
-                errorMessage =
-                    "Limelight could not attach the X19 hotkey to its window.";
+                int windowsError =
+                    Marshal.GetLastWin32Error();
 
-                return false;
-            }
-
-            _windowSource.AddHook(
-                WindowMessageReceived);
-
-            int virtualKey =
-                KeyInterop.VirtualKeyFromKey(
-                    key);
-
-            _isRegistered =
-                RegisterHotKey(
-                    _windowHandle,
-                    HotkeyId,
-                    modifiers | ModNoRepeat,
-                    (uint)virtualKey);
-
-            if (!_isRegistered)
-            {
-                _windowSource.RemoveHook(
-                    WindowMessageReceived);
-
-                _windowSource = null;
-                _windowHandle = IntPtr.Zero;
+                Unregister();
 
                 errorMessage =
-                    $"{gesture.ToUpperInvariant()} is already being used by Windows or another application.";
+                    "Limelight could not listen for the X19 hotkey. " +
+                    $"Windows error {windowsError}.";
 
                 return false;
             }
@@ -95,23 +98,19 @@ namespace Limelight.Services
 
         public void Unregister()
         {
-            if (_isRegistered &&
-                _windowHandle != IntPtr.Zero)
+            if (_keyboardHook != IntPtr.Zero)
             {
-                UnregisterHotKey(
-                    _windowHandle,
-                    HotkeyId);
+                UnhookWindowsHookEx(
+                    _keyboardHook);
             }
 
-            if (_windowSource is not null)
-            {
-                _windowSource.RemoveHook(
-                    WindowMessageReceived);
-            }
-
-            _isRegistered = false;
-            _windowSource = null;
-            _windowHandle = IntPtr.Zero;
+            _keyboardHook = IntPtr.Zero;
+            _keyboardProcedure = null;
+            _dispatcher = null;
+            _activationPredicate = null;
+            _virtualKey = 0;
+            _modifiers = 0;
+            _keyHeld = false;
         }
 
         public void Dispose()
@@ -119,21 +118,147 @@ namespace Limelight.Services
             Unregister();
         }
 
-        private IntPtr WindowMessageReceived(
-            IntPtr hwnd,
-            int message,
-            IntPtr wParam,
-            IntPtr lParam,
-            ref bool handled)
+        private IntPtr KeyboardMessageReceived(
+            int code,
+            IntPtr messagePointer,
+            IntPtr dataPointer)
         {
-            if (message == WmHotkey &&
-                wParam.ToInt32() == HotkeyId)
+            if (code < 0)
             {
-                handled = true;
-                Pressed?.Invoke();
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
             }
 
-            return IntPtr.Zero;
+            LowLevelKeyboardInput keyboardInput =
+                Marshal.PtrToStructure<LowLevelKeyboardInput>(
+                    dataPointer);
+
+            if (keyboardInput.VirtualKey !=
+                (uint)_virtualKey)
+            {
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
+            }
+
+            int message =
+                messagePointer.ToInt32();
+
+            if (message == WmKeyUp ||
+                message == WmSystemKeyUp)
+            {
+                _keyHeld = false;
+
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
+            }
+
+            if (message != WmKeyDown &&
+                message != WmSystemKeyDown)
+            {
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
+            }
+
+            if (_keyHeld)
+            {
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
+            }
+
+            _keyHeld = true;
+
+            bool isActive;
+
+            try
+            {
+                isActive =
+                    _activationPredicate?.Invoke() == true;
+            }
+            catch
+            {
+                isActive = false;
+            }
+
+            if (!isActive ||
+                !ModifiersMatch())
+            {
+                // The key belongs to the foreground application whenever Dead
+                // as Disco is not selected. Limelight does not reserve it.
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
+            }
+
+            Dispatcher? dispatcher =
+                _dispatcher;
+
+            if (dispatcher is null ||
+                dispatcher.HasShutdownStarted)
+            {
+                return CallNextHookEx(
+                    _keyboardHook,
+                    code,
+                    messagePointer,
+                    dataPointer);
+            }
+
+            dispatcher.BeginInvoke(
+                DispatcherPriority.Input,
+                new Action(() =>
+                    Pressed?.Invoke()));
+
+            // The X19 key is consumed only while Dead as Disco owns focus so
+            // the same press cannot trigger an unrelated in-game action.
+            return new IntPtr(1);
+        }
+
+        private bool ModifiersMatch()
+        {
+            bool controlPressed =
+                IsKeyPressed(VkControl);
+
+            bool altPressed =
+                IsKeyPressed(VkMenu);
+
+            bool shiftPressed =
+                IsKeyPressed(VkShift);
+
+            bool windowsPressed =
+                IsKeyPressed(VkLeftWindows) ||
+                IsKeyPressed(VkRightWindows);
+
+            return
+                !windowsPressed &&
+                controlPressed ==
+                    ((_modifiers & ModControl) != 0) &&
+                altPressed ==
+                    ((_modifiers & ModAlt) != 0) &&
+                shiftPressed ==
+                    ((_modifiers & ModShift) != 0);
+        }
+
+        private static bool IsKeyPressed(
+            int virtualKey)
+        {
+            return
+                (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
         }
 
         private static bool TryParseGesture(
@@ -191,16 +316,53 @@ namespace Limelight.Services
             return key != Key.None;
         }
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool RegisterHotKey(
-            IntPtr windowHandle,
-            int id,
-            uint modifiers,
-            uint virtualKey);
+        private delegate IntPtr LowLevelKeyboardProcedure(
+            int code,
+            IntPtr messagePointer,
+            IntPtr dataPointer);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool UnregisterHotKey(
-            IntPtr windowHandle,
-            int id);
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LowLevelKeyboardInput
+        {
+            public uint VirtualKey;
+            public uint ScanCode;
+            public uint Flags;
+            public uint Time;
+            public UIntPtr ExtraInformation;
+        }
+
+        [DllImport(
+            "user32.dll",
+            SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(
+            int hookType,
+            LowLevelKeyboardProcedure callback,
+            IntPtr moduleHandle,
+            uint threadId);
+
+        [DllImport(
+            "user32.dll",
+            SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(
+            IntPtr hookHandle);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(
+            IntPtr hookHandle,
+            int code,
+            IntPtr messagePointer,
+            IntPtr dataPointer);
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(
+            int virtualKey);
+
+        [DllImport(
+            "kernel32.dll",
+            CharSet = CharSet.Unicode,
+            SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(
+            string? moduleName);
     }
 }
