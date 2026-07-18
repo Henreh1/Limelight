@@ -29,6 +29,8 @@ namespace Limelight.Models
 
         public int MountOrder { get; set; }
 
+        public bool MountAttempted { get; set; }
+
         public bool WasMounted { get; set; }
 
         public bool WasUnmounted { get; set; }

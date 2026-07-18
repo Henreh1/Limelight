@@ -25,6 +25,10 @@ namespace Limelight.Models
         public DateTimeOffset InstalledAt { get; set; } =
             DateTimeOffset.Now;
 
+        public long NexusModId { get; set; }
+
+        public int NexusFileId { get; set; }
+
         [JsonIgnore]
         public string DisplayName =>
     CreateDisplayName(Name);

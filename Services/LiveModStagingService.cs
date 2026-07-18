@@ -57,38 +57,59 @@ namespace Limelight.Services
 
             int containerNumber = 0;
 
-            foreach (Dictionary<string, string> files in
-                     containers.Values)
+            try
             {
-                ++containerNumber;
-
-                string stagedBaseName =
-                    $"Limelight_{mod.Id[..Math.Min(8, mod.Id.Length)]}_" +
-                    $"{activationId}_{containerNumber:D2}_P";
-
-                foreach (string extension in
-                         RequiredExtensions)
+                foreach (Dictionary<string, string> files in
+                         containers.Values)
                 {
-                    string destinationPath =
-                        Path.Combine(
-                            stagingDirectory,
-                            stagedBaseName + extension);
+                    ++containerNumber;
 
-                    string temporaryPath =
-                        destinationPath + ".tmp";
+                    string stagedBaseName =
+                        $"Limelight_{mod.Id[..Math.Min(8, mod.Id.Length)]}_" +
+                        $"{activationId}_{containerNumber:D2}_P";
 
-                    CopyAtomically(
-                        files[extension],
-                        temporaryPath,
-                        destinationPath);
-
-                    stagedFiles.Add(destinationPath);
-
-                    if (extension == ".pak")
+                    foreach (string extension in
+                             RequiredExtensions)
                     {
-                        stagedPaks.Add(destinationPath);
+                        string destinationPath =
+                            Path.Combine(
+                                stagingDirectory,
+                                stagedBaseName + extension);
+
+                        string temporaryPath =
+                            destinationPath + ".tmp";
+
+                        CopyAtomically(
+                            files[extension],
+                            temporaryPath,
+                            destinationPath);
+
+                        stagedFiles.Add(destinationPath);
+
+                        if (extension == ".pak")
+                        {
+                            stagedPaks.Add(destinationPath);
+                        }
                     }
                 }
+            }
+            catch
+            {
+                // A failed copy never becomes a live generation. I remove every
+                // completed sibling so it cannot quietly consume the next session.
+                foreach (string stagedFile in stagedFiles)
+                {
+                    try
+                    {
+                        File.Delete(stagedFile);
+                    }
+                    catch
+                    {
+                        // Closed-game recovery will collect a file still held by Windows.
+                    }
+                }
+
+                throw;
             }
 
             return new LiveModStageResult

@@ -16,6 +16,12 @@ namespace Limelight.Services
 
     public sealed class LiveLoaderCommandService
     {
+        private readonly SemaphoreSlim _luaCommandLock =
+            new(1, 1);
+
+        private readonly SemaphoreSlim _nativeCommandLock =
+            new(1, 1);
+
         private string RuntimeDirectory =>
             Path.Combine(
                 Environment.GetFolderPath(
@@ -173,6 +179,40 @@ namespace Limelight.Services
         }
 
         private async Task<LiveLoaderCommandResult> SendAsync(
+            string action,
+            string commandFileName,
+            string responseFileName,
+            IReadOnlyDictionary<string, string>? arguments,
+            TimeSpan timeout,
+            CancellationToken cancellationToken)
+        {
+            SemaphoreSlim commandLock =
+                responseFileName.Equals(
+                    "native-response.txt",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? _nativeCommandLock
+                    : _luaCommandLock;
+
+            await commandLock.WaitAsync(
+                cancellationToken);
+
+            try
+            {
+                return await SendLockedAsync(
+                    action,
+                    commandFileName,
+                    responseFileName,
+                    arguments,
+                    timeout,
+                    cancellationToken);
+            }
+            finally
+            {
+                commandLock.Release();
+            }
+        }
+
+        private async Task<LiveLoaderCommandResult> SendLockedAsync(
             string action,
             string commandFileName,
             string responseFileName,

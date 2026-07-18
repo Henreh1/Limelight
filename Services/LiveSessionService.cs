@@ -8,6 +8,8 @@ namespace Limelight.Services
     {
         public const int MaximumMountedContainers = 12;
 
+        private const int MaximumRetiredHistoryRecords = 24;
+
         private static readonly string[] ManagedExtensions =
         {
             ".pak",
@@ -135,7 +137,8 @@ namespace Limelight.Services
             LiveSessionState state)
         {
             return state.Mounts.Count(record =>
-                record.WasMounted &&
+                (record.WasMounted ||
+                 record.MountAttempted) &&
                 !record.WasUnmounted);
         }
 
@@ -181,6 +184,8 @@ namespace Limelight.Services
                     });
             }
 
+            TrimRetiredHistory(state);
+
             Save(state);
         }
 
@@ -204,6 +209,57 @@ namespace Limelight.Services
                 record.WasMounted = true;
                 record.MountOrder = mountOrder;
                 record.MountedAt = DateTimeOffset.UtcNow;
+            }
+
+            TrimRetiredHistory(state);
+
+            Save(state);
+        }
+
+        public void RecordMountAttempt(
+            string pakPath,
+            int mountOrder)
+        {
+            LiveSessionState state =
+                Load();
+
+            LiveSessionMountRecord? record =
+                state.Mounts.LastOrDefault(candidate =>
+                    string.Equals(
+                        candidate.PakPath,
+                        pakPath,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    !candidate.WasMounted &&
+                    !candidate.MountAttempted);
+
+            if (record is not null)
+            {
+                record.MountAttempted = true;
+                record.MountOrder = mountOrder;
+            }
+
+            Save(state);
+        }
+
+        public void RecordRejectedMount(
+            string pakPath)
+        {
+            LiveSessionState state =
+                Load();
+
+            LiveSessionMountRecord? record =
+                state.Mounts.LastOrDefault(candidate =>
+                    string.Equals(
+                        candidate.PakPath,
+                        pakPath,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    candidate.MountAttempted &&
+                    !candidate.WasMounted);
+
+            if (record is not null)
+            {
+                record.MountAttempted = false;
+                record.MountOrder = 0;
             }
 
             Save(state);
@@ -230,7 +286,8 @@ namespace Limelight.Services
 
             return state.Mounts
                 .Where(record =>
-                    record.WasMounted &&
+                    (record.WasMounted ||
+                     record.MountAttempted) &&
                     !record.WasUnmounted &&
                     (string.IsNullOrWhiteSpace(
                          state.ActiveGenerationId) ||
@@ -255,7 +312,8 @@ namespace Limelight.Services
                         candidate.PakPath,
                         pakPath,
                         StringComparison.OrdinalIgnoreCase) &&
-                    candidate.WasMounted &&
+                    (candidate.WasMounted ||
+                     candidate.MountAttempted) &&
                     !candidate.WasUnmounted);
 
             if (record is not null)
@@ -265,7 +323,70 @@ namespace Limelight.Services
                 record.RetirementError = string.Empty;
             }
 
+            TrimRetiredHistory(state);
+
             Save(state);
+        }
+
+        public LiveSessionCleanupResult DeleteUncommittedGenerationFiles(
+            string generationId,
+            string gameDirectory)
+        {
+            LiveSessionState state =
+                Load();
+
+            List<LiveSessionMountRecord> unusedRecords =
+                state.Mounts
+                    .Where(record =>
+                        string.Equals(
+                            record.GenerationId,
+                            generationId,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        !record.MountAttempted &&
+                        !record.WasMounted)
+                    .ToList();
+
+            int deletedFileCount = 0;
+            long deletedBytes = 0;
+            var errors = new List<string>();
+
+            foreach (LiveSessionMountRecord record in unusedRecords)
+            {
+                LiveSessionCleanupResult cleanup =
+                    DeleteRetiredContainerFiles(
+                        record.PakPath,
+                        gameDirectory);
+
+                deletedFileCount +=
+                    cleanup.DeletedFileCount;
+
+                deletedBytes +=
+                    cleanup.DeletedBytes;
+
+                if (cleanup.Errors.Count == 0)
+                {
+                    state.Mounts.Remove(record);
+                    continue;
+                }
+
+                record.RetirementError =
+                    string.Join(
+                        "; ",
+                        cleanup.Errors);
+
+                errors.AddRange(
+                    cleanup.Errors);
+            }
+
+            TrimRetiredHistory(state);
+            Save(state);
+
+            return new LiveSessionCleanupResult
+            {
+                DeletedFileCount = deletedFileCount,
+                DeletedBytes = deletedBytes,
+                Errors = errors
+            };
         }
 
         public void RecordRetirementFailure(
@@ -379,6 +500,8 @@ namespace Limelight.Services
             state.SuccessfulSwitches++;
             state.LastError = string.Empty;
 
+            TrimRetiredHistory(state);
+
             Save(state);
         }
 
@@ -395,7 +518,36 @@ namespace Limelight.Services
             state.PendingGenerationId = string.Empty;
             state.LastError = exception.Message;
 
+            TrimRetiredHistory(state);
+
             Save(state);
+        }
+
+        private static void TrimRetiredHistory(
+            LiveSessionState state)
+        {
+            List<LiveSessionMountRecord> retiredRecords =
+                state.Mounts
+                    .Where(record =>
+                        record.WasUnmounted)
+                    .OrderByDescending(record =>
+                        record.UnmountedAt ??
+                        record.MountedAt ??
+                        record.StagedAt)
+                    .Skip(MaximumRetiredHistoryRecords)
+                    .ToList();
+
+            if (retiredRecords.Count == 0)
+            {
+                return;
+            }
+
+            // The current and rollback generations stay untouched. I only trim
+            // old diagnostic entries after their containers are safely retired.
+            foreach (LiveSessionMountRecord record in retiredRecords)
+            {
+                state.Mounts.Remove(record);
+            }
         }
 
         public LiveSessionRecoveryResult RecoverClosedGame(

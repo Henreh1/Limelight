@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -47,6 +48,7 @@ namespace Limelight.Services
             " }";
 
         private readonly HttpClient _httpClient;
+        private readonly HttpClient _downloadClient;
         private readonly object _usageLock =
     new();
 
@@ -96,6 +98,13 @@ namespace Limelight.Services
                 {
                     Timeout =
                         TimeSpan.FromSeconds(20)
+                };
+
+            _downloadClient =
+                new HttpClient
+                {
+                    Timeout =
+                        Timeout.InfiniteTimeSpan
                 };
         }
 
@@ -288,6 +297,246 @@ namespace Limelight.Services
                             file.IsPrimary
                     })
                 .ToList();
+        }
+
+        public async Task<string> DownloadModFileAsync(
+            string apiKey,
+            NexusModFile file,
+            IProgress<NexusDownloadProgress>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(file);
+            ValidateApiKey(apiKey);
+
+            if (file.ModId <= 0 ||
+                file.FileId <= 0)
+            {
+                throw new ArgumentException(
+                    "A valid Nexus mod file is required.",
+                    nameof(file));
+            }
+
+            Uri downloadUri =
+                await GetDownloadUriAsync(
+                    apiKey,
+                    file.ModId,
+                    file.FileId,
+                    cancellationToken);
+
+            string downloadDirectory =
+                Path.Combine(
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.LocalApplicationData),
+                    "Limelight",
+                    "Downloads");
+
+            Directory.CreateDirectory(
+                downloadDirectory);
+
+            string archiveName =
+                CreateSafeArchiveName(file);
+
+            string finalPath =
+                Path.Combine(
+                    downloadDirectory,
+                    archiveName);
+
+            string temporaryPath =
+                finalPath + ".download";
+
+            TryDeleteFile(temporaryPath);
+
+            try
+            {
+                using HttpRequestMessage request =
+                    new(
+                        HttpMethod.Get,
+                        downloadUri);
+
+                request.Headers.TryAddWithoutValidation(
+                    "Application-Name",
+                    "Limelight");
+
+                request.Headers.TryAddWithoutValidation(
+                    "Application-Version",
+                    "0.1.0");
+
+                using HttpResponseMessage response =
+                    await _downloadClient.SendAsync(
+                        request,
+                        HttpCompletionOption.ResponseHeadersRead,
+                        cancellationToken);
+
+                response.EnsureSuccessStatusCode();
+
+                long? totalBytes =
+                    response.Content.Headers.ContentLength;
+
+                await using Stream source =
+                    await response.Content.ReadAsStreamAsync(
+                        cancellationToken);
+
+                await using FileStream destination =
+                    new(
+                        temporaryPath,
+                        FileMode.CreateNew,
+                        FileAccess.Write,
+                        FileShare.None,
+                        81920,
+                        useAsync: true);
+
+                byte[] buffer =
+                    new byte[81920];
+
+                long bytesReceived = 0;
+                int bytesRead;
+
+                while ((bytesRead =
+                    await source.ReadAsync(
+                        buffer,
+                        cancellationToken)) > 0)
+                {
+                    await destination.WriteAsync(
+                        buffer.AsMemory(0, bytesRead),
+                        cancellationToken);
+
+                    bytesReceived += bytesRead;
+
+                    progress?.Report(
+                        new NexusDownloadProgress
+                        {
+                            BytesReceived = bytesReceived,
+                            TotalBytes = totalBytes
+                        });
+                }
+
+                await destination.FlushAsync(
+                    cancellationToken);
+
+                if (bytesReceived == 0)
+                {
+                    throw new InvalidDataException(
+                        "Nexus Mods returned an empty download.");
+                }
+
+                File.Move(
+                    temporaryPath,
+                    finalPath,
+                    overwrite: true);
+
+                return finalPath;
+            }
+            catch
+            {
+                TryDeleteFile(temporaryPath);
+                throw;
+            }
+        }
+
+        public static void DeleteDownloadedArchive(
+            string archivePath)
+        {
+            TryDeleteFile(archivePath);
+        }
+
+        private async Task<Uri> GetDownloadUriAsync(
+            string apiKey,
+            long modId,
+            int fileId,
+            CancellationToken cancellationToken)
+        {
+            string endpoint =
+                DeadAsDiscoModsEndpoint +
+                $"{modId}/files/{fileId}/download_link.json";
+
+            using HttpRequestMessage request =
+                CreateRequest(
+                    endpoint,
+                    apiKey);
+
+            using HttpResponseMessage response =
+                await SendRequestAsync(
+                    request,
+                    cancellationToken);
+
+            if (response.StatusCode ==
+                HttpStatusCode.Forbidden)
+            {
+                throw new InvalidOperationException(
+                    "Nexus direct downloads require a Premium account during personal-key testing. " +
+                    "Open this file on Nexus Mods if the connected account uses manual downloads.");
+            }
+
+            EnsureSuccessfulResponse(response);
+
+            string json =
+                await response.Content.ReadAsStringAsync(
+                    cancellationToken);
+
+            List<NexusDownloadLinkResponse>? links =
+                JsonSerializer.Deserialize<List<NexusDownloadLinkResponse>>(
+                    json);
+
+            string? uriText =
+                links?
+                    .Select(link => link.Uri)
+                    .FirstOrDefault(value =>
+                        !string.IsNullOrWhiteSpace(value));
+
+            if (!Uri.TryCreate(
+                    uriText,
+                    UriKind.Absolute,
+                    out Uri? downloadUri) ||
+                downloadUri.Scheme != Uri.UriSchemeHttps)
+            {
+                throw new InvalidOperationException(
+                    "Nexus Mods did not return a secure download link.");
+            }
+
+            return downloadUri;
+        }
+
+        private static string CreateSafeArchiveName(
+            NexusModFile file)
+        {
+            string requestedName =
+                FirstAvailable(
+                    file.ArchiveName,
+                    file.FileName,
+                    $"mod-{file.ModId}-file-{file.FileId}.zip");
+
+            string safeName =
+                string.Join(
+                    "_",
+                    requestedName.Split(
+                        Path.GetInvalidFileNameChars(),
+                        StringSplitOptions.RemoveEmptyEntries));
+
+            if (!Path.GetExtension(safeName).Equals(
+                    ".zip",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    "This Nexus file is not a ZIP archive. Limelight currently installs ZIP downloads only.");
+            }
+
+            return $"{file.ModId}-{file.FileId}-{safeName}";
+        }
+
+        private static void TryDeleteFile(
+            string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+            }
+            catch
+            {
+                // A partial download can be removed by the next attempt.
+            }
         }
 
         private async Task RefreshCatalogueAsync(
@@ -1292,6 +1541,12 @@ namespace Limelight.Services
         {
             [JsonPropertyName("files")]
             public List<NexusModFileResponse>? Files { get; set; }
+        }
+
+        private sealed class NexusDownloadLinkResponse
+        {
+            [JsonPropertyName("URI")]
+            public string? Uri { get; set; }
         }
 
         private sealed class NexusModFileResponse

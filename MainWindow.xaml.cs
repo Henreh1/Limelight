@@ -67,6 +67,7 @@ namespace Limelight
             string.Empty;
 
         private bool _isNexusBrowseLoading;
+        private bool _isNexusDownloadRunning;
         private bool _hasLoadedNexusBrowseMods;
         private readonly DispatcherTimer _gameStatusTimer;
         private bool _hasHandledLiveLoaderPrompt;
@@ -1377,6 +1378,10 @@ namespace Limelight
                     int mountOrder =
                         _nextLiveMountOrder++;
 
+                    _liveSessionService.RecordMountAttempt(
+                        pakPath,
+                        mountOrder);
+
                     LiveLoaderCommandResult mountResult =
                         await _liveLoaderCommandService.MountPakAsync(
                             pakPath,
@@ -1384,6 +1389,16 @@ namespace Limelight
 
                     if (!mountResult.Success)
                     {
+                        if (!mountResult.Message.Contains(
+                                "did not respond",
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            // A definite rejection means Unreal never owned this
+                            // container, so failed-stage cleanup may remove it.
+                            _liveSessionService.RecordRejectedMount(
+                                pakPath);
+                        }
+
                         throw new InvalidOperationException(
                             mountResult.Message);
                     }
@@ -1446,6 +1461,12 @@ namespace Limelight
             }
             catch (Exception exception)
             {
+                // Anything Unreal already mounted stays recorded for the guarded
+                // retirement path. Files which never mounted are safe to remove now.
+                _liveSessionService.DeleteUncommittedGenerationFiles(
+                    generationId,
+                    gameDirectory);
+
                 _liveSessionService.FailActivation(
                     exception);
 
@@ -1904,24 +1925,48 @@ namespace Limelight
             Action<string, int>? reportProgress)
         {
             DateTime deadline =
-                DateTime.UtcNow.AddSeconds(12);
+                DateTime.UtcNow.AddSeconds(30);
 
             LiveLoaderCommandResult result =
                 await _liveLoaderCommandService
                     .CanSwitchModsAsync();
 
-            while (!result.Success &&
-                   IsTemporaryLiveSwitchDelay(result.Message) &&
-                   DateTime.UtcNow < deadline)
-            {
-                // The retirement guard is deliberately short. I wait here so
-                // the user does not have to dismiss a false level-change warning
-                // and press Activate again after every quick X19 switch.
-                reportProgress?.Invoke(
-                    "WAITING FOR LIVE ASSETS TO SETTLE",
-                    8);
+            int consecutiveReadyChecks = 0;
 
-                await Task.Delay(400);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (result.Success)
+                {
+                    consecutiveReadyChecks++;
+
+                    // Two clean samples prevent a brief gap between Unreal world
+                    // callbacks from opening the switch gate too early.
+                    if (consecutiveReadyChecks >= 2)
+                    {
+                        return result;
+                    }
+
+                    reportProgress?.Invoke(
+                        "VERIFYING A STABLE GAME WORLD",
+                        9);
+
+                    await Task.Delay(250);
+                }
+                else
+                {
+                    consecutiveReadyChecks = 0;
+
+                    if (!IsTemporaryLiveSwitchDelay(result.Message))
+                    {
+                        return result;
+                    }
+
+                    reportProgress?.Invoke(
+                        "WAITING FOR LIVE ASSETS TO SETTLE",
+                        8);
+
+                    await Task.Delay(400);
+                }
 
                 result =
                     await _liveLoaderCommandService
@@ -1934,23 +1979,35 @@ namespace Limelight
         private static bool IsTemporaryLiveSwitchDelay(
             string message)
         {
-            return message.Contains(
-                       "still settling",
-                       StringComparison.OrdinalIgnoreCase) ||
-                   message.Contains(
-                       "still retiring",
-                       StringComparison.OrdinalIgnoreCase);
+            return ContainsAny(
+                message,
+                "still settling",
+                "still retiring",
+                "temporarily locked",
+                "level is still loading",
+                "world is still loading");
         }
 
         private static bool IsLevelTransitionBlock(
             string message)
         {
-            return message.Contains(
-                       "changing levels",
-                       StringComparison.OrdinalIgnoreCase) ||
-                   message.Contains(
-                       "level transition",
-                       StringComparison.OrdinalIgnoreCase);
+            return ContainsAny(
+                message,
+                "changing levels",
+                "level transition",
+                "level is still loading",
+                "world is still loading",
+                "loadmap");
+        }
+
+        private static bool ContainsAny(
+            string value,
+            params string[] candidates)
+        {
+            return candidates.Any(candidate =>
+                value.Contains(
+                    candidate,
+                    StringComparison.OrdinalIgnoreCase));
         }
 
         private async void ShowNotification(
@@ -2883,15 +2940,143 @@ namespace Limelight
             }
         }
 
-        private void NexusDownloadRequested(
+        private async void NexusDownloadRequested(
             NexusModFile file)
         {
-            // The picker now hands one exact Nexus file to the download stage.
-            // The authenticated download and install queue is the next connection.
-            ShowNotification(
-                "DOWNLOAD READY",
-                $"{file.FileName} is selected and ready for the download stage.",
-                isError: false);
+            if (_isNexusDownloadRunning)
+            {
+                ShowNotification(
+                    "DOWNLOAD IN PROGRESS",
+                    "Let the current Nexus file finish before starting another.",
+                    isError: true);
+
+                return;
+            }
+
+            if (_nexusAccount is null ||
+                string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                ShowNotification(
+                    "NEXUS ACCOUNT REQUIRED",
+                    "Connect Nexus Mods in Settings before downloading a file.",
+                    isError: true);
+
+                return;
+            }
+
+            NexusModSummary? selectedMod =
+                _nexusBrowseMods.FirstOrDefault(mod =>
+                    mod.ModId == file.ModId);
+
+            string displayName =
+                selectedMod?.Name ??
+                file.FileName;
+
+            bool isAlreadyInstalled =
+                _settings.InstalledMods.Any(mod =>
+                    (mod.NexusModId == file.ModId &&
+                     mod.NexusFileId == file.FileId) ||
+                    string.Equals(
+                        mod.DisplayName,
+                        InstalledMod.CreateDisplayName(displayName),
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (isAlreadyInstalled)
+            {
+                ShowNotification(
+                    "MOD ALREADY INSTALLED",
+                    $"{displayName} is already in your Limelight library.",
+                    isError: true);
+
+                return;
+            }
+
+            _isNexusDownloadRunning =
+                true;
+
+            string downloadedArchive =
+                string.Empty;
+
+            try
+            {
+                BrowseNexusPageControl.ShowDownloadState(
+                    file,
+                    "REQUESTING A SECURE NEXUS DOWNLOAD",
+                    isBusy: true);
+
+                var progress =
+                    new Progress<NexusDownloadProgress>(snapshot =>
+                    {
+                        BrowseNexusPageControl.ShowDownloadState(
+                            file,
+                            "DOWNLOADING AND CHECKING THE ARCHIVE",
+                            isBusy: true,
+                            snapshot.TotalBytes is > 0
+                                ? snapshot.Percentage
+                                : null);
+                    });
+
+                downloadedArchive =
+                    await _nexusApiService.DownloadModFileAsync(
+                        _nexusApiKey,
+                        file,
+                        progress);
+
+                BrowseNexusPageControl.ShowDownloadState(
+                    file,
+                    "VALIDATING AND INSTALLING THE MOD",
+                    isBusy: true,
+                    percentage: 100);
+
+                InstalledMod installedMod =
+                    await Task.Run(() =>
+                        _modLibraryService.Import(
+                            downloadedArchive,
+                            file.ModId,
+                            file.FileId,
+                            displayName));
+
+                _settings.InstalledMods.Add(
+                    installedMod);
+
+                _settingsService.Save(
+                    _settings);
+
+                RefreshLibrarySummary();
+
+                BrowseNexusPageControl.ShowDownloadState(
+                    file,
+                    $"{installedMod.DisplayName} IS READY IN MY MODS.",
+                    isBusy: false);
+
+                ShowNotification(
+                    "MOD INSTALLED",
+                    $"{installedMod.DisplayName} is ready in My Mods.",
+                    isError: false);
+            }
+            catch (Exception exception)
+            {
+                BrowseNexusPageControl.ShowDownloadState(
+                    file,
+                    "THE DOWNLOAD COULD NOT BE INSTALLED.",
+                    isBusy: false);
+
+                ShowNotification(
+                    "DOWNLOAD FAILED",
+                    exception.Message,
+                    isError: true);
+            }
+            finally
+            {
+                if (!string.IsNullOrWhiteSpace(downloadedArchive))
+                {
+                    NexusApiService.DeleteDownloadedArchive(
+                        downloadedArchive);
+                }
+
+                _isNexusDownloadRunning =
+                    false;
+            }
         }
         private static string CreateNexusAccountLabel(
             NexusAccount account)

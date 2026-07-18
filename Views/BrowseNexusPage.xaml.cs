@@ -87,6 +87,19 @@ namespace Limelight.Views
                 message);
         }
 
+        public void ShowDownloadState(
+            NexusModFile file,
+            string message,
+            bool isBusy,
+            int? percentage = null)
+        {
+            NexusModFilesViewControl.ShowDownloadState(
+                file,
+                message,
+                isBusy,
+                percentage);
+        }
+
         public string SelectedSortKey =>
             NexusSortBox.SelectedIndex switch
             {

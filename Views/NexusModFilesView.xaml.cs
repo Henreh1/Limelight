@@ -144,6 +144,41 @@ namespace Limelight.Views
                 "The Nexus file list could not be loaded.";
         }
 
+        public void ShowDownloadState(
+            NexusModFile file,
+            string message,
+            bool isBusy,
+            int? percentage = null)
+        {
+            ArgumentNullException.ThrowIfNull(file);
+
+            FilesList.IsEnabled =
+                !isBusy;
+
+            DownloadProgressBar.Visibility =
+                isBusy
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            DownloadProgressBar.IsIndeterminate =
+                isBusy &&
+                percentage is null;
+
+            if (percentage is >= 0)
+            {
+                DownloadProgressBar.Value =
+                    Math.Clamp(
+                        percentage.Value,
+                        0,
+                        100);
+            }
+
+            FooterStatusText.Text =
+                percentage is >= 0
+                    ? $"{message} {percentage.Value}%"
+                    : message;
+        }
+
         private void ShowModHeader(
             NexusModSummary mod)
         {

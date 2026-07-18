@@ -304,9 +304,28 @@
                 Background="{StaticResource SidebarBrush}"
                 BorderBrush="{StaticResource BorderBrush}"
                 BorderThickness="0,1,0,0">
-            <TextBlock x:Name="FooterStatusText"
-                       FontSize="11"
-                       Foreground="{StaticResource MutedTextBrush}"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="FooterStatusText"
+                           VerticalAlignment="Center"
+                           FontSize="11"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                <ProgressBar x:Name="DownloadProgressBar"
+                             Grid.Column="1"
+                             Width="190"
+                             Height="6"
+                             Margin="20,0,0,0"
+                             VerticalAlignment="Center"
+                             Minimum="0"
+                             Maximum="100"
+                             Foreground="{StaticResource CyanBrush}"
+                             Visibility="Collapsed"/>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

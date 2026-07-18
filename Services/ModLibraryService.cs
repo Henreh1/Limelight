@@ -30,7 +30,11 @@ namespace Limelight.Services
             _assetScanner = new ModAssetScannerService();
         }
 
-        public InstalledMod Import(string archivePath)
+        public InstalledMod Import(
+            string archivePath,
+            long nexusModId = 0,
+            int nexusFileId = 0,
+            string? displayName = null)
         {
             // Validate again here so this service is safe even when called
             // from somewhere other than the current Import button.
@@ -76,13 +80,17 @@ namespace Limelight.Services
                 return new InstalledMod
                 {
                     Id = modId,
-                    Name = CreateDisplayName(archivePath),
+                    Name = string.IsNullOrWhiteSpace(displayName)
+                        ? CreateDisplayName(archivePath)
+                        : displayName.Trim(),
                     InstallDirectory = finalDirectory,
                     PackageFiles = packageFiles,
                     AssetPackages = assetPackages,
                     AssetManifestVersion =
                         ModAssetScannerService.CurrentManifestVersion,
-                    InstalledAt = DateTimeOffset.Now
+                    InstalledAt = DateTimeOffset.Now,
+                    NexusModId = nexusModId,
+                    NexusFileId = nexusFileId
                 };
             }
             catch
