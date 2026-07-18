@@ -50,6 +50,53 @@ namespace Limelight.Services
             return false;
         }
 
+        public IntPtr FindGameWindow(
+    string? gameDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(gameDirectory))
+            {
+                return IntPtr.Zero;
+            }
+
+            foreach (string processName in
+                     GetPossibleProcessNames(gameDirectory))
+            {
+                try
+                {
+                    Process[] matchingProcesses =
+                        Process.GetProcessesByName(processName);
+
+                    foreach (Process process in matchingProcesses)
+                    {
+                        try
+                        {
+                            process.Refresh();
+
+                            if (process.MainWindowHandle != IntPtr.Zero)
+                            {
+                                return process.MainWindowHandle;
+                            }
+                        }
+                        catch
+                        {
+                            // I can try another process if this one closes while
+                            // Windows is returning its window information.
+                        }
+                        finally
+                        {
+                            process.Dispose();
+                        }
+                    }
+                }
+                catch
+                {
+                    // I will continue through the known game process names.
+                }
+            }
+
+            return IntPtr.Zero;
+        }
+
         private IReadOnlyList<string> GetPossibleProcessNames(
             string gameDirectory)
         {
@@ -78,6 +125,7 @@ namespace Limelight.Services
                     StringComparer.OrdinalIgnoreCase)
                 {
                     "Pagoda-Win64-Shipping",
+                    "PagodaSteam-Win64-Shipping",
                     "Pagoda",
                     "DeadAsDisco",
                     "Dead as Disco"

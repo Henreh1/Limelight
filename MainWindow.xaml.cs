@@ -255,6 +255,38 @@ namespace Limelight
             }
         }
 
+        private void MinimiseWindow_Click(
+     object sender,
+     RoutedEventArgs e)
+        {
+            // I let Windows handle this so its native minimise animation is preserved.
+            SystemCommands.MinimizeWindow(
+                this);
+        }
+
+        private void ToggleMaximiseWindow_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                SystemCommands.RestoreWindow(
+                    this);
+
+                return;
+            }
+
+            SystemCommands.MaximizeWindow(
+                this);
+        }
+
+        private void CloseWindow_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            SystemCommands.CloseWindow(
+                this);
+        }
         private void CloseLevelTransitionBlocker_Click(
     object sender,
     RoutedEventArgs e)
@@ -367,10 +399,7 @@ namespace Limelight
             _isLiveLoaderInitializationRunning = true;
 
             LiveLoaderInitializingWindow initialisingWindow =
-                new LiveLoaderInitializingWindow
-                {
-                    Owner = this
-                };
+               new LiveLoaderInitializingWindow();
 
             bool previousEnabledState =
                 IsEnabled;
@@ -380,7 +409,6 @@ namespace Limelight
 
             try
             {
-                initialisingWindow.Show();
                 IsEnabled = false;
 
                 initialisingWindow.Report(
@@ -407,11 +435,34 @@ namespace Limelight
                 }
 
                 _wasGameRunning = true;
+                IntPtr gameWindowHandle =
+                    IntPtr.Zero;
+
+                DateTime gameWindowDeadline =
+                    DateTime.UtcNow.AddSeconds(30);
+
+                // I wait for Dead as Disco's visible window so the loading card
+                // appears over the game instead of over Limelight.
+                while (gameWindowHandle == IntPtr.Zero &&
+                       DateTime.UtcNow < gameWindowDeadline)
+                {
+                    gameWindowHandle =
+                        _gameProcessService.FindGameWindow(
+                            gameDirectory);
+
+                    if (gameWindowHandle == IntPtr.Zero)
+                    {
+                        await Task.Delay(100);
+                    }
+                }
 
                 initialisingWindow.Report(
                     "CONNECTING TO UE4SS",
                     18,
                     "The game is running. Waiting for the Limelight runtime bridge and Unreal object system.");
+
+                initialisingWindow.ShowOverGame(
+                    gameWindowHandle);
 
                 DateTime bridgeDeadline =
                     DateTime.UtcNow.AddMinutes(2);
@@ -1353,7 +1404,8 @@ namespace Limelight
             }
         }
 
-        private async void ToggleModRequested(string modId)
+        private async void ToggleModRequested(
+    string modId)
         {
             if (_isLiveModChangeRunning)
             {
@@ -1416,24 +1468,22 @@ namespace Limelight
             if (isGameRunning)
             {
                 LiveLoaderStatusText.Foreground =
-                    (Brush)FindResource("CyanBrush");
+                    (Brush)FindResource(
+                        "CyanBrush");
             }
 
             LiveModSwitchingWindow? switchingWindow =
                 null;
 
-            bool previousEnabledState =
-                IsEnabled;
-
             void CloseSwitchingWindow()
             {
-                if (switchingWindow is not null)
+                if (switchingWindow is null)
                 {
-                    switchingWindow.CloseWhenFinished();
-                    switchingWindow = null;
+                    return;
                 }
 
-                IsEnabled = previousEnabledState;
+                switchingWindow.CloseWhenFinished();
+                switchingWindow = null;
             }
 
             try
@@ -1452,6 +1502,21 @@ namespace Limelight
                 }
                 else if (isGameRunning)
                 {
+                    bool isFirstLiveSwitch =
+                        _nextLiveMountOrder == 1000;
+
+                    switchingWindow =
+                        new LiveModSwitchingWindow(
+                            selectedMod.DisplayName,
+                            isFirstLiveSwitch);
+
+                    IntPtr gameWindowHandle =
+                        _gameProcessService.FindGameWindow(
+                            gameDirectory);
+
+                    switchingWindow.ShowOverGame(
+                        gameWindowHandle);
+
                     if (!_liveLoaderBridgeService.IsOnline())
                     {
                         throw new InvalidOperationException(
@@ -1459,12 +1524,13 @@ namespace Limelight
                     }
 
                     LiveLoaderCommandResult safetyCheck =
-                        await _liveLoaderCommandService.CanSwitchModsAsync();
+                        await _liveLoaderCommandService
+                            .CanSwitchModsAsync();
 
                     if (!safetyCheck.Success)
                     {
-                        // I stop here before Limelight stages, mounts, unloads, or
-                        // refreshes anything while Unreal is replacing its world.
+                        // I stop before staging or mounting anything while Unreal is
+                        // replacing the current world.
                         LevelTransitionBlockerMessage.Text =
                             safetyCheck.Message +
                             " Wait until the new level is fully visible, then select Activate again.";
@@ -1472,22 +1538,13 @@ namespace Limelight
                         LevelTransitionBlocker.Visibility =
                             Visibility.Visible;
 
+                        switchingWindow.ShowError(
+                            safetyCheck.Message);
+
+                        // The overlay now owns its timed closing animation.
+                        switchingWindow = null;
                         return;
                     }
-
-                    bool isFirstLiveSwitch =
-                        _nextLiveMountOrder == 1000;
-
-                    switchingWindow =
-                        new LiveModSwitchingWindow(
-                            selectedMod.DisplayName,
-                            isFirstLiveSwitch)
-                        {
-                            Owner = this
-                        };
-
-                    switchingWindow.Show();
-                    IsEnabled = false;
 
                     await ActivateLiveModAsync(
                         selectedMod,
@@ -1500,8 +1557,8 @@ namespace Limelight
                     _settings.ActiveModId =
                         selectedMod.Id;
 
-                    // The live copy is already active. Once the game closes,
-                    // Limelight mirrors the same choice into ~mods for next time.
+                    // The live copy is already active. Once the game closes, Limelight
+                    // mirrors the same choice into ~mods for the next launch.
                     _settings.PendingDeploymentModId =
                         selectedMod.Id;
                 }
@@ -1519,10 +1576,10 @@ namespace Limelight
                         string.Empty;
                 }
 
-                _settingsService.Save(_settings);
-                RefreshLibrarySummary();
+                _settingsService.Save(
+                    _settings);
 
-                CloseSwitchingWindow();
+                RefreshLibrarySummary();
 
                 string notificationTitle =
                     isCurrentlyActive
@@ -1536,24 +1593,48 @@ namespace Limelight
                             ? $"{selectedMod.DisplayName} is now active live."
                             : $"{selectedMod.DisplayName} is active and ready for the next launch.";
 
-                ShowNotification(
-                    notificationTitle,
-                    notificationMessage,
-                    isError: false);
+                if (isGameRunning &&
+                    switchingWindow is not null)
+                {
+                    switchingWindow.ShowSuccess(
+                        notificationMessage);
+
+                    // The in-game card remains visible briefly and closes itself.
+                    switchingWindow = null;
+                }
+                else
+                {
+                    ShowNotification(
+                        notificationTitle,
+                        notificationMessage,
+                        isError: false);
+                }
             }
             catch (Exception exception)
             {
-                CloseSwitchingWindow();
+                if (isGameRunning &&
+                    switchingWindow is not null)
+                {
+                    switchingWindow.ShowError(
+                        exception.Message);
 
-                ShowNotification(
-                    "MOD ACTIVATION FAILED",
-                    exception.Message,
-                    isError: true);
+                    // Errors remain visible for slightly longer before closing.
+                    switchingWindow = null;
+                }
+                else
+                {
+                    ShowNotification(
+                        "MOD ACTIVATION FAILED",
+                        exception.Message,
+                        isError: true);
+                }
             }
             finally
             {
                 CloseSwitchingWindow();
+
                 _isLiveModChangeRunning = false;
+
                 UpdateGameRunningStatus();
             }
         }

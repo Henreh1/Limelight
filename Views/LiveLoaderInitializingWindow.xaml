@@ -9,7 +9,9 @@
         Background="Transparent"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
+        ShowActivated="False"
+        Focusable="False"
+        WindowStartupLocation="Manual"
         FontFamily="Bahnschrift, Segoe UI"
         Foreground="{StaticResource TextBrush}">
 

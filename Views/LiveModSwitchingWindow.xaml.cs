@@ -1,19 +1,35 @@
+﻿using System;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
 namespace Limelight.Views
 {
     public partial class LiveModSwitchingWindow : Window
     {
-        private readonly DispatcherTimer _animationTimer;
+        private const uint SwpNoActivate = 0x0010;
+        private const uint SwpNoOwnerZOrder = 0x0200;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct NativeRect
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
+
+        private readonly DispatcherTimer _resultTimer;
+        private readonly DispatcherTimer _etaTimer;
         private readonly double _timingScale;
         private DateTime _phaseStartedAt;
-        private double _phaseStartProgress;
-        private double _phaseCeilingProgress;
-        private TimeSpan _phaseDuration;
         private TimeSpan _remainingAtPhaseStart;
         private bool _canClose;
+        private bool _resultShown;
 
         public LiveModSwitchingWindow(
             string modName,
@@ -22,84 +38,297 @@ namespace Limelight.Views
             InitializeComponent();
 
             ModNameText.Text =
-                $"PREPARING {modName.ToUpperInvariant()}";
+                modName.ToUpperInvariant();
+
+            DetailText.Text =
+                isFirstLiveSwitch
+                    ? "The first live switch may take a little longer while Limelight prepares the package."
+                    : "Limelight is preparing the selected mod for a safe live change.";
+
+            _resultTimer =
+                new DispatcherTimer();
 
             _timingScale =
-                isFirstLiveSwitch
-                    ? 1.0
-                    : 0.55;
+    isFirstLiveSwitch
+        ? 1.0
+        : 0.55;
 
-            TimingNoteText.Text =
-                isFirstLiveSwitch
-                    ? "The first live switch performs the full package scan and normally takes the longest."
-                    : "This package was already prepared once, so the estimated time is usually shorter.";
-
-            _animationTimer =
+            _etaTimer =
                 new DispatcherTimer
                 {
-                    Interval = TimeSpan.FromMilliseconds(250)
+                    Interval =
+                        TimeSpan.FromMilliseconds(
+                            500)
                 };
 
-            _animationTimer.Tick +=
-                AnimationTimer_Tick;
+            _etaTimer.Tick +=
+                EtaTimer_Tick;
+
+            _etaTimer.Start();
+
+            _resultTimer.Tick +=
+                ResultTimer_Tick;
 
             Report(
                 "CHECKING MOD PACKAGE",
                 12);
         }
 
+        public void ShowOverGame(
+            IntPtr gameWindowHandle)
+        {
+            if (gameWindowHandle == IntPtr.Zero ||
+                !GetWindowRect(
+                    gameWindowHandle,
+                    out NativeRect gameRect))
+            {
+                // I use the desktop corner only when Windows has not exposed
+                // the game window yet.
+                Rect workArea =
+                    SystemParameters.WorkArea;
+
+                Left =
+                    workArea.Right -
+                    Width -
+                    24;
+
+                Top =
+                    workArea.Bottom -
+                    Height -
+                    24;
+
+                Topmost = true;
+
+                Show();
+                AnimateIn();
+                return;
+            }
+
+            // I make Dead as Disco the native owner so this card stays above
+            // the game without covering unrelated applications.
+            WindowInteropHelper helper =
+                new(this)
+                {
+                    Owner = gameWindowHandle
+                };
+
+            Show();
+
+            uint gameDpi =
+                GetDpiForWindow(
+                    gameWindowHandle);
+
+            double scale =
+                gameDpi == 0
+                    ? 1.0
+                    : gameDpi / 96.0;
+
+            int overlayWidth =
+                (int)Math.Round(
+                    Width * scale);
+
+            int overlayHeight =
+                (int)Math.Round(
+                    Height * scale);
+
+            int margin =
+                (int)Math.Round(
+                    24 * scale);
+
+            int overlayLeft =
+                Math.Max(
+                    gameRect.Left,
+                    gameRect.Right -
+                    overlayWidth -
+                    margin);
+
+            int overlayTop =
+                Math.Max(
+                    gameRect.Top,
+                    gameRect.Bottom -
+                    overlayHeight -
+                    margin);
+
+            SetWindowPos(
+                helper.Handle,
+                IntPtr.Zero,
+                overlayLeft,
+                overlayTop,
+                overlayWidth,
+                overlayHeight,
+                SwpNoActivate |
+                SwpNoOwnerZOrder);
+
+            AnimateIn();
+        }
+
         public void Report(
             string phase,
             int progress)
         {
+            if (_resultShown)
+            {
+                return;
+            }
+
             int safeProgress =
                 Math.Clamp(
                     progress,
                     0,
                     100);
 
-            PhaseText.Text = phase;
-            DetailText.Text = GetPhaseDetail(phase);
+            PhaseText.Text =
+                phase;
 
-            if (safeProgress >= 100)
-            {
-                _animationTimer.Stop();
-                SwitchProgress.Value = 100;
-                ProgressText.Text = "100%";
-                EtaText.Text = "READY";
-                return;
-            }
+            DetailText.Text =
+                GetPhaseDetail(
+                    phase);
 
-            (double ceiling,
-             double phaseSeconds,
-             double remainingSeconds) =
-                GetPhaseTiming(safeProgress);
+            ProgressText.Text =
+                $"{safeProgress}%";
 
-            _phaseStartProgress = safeProgress;
-            _phaseCeilingProgress = ceiling;
-            _phaseDuration =
-                TimeSpan.FromSeconds(
-                    Math.Max(
-                        1,
-                        phaseSeconds * _timingScale));
+            _phaseStartedAt =
+    DateTime.UtcNow;
 
             _remainingAtPhaseStart =
                 TimeSpan.FromSeconds(
-                    Math.Max(
-                        1,
-                        remainingSeconds * _timingScale));
+                    GetEstimatedRemainingSeconds(
+                        safeProgress) *
+                    _timingScale);
 
-            _phaseStartedAt = DateTime.UtcNow;
-            SwitchProgress.Value = safeProgress;
+            UpdateEta();
 
-            UpdateAnimatedValues();
-            _animationTimer.Start();
+            DoubleAnimation progressAnimation =
+                new()
+                {
+                    To = safeProgress,
+                    Duration =
+                        TimeSpan.FromMilliseconds(
+                            220),
+                    EasingFunction =
+                        new QuadraticEase
+                        {
+                            EasingMode =
+                                EasingMode.EaseOut
+                        }
+                };
+
+            SwitchProgress.BeginAnimation(
+                System.Windows.Controls.Primitives
+                    .RangeBase.ValueProperty,
+                progressAnimation);
+        }
+
+        public void ShowSuccess(
+            string message)
+        {
+            _resultShown = true;
+
+            _etaTimer.Stop();
+
+            EtaText.Text =
+                "COMPLETE";
+
+            Brush cyanBrush =
+                (Brush)FindResource(
+                    "CyanBrush");
+
+            EtaText.Foreground =
+    cyanBrush;
+
+            PhaseText.Text =
+                "LIVE SWITCH COMPLETE";
+
+            DetailText.Text =
+                message;
+
+            ProgressText.Text =
+                "DONE";
+
+            StatusIcon.Text =
+                "✓";
+
+            PhaseText.Foreground =
+                cyanBrush;
+
+            ProgressText.Foreground =
+                cyanBrush;
+
+            StatusIcon.Foreground =
+                cyanBrush;
+
+            SwitchProgress.Foreground =
+                cyanBrush;
+
+            SwitchProgress.BeginAnimation(
+                System.Windows.Controls.Primitives
+                    .RangeBase.ValueProperty,
+                null);
+
+            SwitchProgress.Value = 100;
+
+            PopupShell.BorderBrush =
+                cyanBrush;
+
+            StartResultTimer(
+                TimeSpan.FromSeconds(
+                    2.8));
+        }
+
+        public void ShowError(
+            string message)
+        {
+            _resultShown = true;
+
+            Brush pinkBrush =
+                (Brush)FindResource(
+                    "PinkBrush");
+
+            EtaText.Foreground =
+    pinkBrush;
+
+            _etaTimer.Stop();
+
+            EtaText.Text =
+                "CHECK LIMELIGHT";
+
+            PhaseText.Text =
+                "LIVE SWITCH FAILED";
+
+            DetailText.Text =
+                message;
+
+            ProgressText.Text =
+                "ERROR";
+
+            StatusIcon.Text =
+                "!";
+
+            PhaseText.Foreground =
+                pinkBrush;
+
+            ProgressText.Foreground =
+                pinkBrush;
+
+            StatusIcon.Foreground =
+                pinkBrush;
+
+            SwitchProgress.Foreground =
+                pinkBrush;
+
+            PopupShell.BorderBrush =
+                pinkBrush;
+
+            StartResultTimer(
+                TimeSpan.FromSeconds(
+                    5.5));
         }
 
         public void CloseWhenFinished()
         {
             _canClose = true;
-            _animationTimer.Stop();
+            _resultTimer.Stop();
+            _etaTimer.Stop();
             Close();
         }
 
@@ -108,8 +337,6 @@ namespace Limelight.Views
         {
             if (!_canClose)
             {
-                // Limelight owns the operation that opened this window. Keeping
-                // it visible prevents another activation while files are moving.
                 e.Cancel = true;
                 return;
             }
@@ -117,47 +344,101 @@ namespace Limelight.Views
             base.OnClosing(e);
         }
 
-        private void AnimationTimer_Tick(
+        protected override void OnClosed(
+            EventArgs e)
+        {
+            _resultTimer.Stop();
+            _etaTimer.Stop();
+
+            base.OnClosed(e);
+        }
+
+        private void AnimateIn()
+        {
+            CubicEase easing =
+                new()
+                {
+                    EasingMode =
+                        EasingMode.EaseOut
+                };
+
+            PopupShell.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation
+                {
+                    From = 0,
+                    To = 1,
+                    Duration =
+                        TimeSpan.FromMilliseconds(
+                            220),
+                    EasingFunction = easing
+                });
+
+            PopupTransform.BeginAnimation(
+                TranslateTransform.XProperty,
+                new DoubleAnimation
+                {
+                    From = 26,
+                    To = 0,
+                    Duration =
+                        TimeSpan.FromMilliseconds(
+                            260),
+                    EasingFunction = easing
+                });
+        }
+
+        private void StartResultTimer(
+            TimeSpan delay)
+        {
+            _resultTimer.Stop();
+            _resultTimer.Interval = delay;
+            _resultTimer.Start();
+        }
+
+        private void ResultTimer_Tick(
             object? sender,
             EventArgs e)
         {
-            UpdateAnimatedValues();
-        }
+            _resultTimer.Stop();
 
-        private void UpdateAnimatedValues()
-        {
-            TimeSpan elapsed =
-                DateTime.UtcNow -
-                _phaseStartedAt;
+            CubicEase easing =
+                new()
+                {
+                    EasingMode =
+                        EasingMode.EaseIn
+                };
 
-            double phaseFraction =
-                Math.Min(
-                    0.92,
-                    elapsed.TotalMilliseconds /
-                    Math.Max(
-                        1,
-                        _phaseDuration.TotalMilliseconds));
+            DoubleAnimation opacityAnimation =
+                new()
+                {
+                    To = 0,
+                    Duration =
+                        TimeSpan.FromMilliseconds(
+                            180),
+                    EasingFunction = easing
+                };
 
-            double animatedProgress =
-                _phaseStartProgress +
-                ((_phaseCeilingProgress -
-                  _phaseStartProgress) *
-                 phaseFraction);
+            opacityAnimation.Completed +=
+                (_, _) =>
+                {
+                    _canClose = true;
+                    Close();
+                };
 
-            SwitchProgress.Value =
-                Math.Max(
-                    SwitchProgress.Value,
-                    animatedProgress);
+            PopupShell.BeginAnimation(
+                OpacityProperty,
+                opacityAnimation);
 
-            ProgressText.Text =
-                $"{Math.Floor(SwitchProgress.Value)}%";
-
-            TimeSpan remaining =
-                _remainingAtPhaseStart -
-                elapsed;
-
-            EtaText.Text =
-                FormatRemainingTime(remaining);
+            PopupTransform.BeginAnimation(
+                TranslateTransform.XProperty,
+                new DoubleAnimation
+                {
+                    To = 22,
+                    Duration =
+                        TimeSpan.FromMilliseconds(
+                            180),
+                    EasingFunction = easing
+                });
         }
 
         private static string GetPhaseDetail(
@@ -166,54 +447,84 @@ namespace Limelight.Views
             return phase switch
             {
                 "SCANNING MOD CONTENT" =>
-                    "Reading the mod container and building a list of every replacement asset.",
+                    "Reading every replacement contained in the selected mod.",
+
                 "STAGING MOD CONTAINER" =>
-                    "Preparing a uniquely named live container for this game session.",
+                    "Preparing the package for this live game session.",
+
                 "MOUNTING MOD CONTENT" =>
-                    "Unreal is mounting the package. The first mount normally takes the longest.",
+                    "Unreal is mounting the replacement content.",
+
                 "REFRESHING OVERRIDDEN PACKAGES" =>
-                    "Removing cached base game packages so the mounted replacements can take their place.",
+                    "Clearing cached packages before loading their replacements.",
+
                 "LOADING MODELS, PORTRAITS AND TEXT" =>
-                    "Loading registered replacements first. New materials and textures will follow the character package.",
+                    "Loading the selected model, materials, portraits, and text.",
+
                 "LIVE LOADER READY" =>
-                    "The selected mod is mounted and Charlie has been refreshed.",
+                    "The new character and supporting assets are ready.",
+
                 _ =>
-                    "Limelight is confirming that Unreal is ready for a safe live change."
+                    "Limelight is confirming that Unreal is ready for a safe live switch."
             };
         }
 
-        private static (double Ceiling,
-                        double PhaseSeconds,
-                        double RemainingSeconds)
-            GetPhaseTiming(
-                int progress)
+        private void EtaTimer_Tick(
+    object? sender,
+    EventArgs e)
+        {
+            UpdateEta();
+        }
+
+        private void UpdateEta()
+        {
+            TimeSpan elapsed =
+                DateTime.UtcNow -
+                _phaseStartedAt;
+
+            TimeSpan remaining =
+                _remainingAtPhaseStart -
+                elapsed;
+
+            EtaText.Text =
+                FormatRemainingTime(
+                    remaining);
+        }
+
+        private static double GetEstimatedRemainingSeconds(
+            int progress)
         {
             if (progress <= 12)
             {
-                return (34, 15, 225);
+                return 225;
             }
 
             if (progress <= 35)
             {
-                return (47, 20, 210);
+                return 210;
             }
 
             if (progress <= 48)
             {
-                return (59, 25, 190);
+                return 190;
             }
 
             if (progress <= 60)
             {
-                return (73, 125, 165);
+                return 165;
             }
 
             if (progress <= 74)
             {
-                return (85, 15, 40);
+                return 40;
             }
 
-            return (99, 25, 25);
+            if (progress <= 86)
+            {
+                return 25;
+            }
+
+            return 8;
         }
 
         private static string FormatRemainingTime(
@@ -233,10 +544,38 @@ namespace Limelight.Views
                 return $"ABOUT {totalSeconds} SEC";
             }
 
-            int minutes = totalSeconds / 60;
-            int seconds = totalSeconds % 60;
+            int minutes =
+                totalSeconds / 60;
+
+            int seconds =
+                totalSeconds % 60;
 
             return $"ABOUT {minutes}:{seconds:00}";
         }
+
+        [DllImport(
+            "user32.dll",
+            SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(
+            IntPtr windowHandle,
+            out NativeRect rectangle);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(
+            IntPtr windowHandle);
+
+        [DllImport(
+            "user32.dll",
+            SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(
+            IntPtr windowHandle,
+            IntPtr insertAfter,
+            int x,
+            int y,
+            int width,
+            int height,
+            uint flags);
     }
 }
