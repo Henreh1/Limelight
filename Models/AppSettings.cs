@@ -21,6 +21,10 @@ namespace Limelight.Models
         public string X19HotkeyGesture { get; set; } =
             "C";
 
+        // Discord presence is public, so I wait for the user to opt in
+        // before Limelight shares any activity with the desktop client.
+        public bool DiscordRichPresenceEnabled { get; set; }
+
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 

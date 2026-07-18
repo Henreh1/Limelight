@@ -47,6 +47,7 @@ namespace Limelight
         private readonly DiagnosticReportService _diagnosticReportService;
         private readonly NexusApiService _nexusApiService;
         private readonly NexusCredentialService _nexusCredentialService;
+        private readonly DiscordPresenceService _discordPresenceService;
 
         private NexusAccount? _nexusAccount;
 
@@ -59,6 +60,9 @@ namespace Limelight
             string.Empty;
 
         private string _nexusCategoryFilter =
+            string.Empty;
+
+        private string _discordPresenceSwitchTarget =
             string.Empty;
 
         private bool _isNexusBrowseLoading;
@@ -152,6 +156,12 @@ namespace Limelight
             _settings =
                 _settingsService.Load();
 
+            _discordPresenceService =
+                new DiscordPresenceService();
+
+            _discordPresenceService.SetEnabled(
+                _settings.DiscordRichPresenceEnabled);
+
             // The page reports its button clicks to the main window, where
             // the settings and connected game directory are available.
             MyModsPageControl.ToggleModRequested +=
@@ -183,6 +193,9 @@ namespace Limelight
 
             SettingsPageControl.X19HotkeyChanged +=
                 X19HotkeyChanged;
+
+            SettingsPageControl.DiscordPresenceChanged +=
+                DiscordPresenceChanged;
 
             BrowseNexusPageControl.SearchRequested +=
                 NexusSearchRequested;
@@ -251,6 +264,8 @@ namespace Limelight
             }
 
             RefreshSettingsPage();
+            RefreshDiscordPresence(
+                isGameRunning);
             await RestoreNexusConnectionAsync();
 
             // Finish any existing-mod migration before opening another modal window.
@@ -381,6 +396,8 @@ namespace Limelight
             }
 
             RefreshSettingsPage();
+            RefreshDiscordPresence(
+                isGameRunning);
         }
 
         private void MainWindow_Closed(
@@ -391,6 +408,7 @@ namespace Limelight
             // it checking processes after Limelight has closed.
             _gameStatusTimer.Stop();
             _globalHotkeyService.Dispose();
+            _discordPresenceService.Dispose();
         }
 
         private async Task InitialiseLiveLoaderForRunningGameAsync(
@@ -1607,6 +1625,11 @@ namespace Limelight
             }
 
             _isLiveModChangeRunning = true;
+            _discordPresenceSwitchTarget =
+                selectedMod.DisplayName;
+
+            RefreshDiscordPresence(
+                isGameRunning);
 
             LiveLoaderStatusText.Text =
                 isGameRunning
@@ -1842,8 +1865,12 @@ namespace Limelight
 
                 _isLiveModChangeRunning = false;
                 _isX19SwitchRequest = false;
+                _discordPresenceSwitchTarget =
+                    string.Empty;
 
                 UpdateGameRunningStatus();
+                RefreshDiscordPresence(
+                    isGameRunning);
             }
         }
 
@@ -2123,6 +2150,7 @@ namespace Limelight
                 NavigationPage.LiveLoaders;
 
             ApplyNavigationAppearance();
+            RefreshDiscordPresence();
         }
 
         private void X19GroupChanged(
@@ -2173,6 +2201,33 @@ namespace Limelight
             // I refresh the loader page too so its hotkey badge changes
             // immediately instead of waiting for another navigation visit.
             RefreshLibrarySummary();
+        }
+
+        private void DiscordPresenceChanged(
+            bool enabled)
+        {
+            _settings.DiscordRichPresenceEnabled =
+                enabled;
+
+            _settingsService.Save(
+                _settings);
+
+            _discordPresenceService.SetEnabled(
+                enabled);
+
+            SettingsPageControl.ShowDiscordPresence(
+                enabled);
+
+            RefreshDiscordPresence();
+
+            ShowNotification(
+                enabled
+                    ? "DISCORD PRESENCE ENABLED"
+                    : "DISCORD PRESENCE DISABLED",
+                enabled
+                    ? "Limelight will now share its current activity through the Discord desktop client."
+                    : "Limelight cleared its Discord activity and returned to private mode.",
+                isError: false);
         }
 
         private async void TestLiveLoader_Click(
@@ -2303,6 +2358,7 @@ namespace Limelight
                             : NavigationPage.Dashboard;
 
             ApplyNavigationAppearance();
+            RefreshDiscordPresence();
         }
 
         private void ApplyNavigationAppearance()
@@ -2755,6 +2811,56 @@ namespace Limelight
 
             SettingsPageControl.ShowX19Hotkey(
                 _settings.X19HotkeyGesture);
+
+            SettingsPageControl.ShowDiscordPresence(
+                _settings.DiscordRichPresenceEnabled);
+        }
+
+        private void RefreshDiscordPresence(
+            bool? knownGameRunning = null)
+        {
+            bool isGameRunning =
+                knownGameRunning ??
+                (!string.IsNullOrWhiteSpace(_gameDirectory) &&
+                 _gameProcessService.IsGameRunning(
+                     _gameDirectory));
+
+            InstalledMod? activeMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        _settings.ActiveModId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            string pageLabel =
+                _selectedNavigationPage switch
+                {
+                    NavigationPage.Dashboard =>
+                        "Managing the Limelight dashboard",
+                    NavigationPage.MyMods =>
+                        "Browsing character mods",
+                    NavigationPage.LiveLoaders =>
+                        "Configuring the Live Loader",
+                    NavigationPage.BrowseNexus =>
+                        "Browsing Nexus Mods",
+                    NavigationPage.Settings =>
+                        "Adjusting Limelight settings",
+                    _ =>
+                        "Managing Dead as Disco mods"
+                };
+
+            string loaderMode =
+                _selectedLoaderMode == LoaderLaunchMode.X19
+                    ? "X19 LLoader"
+                    : "Live Loader";
+
+            _discordPresenceService.Update(
+                isGameRunning,
+                _isLiveModChangeRunning,
+                pageLabel,
+                activeMod?.DisplayName,
+                loaderMode,
+                _discordPresenceSwitchTarget);
         }
 
         private async void RepairLiveLoaderRequested()
@@ -3684,6 +3790,7 @@ namespace Limelight
                         : "CyanBrush");
 
             UpdateSpotlightBanner(activeMod);
+            RefreshDiscordPresence();
 
             if (installedCount == 0)
             {

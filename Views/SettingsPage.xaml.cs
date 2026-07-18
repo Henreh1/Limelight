@@ -11,6 +11,7 @@ namespace Limelight.Views
     public partial class SettingsPage : UserControl
     {
         private bool _isCapturingX19Hotkey;
+        private bool _discordPresenceEnabled;
 
         public event Action? RepairRequested;
         public event Action? ExportDiagnosticsRequested;
@@ -19,6 +20,7 @@ namespace Limelight.Views
         public event Action<string>? NexusConnectRequested;
         public event Action? NexusDisconnectRequested;
         public event Action<string>? X19HotkeyChanged;
+        public event Action<bool>? DiscordPresenceChanged;
 
         public SettingsPage()
         {
@@ -37,6 +39,31 @@ namespace Limelight.Views
                 string.IsNullOrWhiteSpace(hotkeyGesture)
                     ? "NOT SET"
                     : hotkeyGesture.ToUpperInvariant();
+        }
+
+        public void ShowDiscordPresence(
+            bool enabled)
+        {
+            _discordPresenceEnabled =
+                enabled;
+
+            DiscordPresenceStatusText.Text =
+                enabled
+                    ? "SHARING ACTIVITY"
+                    : "PRIVATE";
+
+            DiscordPresenceStatusText.Foreground =
+                StatusBrush(enabled);
+
+            DiscordPresenceDetailText.Text =
+                enabled
+                    ? "Limelight will update Discord while the desktop client is open. No Discord login or secret is stored."
+                    : "Enable this to share Limelight, game, active-mod, and X19 activity on your Discord profile.";
+
+            DiscordPresenceButton.Content =
+                enabled
+                    ? "DISABLE PRESENCE"
+                    : "ENABLE PRESENCE";
         }
 
         private void CaptureX19Hotkey_Click(
@@ -502,6 +529,14 @@ namespace Limelight.Views
             RoutedEventArgs e)
         {
             ChangeGameFolderRequested?.Invoke();
+        }
+
+        private void DiscordPresenceButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            DiscordPresenceChanged?.Invoke(
+                !_discordPresenceEnabled);
         }
 
         private void NativeTestButton_Click(
