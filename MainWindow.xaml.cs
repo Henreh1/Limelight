@@ -1321,9 +1321,13 @@ namespace Limelight
                     $"{mod.DisplayName} does not contain a complete pak, utoc, and ucas set.");
             }
 
+            await EnsureLiveWorldStableAsync();
+
             await RetireStaleLiveContainersAsync(
                 gameDirectory,
                 reportProgress);
+
+            await EnsureLiveWorldStableAsync();
 
             if (!_liveSessionService.CanStageContainers(
                     gameDirectory,
@@ -1371,6 +1375,8 @@ namespace Limelight
                             mod,
                             gameDirectory));
 
+                await EnsureLiveWorldStableAsync();
+
                 _liveSessionService.RecordStagedContainers(
                     mod,
                     stageResult.PakPaths,
@@ -1384,6 +1390,8 @@ namespace Limelight
                 foreach (string pakPath in
                          stageResult.PakPaths)
                 {
+                    await EnsureLiveWorldStableAsync();
+
                     int mountOrder =
                         _nextLiveMountOrder++;
 
@@ -1421,6 +1429,8 @@ namespace Limelight
                     "REFRESHING OVERRIDDEN PACKAGES",
                     74);
 
+                await EnsureLiveWorldStableAsync();
+
                 LiveLoaderCommandResult releaseResult =
                     await _liveLoaderCommandService.ReleasePackagesAsync(
                         livePackages.Select(package =>
@@ -1436,6 +1446,8 @@ namespace Limelight
                     "LOADING MODELS, PORTRAITS AND TEXT",
                     86);
 
+                await EnsureLiveWorldStableAsync();
+
                 LiveLoaderCommandResult reloadResult =
                     await _liveLoaderCommandService.ReloadAssetsAsync(
                         livePackages.Select(package =>
@@ -1446,6 +1458,8 @@ namespace Limelight
                     throw new InvalidOperationException(
                         reloadResult.Message);
                 }
+
+                await EnsureLiveWorldStableAsync();
 
                 LiveLoaderCommandResult reapplyResult =
                     await _liveLoaderCommandService.ReapplyCharlieAsync();
@@ -1480,6 +1494,19 @@ namespace Limelight
                     exception);
 
                 throw;
+            }
+        }
+
+        private async Task EnsureLiveWorldStableAsync()
+        {
+            LiveLoaderCommandResult result =
+                await _liveLoaderCommandService
+                    .IsWorldStableAsync();
+
+            if (!result.Success)
+            {
+                throw new InvalidOperationException(
+                    result.Message);
             }
         }
 
@@ -1892,6 +1919,29 @@ namespace Limelight
             catch (Exception exception)
             {
                 if (isGameRunning &&
+                    IsLevelTransitionBlock(
+                        exception.Message))
+                {
+                    // If a level change began after the first check, I stop the
+                    // remaining stages and explain why nothing else was touched.
+                    LevelTransitionBlockerMessage.Text =
+                        exception.Message +
+                        " Wait until the new level is fully visible, then select Activate again.";
+
+                    LevelTransitionBlocker.Visibility =
+                        Visibility.Visible;
+
+                    if (x19PulseWindow is not null)
+                    {
+                        x19PulseWindow.ShowError();
+                        x19PulseWindow = null;
+                    }
+                    else
+                    {
+                        CloseSwitchingWindow();
+                    }
+                }
+                else if (isGameRunning &&
                     x19PulseWindow is not null)
                 {
                     x19PulseWindow.ShowError();
@@ -1964,6 +2014,14 @@ namespace Limelight
                 else
                 {
                     consecutiveReadyChecks = 0;
+
+                    if (IsLevelTransitionBlock(
+                            result.Message))
+                    {
+                        // A click made during LoadMap is rejected. I do not hold
+                        // it in a queue and surprise the user after the map opens.
+                        return result;
+                    }
 
                     if (!IsTemporaryLiveSwitchDelay(result.Message))
                     {

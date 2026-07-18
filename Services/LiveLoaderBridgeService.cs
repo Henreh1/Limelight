@@ -37,6 +37,7 @@ namespace Limelight.Services
     local lastHeartbeatSecond = 0
     local lastRequestId = nil
     local worldTransitioning = false
+    local worldSettling = false
     local transitionGeneration = 0
     local automaticCharlieRefreshEnabled = false
     local activeCharliePortraitPath = nil
@@ -804,7 +805,7 @@ namespace Limelight.Services
             end)
         elseif action == "reapply_charlie" then
             ExecuteInGameThread(function()
-                if worldTransitioning then
+                if worldTransitioning or worldSettling then
                     writeResponse(
                         requestId,
                         false,
@@ -837,7 +838,7 @@ namespace Limelight.Services
             end)
         elseif action == "reload_assets" then
             ExecuteInGameThread(function()
-                if worldTransitioning then
+                if worldTransitioning or worldSettling then
                     writeResponse(
                         requestId,
                         false,
@@ -898,6 +899,7 @@ namespace Limelight.Services
             delayMilliseconds,
             function()
                 if worldTransitioning or
+                   worldSettling or
                    expectedGeneration ~= transitionGeneration or
                    not automaticCharlieRefreshEnabled then
 
@@ -953,6 +955,7 @@ namespace Limelight.Services
 
     RegisterLoadMapPreHook(function()
         worldTransitioning = true
+        worldSettling = true
         transitionGeneration =
             transitionGeneration + 1
 
@@ -962,6 +965,10 @@ namespace Limelight.Services
 
     RegisterLoadMapPostHook(function()
         worldTransitioning = false
+        worldSettling = true
+
+        local completedGeneration =
+            transitionGeneration
 
         if activeCharliePortraitPath ~= nil and
            activeCharliePortraitPath ~= "" then
@@ -973,11 +980,27 @@ namespace Limelight.Services
             lastPortraitRefreshSecond = 0
         end
 
-        -- The map callback fires before every streamed actor and component is
-        -- guaranteed to exist, so allow the new world to settle first.
-        scheduleAutomaticCharlieRefresh(
-            2000,
-            transitionGeneration)
+        -- LoadMap finishes before every streamed actor and widget is ready. I
+        -- keep every refresh locked until the same quiet period used by the
+        -- native bridge has passed without another map starting.
+        ExecuteInGameThreadWithDelay(
+            6000,
+            function()
+                if worldTransitioning or
+                   completedGeneration ~= transitionGeneration then
+
+                    return
+                end
+
+                worldSettling = false
+
+                scheduleAutomaticCharlieRefresh(
+                    0,
+                    completedGeneration)
+
+                print(
+                    "[LimelightBridge] New level settled; model refresh unlocked.\n")
+            end)
 
         print(
             "[LimelightBridge] Level transition finished; model refresh scheduled.\n")
@@ -985,6 +1008,7 @@ namespace Limelight.Services
 
     RegisterBeginPlayPostHook(function(contextParameter)
         if worldTransitioning or
+           worldSettling or
            not automaticCharlieRefreshEnabled then
 
             return
@@ -1034,7 +1058,8 @@ namespace Limelight.Services
 
             if portraitRefreshPassesRemaining > 0 and
        currentSecond ~= lastPortraitRefreshSecond and
-       not worldTransitioning then
+       not worldTransitioning and
+       not worldSettling then
 
         -- Portrait widgets are often created after the texture loads. I
         -- retry briefly so newly opened screens receive the active image.

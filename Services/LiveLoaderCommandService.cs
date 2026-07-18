@@ -109,6 +109,21 @@ namespace Limelight.Services
                 cancellationToken);
         }
 
+        public Task<LiveLoaderCommandResult> IsWorldStableAsync(
+            CancellationToken cancellationToken = default)
+        {
+            // I use this narrower check between switch stages. Retirement and
+            // cooldown checks belong at the start, but a map change must stop
+            // every later Unreal mutation as well.
+            return SendAsync(
+                "is_world_stable",
+                "native-command.txt",
+                "native-response.txt",
+                arguments: null,
+                timeout: TimeSpan.FromSeconds(10),
+                cancellationToken);
+        }
+
         public Task<LiveLoaderCommandResult> MountPakAsync(
             string pakPath,
             int mountOrder,
