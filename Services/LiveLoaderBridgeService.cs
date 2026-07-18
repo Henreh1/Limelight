@@ -39,7 +39,7 @@ namespace Limelight.Services
     local worldTransitioning = false
     local transitionGeneration = 0
     local automaticCharlieRefreshEnabled = false
-    local activeCharliePortrait = nil
+    local activeCharliePortraitPath = nil
     local activeObjectPathsText = nil
     local portraitRefreshPassesRemaining = 0
     local lastPortraitRefreshSecond = 0
@@ -129,7 +129,25 @@ namespace Limelight.Services
     end
 
     local function refreshCharliePortraitWidgets()
-        if activeCharliePortrait == nil or
+        if activeCharliePortraitPath == nil or
+           activeCharliePortraitPath == "" then
+
+            return 0
+        end
+
+        local portraitLoadSucceeded,
+              activeCharliePortrait,
+              portraitWasFound,
+              portraitWasLoaded =
+            pcall(function()
+                return LoadAsset(
+                    activeCharliePortraitPath)
+            end)
+
+        if not portraitLoadSucceeded or
+           not portraitWasFound or
+           not portraitWasLoaded or
+           activeCharliePortrait == nil or
            not activeCharliePortrait:IsValid() then
 
             return 0
@@ -255,7 +273,11 @@ namespace Limelight.Services
                         1,
                         true) ~= nil then
 
-                    activeCharliePortrait = asset
+                    -- I save the path instead of keeping this UObject across
+                    -- map loads. Unreal may retire the old package while the
+                    -- Lua bridge is still alive, so a cached pointer can no
+                    -- longer be trusted after a level change.
+                    activeCharliePortraitPath = objectPath
                     portraitRefreshPassesRemaining = 20
     lastPortraitRefreshSecond = 0
 
@@ -941,14 +963,15 @@ namespace Limelight.Services
     RegisterLoadMapPostHook(function()
         worldTransitioning = false
 
-            if activeCharliePortrait ~= nil and
-       activeCharliePortrait:IsValid() then
+        if activeCharliePortraitPath ~= nil and
+           activeCharliePortraitPath ~= "" then
 
-        -- A new map creates fresh widgets, so I give the portrait another
-        -- chance to reach screens constructed after the transition.
-        portraitRefreshPassesRemaining = 20
-        lastPortraitRefreshSecond = 0
-    end
+            -- A new map creates fresh widgets, so I give the portrait another
+            -- chance to reach screens constructed after the transition. The
+            -- next refresh resolves a new UObject from the saved path.
+            portraitRefreshPassesRemaining = 20
+            lastPortraitRefreshSecond = 0
+        end
 
         -- The map callback fires before every streamed actor and component is
         -- guaranteed to exist, so allow the new world to settle first.

@@ -1722,35 +1722,55 @@ namespace Limelight
                     }
 
                     LiveLoaderCommandResult safetyCheck =
-                        await _liveLoaderCommandService
-                            .CanSwitchModsAsync();
+                        await WaitForLiveSwitchWindowAsync(
+                            (phase, progress) =>
+                            {
+                                if (x19PulseWindow is not null)
+                                {
+                                    x19PulseWindow.Report(
+                                        progress);
+                                }
+                                else
+                                {
+                                    switchingWindow?.Report(
+                                        phase,
+                                        progress);
+                                }
+                            });
 
                     if (!safetyCheck.Success)
                     {
-                        // I stop before staging or mounting anything while Unreal is
-                        // replacing the current world.
-                        LevelTransitionBlockerMessage.Text =
-                            safetyCheck.Message +
-                            " Wait until the new level is fully visible, then select Activate again.";
-
-                        LevelTransitionBlocker.Visibility =
-                            Visibility.Visible;
-
-                        if (x19PulseWindow is not null)
+                        if (IsLevelTransitionBlock(
+                                safetyCheck.Message))
                         {
-                            x19PulseWindow.ShowError();
-                            x19PulseWindow = null;
-                        }
-                        else if (switchingWindow is not null)
-                        {
-                            switchingWindow.ShowError(
-                                safetyCheck.Message);
+                            // I stop before staging or mounting anything while Unreal
+                            // is replacing the current world.
+                            LevelTransitionBlockerMessage.Text =
+                                safetyCheck.Message +
+                                " Wait until the new level is fully visible, then select Activate again.";
 
-                            // The overlay now owns its timed closing animation.
-                            switchingWindow = null;
+                            LevelTransitionBlocker.Visibility =
+                                Visibility.Visible;
+
+                            if (x19PulseWindow is not null)
+                            {
+                                x19PulseWindow.ShowError();
+                                x19PulseWindow = null;
+                            }
+                            else if (switchingWindow is not null)
+                            {
+                                switchingWindow.ShowError(
+                                    safetyCheck.Message);
+
+                                // The overlay now owns its timed closing animation.
+                                switchingWindow = null;
+                            }
+
+                            return;
                         }
 
-                        return;
+                        throw new InvalidOperationException(
+                            safetyCheck.Message);
                     }
 
                     await ActivateLiveModAsync(
@@ -1872,6 +1892,59 @@ namespace Limelight
                 RefreshDiscordPresence(
                     isGameRunning);
             }
+        }
+
+        private async Task<LiveLoaderCommandResult> WaitForLiveSwitchWindowAsync(
+            Action<string, int>? reportProgress)
+        {
+            DateTime deadline =
+                DateTime.UtcNow.AddSeconds(12);
+
+            LiveLoaderCommandResult result =
+                await _liveLoaderCommandService
+                    .CanSwitchModsAsync();
+
+            while (!result.Success &&
+                   IsTemporaryLiveSwitchDelay(result.Message) &&
+                   DateTime.UtcNow < deadline)
+            {
+                // The retirement guard is deliberately short. I wait here so
+                // the user does not have to dismiss a false level-change warning
+                // and press Activate again after every quick X19 switch.
+                reportProgress?.Invoke(
+                    "WAITING FOR LIVE ASSETS TO SETTLE",
+                    8);
+
+                await Task.Delay(400);
+
+                result =
+                    await _liveLoaderCommandService
+                        .CanSwitchModsAsync();
+            }
+
+            return result;
+        }
+
+        private static bool IsTemporaryLiveSwitchDelay(
+            string message)
+        {
+            return message.Contains(
+                       "still settling",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains(
+                       "still retiring",
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsLevelTransitionBlock(
+            string message)
+        {
+            return message.Contains(
+                       "changing levels",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   message.Contains(
+                       "level transition",
+                       StringComparison.OrdinalIgnoreCase);
         }
 
         private async void ShowNotification(
