@@ -311,6 +311,33 @@
                             </StackPanel>
                         </Border>
 
+                        <Border x:Name="LiveLoadersNavigation"
+                            Margin="8,3"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            BorderBrush="Transparent"
+                            BorderThickness="3,0,0,0"
+                            MouseLeftButtonDown="ShowLiveLoaders_Click"
+                            MouseEnter="Navigation_MouseEnter"
+                            MouseLeave="Navigation_MouseLeave"
+                            Cursor="Hand">
+
+                            <StackPanel Margin="16,13"
+                                        Orientation="Horizontal">
+
+                                <TextBlock x:Name="LiveLoadersNavigationIcon"
+                                           Text="◇"
+                                           Width="26"
+                                           FontSize="13"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                <TextBlock x:Name="LiveLoadersNavigationText"
+                                           Text="Live Loaders"
+                                           FontSize="14"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+                        </Border>
+
                         <Border x:Name="BrowseNexusNavigation"
                             Margin="8,3"
                             Background="Transparent"
@@ -729,6 +756,11 @@
             <views:MyModsPage x:Name="MyModsPageControl"
                           Grid.Column="1"
                           Visibility="Collapsed"/>
+
+            <!-- Loader modes and the X19 rotation share one focused workspace. -->
+            <views:LiveLoadersPage x:Name="LiveLoadersPageControl"
+                                   Grid.Column="1"
+                                   Visibility="Collapsed"/>
 
             <!-- Nexus browsing has its own page so downloading does not crowd the dashboard. -->
             <views:BrowseNexusPage x:Name="BrowseNexusPageControl"

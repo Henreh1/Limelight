@@ -1,23 +1,190 @@
 ﻿using Limelight.Models;
 using Limelight.Services;
+using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace Limelight.Views
 {
     public partial class SettingsPage : UserControl
     {
+        private bool _isCapturingX19Hotkey;
+
         public event Action? RepairRequested;
         public event Action? ExportDiagnosticsRequested;
         public event Action? ChangeGameFolderRequested;
         public event Action? NativeTestRequested;
         public event Action<string>? NexusConnectRequested;
         public event Action? NexusDisconnectRequested;
+        public event Action<string>? X19HotkeyChanged;
 
         public SettingsPage()
         {
             InitializeComponent();
+        }
+
+        public void ShowX19Hotkey(
+            string hotkeyGesture)
+        {
+            if (_isCapturingX19Hotkey)
+            {
+                return;
+            }
+
+            X19HotkeyText.Text =
+                string.IsNullOrWhiteSpace(hotkeyGesture)
+                    ? "NOT SET"
+                    : hotkeyGesture.ToUpperInvariant();
+        }
+
+        private void CaptureX19Hotkey_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            _isCapturingX19Hotkey = true;
+
+            CaptureX19HotkeyButton.Content =
+                "PRESS A KEY";
+
+            X19HotkeyStatusText.Text =
+                "Press the new key combination now. Press Escape to cancel.";
+
+            CaptureX19HotkeyButton.Focus();
+            Keyboard.Focus(CaptureX19HotkeyButton);
+        }
+
+        private void CaptureX19Hotkey_PreviewKeyDown(
+            object sender,
+            KeyEventArgs e)
+        {
+            if (!_isCapturingX19Hotkey)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            Key pressedKey =
+                e.Key == Key.System
+                    ? e.SystemKey
+                    : e.Key;
+
+            if (pressedKey == Key.Escape)
+            {
+                FinishHotkeyCapture(
+                    X19HotkeyText.Text,
+                    saveChange: false);
+
+                return;
+            }
+
+            if (IsModifierKey(pressedKey) ||
+                pressedKey == Key.None)
+            {
+                X19HotkeyStatusText.Text =
+                    "Add a letter, number, or function key to the combination.";
+
+                return;
+            }
+
+            ModifierKeys modifiers =
+                Keyboard.Modifiers &
+                (ModifierKeys.Control |
+                 ModifierKeys.Alt |
+                 ModifierKeys.Shift);
+
+            string gesture =
+                CreateGestureText(
+                    pressedKey,
+                    modifiers);
+
+            FinishHotkeyCapture(
+                gesture,
+                saveChange: true);
+        }
+
+        private void FinishHotkeyCapture(
+            string gesture,
+            bool saveChange)
+        {
+            _isCapturingX19Hotkey = false;
+
+            CaptureX19HotkeyButton.Content =
+                "CHANGE HOTKEY";
+
+            X19HotkeyStatusText.Text =
+                saveChange
+                    ? "The X19 hotkey is ready for the next game session."
+                    : "The existing X19 hotkey was kept.";
+
+            if (!saveChange)
+            {
+                return;
+            }
+
+            X19HotkeyText.Text =
+                gesture;
+
+            X19HotkeyChanged?.Invoke(gesture);
+        }
+
+        private static bool IsModifierKey(
+            Key key)
+        {
+            return key is
+                Key.LeftCtrl or
+                Key.RightCtrl or
+                Key.LeftAlt or
+                Key.RightAlt or
+                Key.LeftShift or
+                Key.RightShift or
+                Key.LWin or
+                Key.RWin;
+        }
+
+        private static string CreateGestureText(
+            Key key,
+            ModifierKeys modifiers)
+        {
+            List<string> parts =
+                new();
+
+            if (modifiers.HasFlag(ModifierKeys.Control))
+            {
+                parts.Add("CTRL");
+            }
+
+            if (modifiers.HasFlag(ModifierKeys.Alt))
+            {
+                parts.Add("ALT");
+            }
+
+            if (modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                parts.Add("SHIFT");
+            }
+
+            parts.Add(
+                key switch
+                {
+                    Key.D0 => "0",
+                    Key.D1 => "1",
+                    Key.D2 => "2",
+                    Key.D3 => "3",
+                    Key.D4 => "4",
+                    Key.D5 => "5",
+                    Key.D6 => "6",
+                    Key.D7 => "7",
+                    Key.D8 => "8",
+                    Key.D9 => "9",
+                    _ => key.ToString().ToUpperInvariant()
+                });
+
+            return string.Join(
+                "+",
+                parts);
         }
 
         public void ShowStatus(

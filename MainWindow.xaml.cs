@@ -23,6 +23,7 @@ namespace Limelight
         {
             Dashboard,
             MyMods,
+            LiveLoaders,
             BrowseNexus,
             Settings
         }
@@ -33,6 +34,7 @@ namespace Limelight
         private readonly ModDeploymentService _modDeploymentService;
         private readonly ExistingModsMigrationService _existingModsMigrationService;
         private readonly GameProcessService _gameProcessService;
+        private readonly GlobalHotkeyService _globalHotkeyService;
         private readonly Ue4ssDetectionService _ue4ssDetectionService;
         private readonly Ue4ssReleaseService _ue4ssReleaseService;
         private readonly Ue4ssInstallerService _ue4ssInstallerService;
@@ -65,6 +67,7 @@ namespace Limelight
         private bool _hasHandledLiveLoaderPrompt;
         private bool _isLiveLoaderSetupRunning;
         private bool _isLiveModChangeRunning;
+        private bool _isX19SwitchRequest;
         private bool _isLiveLoaderInitializationRunning;
         private bool _hasInitialisedCurrentGameSession;
         private bool _wasGameRunning;
@@ -72,6 +75,8 @@ namespace Limelight
         private bool _pendingDeploymentAttempted;
         private int _nextLiveMountOrder = 1000;
         private int _notificationSequence;
+        private LoaderLaunchMode _selectedLoaderMode =
+            LoaderLaunchMode.Normal;
         private NavigationPage _selectedNavigationPage =
             NavigationPage.Dashboard;
 
@@ -95,6 +100,12 @@ namespace Limelight
 
             _gameProcessService =
                 new GameProcessService();
+
+            _globalHotkeyService =
+                new GlobalHotkeyService();
+
+            _globalHotkeyService.Pressed +=
+                X19HotkeyPressed;
 
             _ue4ssDetectionService =
                 new Ue4ssDetectionService();
@@ -149,6 +160,12 @@ namespace Limelight
             MyModsPageControl.RemoveModRequested +=
                 RemoveModRequested;
 
+            LiveLoadersPageControl.X19GroupChanged +=
+                X19GroupChanged;
+
+            LiveLoadersPageControl.OpenHotkeySettingsRequested +=
+                OpenX19HotkeySettingsRequested;
+
             SettingsPageControl.RepairRequested +=
                 RepairLiveLoaderRequested;
 
@@ -163,6 +180,9 @@ namespace Limelight
 
             SettingsPageControl.NexusDisconnectRequested +=
                 NexusDisconnectRequested;
+
+            SettingsPageControl.X19HotkeyChanged +=
+                X19HotkeyChanged;
 
             BrowseNexusPageControl.SearchRequested +=
                 NexusSearchRequested;
@@ -329,6 +349,10 @@ namespace Limelight
 
             if (gameJustStopped)
             {
+                _globalHotkeyService.Unregister();
+                _selectedLoaderMode =
+                    LoaderLaunchMode.Normal;
+
                 _hasInitialisedCurrentGameSession = false;
                 _nextLiveMountOrder = 1000;
 
@@ -366,6 +390,7 @@ namespace Limelight
             // The timer belongs to this window, so there is no reason to leave
             // it checking processes after Limelight has closed.
             _gameStatusTimer.Stop();
+            _globalHotkeyService.Dispose();
         }
 
         private async Task InitialiseLiveLoaderForRunningGameAsync(
@@ -1404,11 +1429,122 @@ namespace Limelight
             }
         }
 
+        private List<InstalledMod> GetX19Rotation()
+        {
+            // I rebuild the rotation from the current library so removed mods
+            // can never leave a dead entry behind in the hotkey cycle.
+            return _settings.X19LoaderModIds
+                .Select(id =>
+                    _settings.InstalledMods.FirstOrDefault(mod =>
+                        string.Equals(
+                            mod.Id,
+                            id,
+                            StringComparison.OrdinalIgnoreCase)))
+                .Where(mod =>
+                    mod is not null &&
+                    Directory.Exists(mod.InstallDirectory))
+                .Cast<InstalledMod>()
+                .ToList();
+        }
+
+        private void EnableX19Hotkey()
+        {
+            _globalHotkeyService.Unregister();
+
+            if (_selectedLoaderMode !=
+                LoaderLaunchMode.X19)
+            {
+                return;
+            }
+
+            if (_globalHotkeyService.Register(
+                    this,
+                    _settings.X19HotkeyGesture,
+                    out string errorMessage))
+            {
+                return;
+            }
+
+            _selectedLoaderMode =
+                LoaderLaunchMode.Normal;
+
+            ShowNotification(
+                "X19 HOTKEY UNAVAILABLE",
+                errorMessage +
+                " Limelight will use the normal Live Loader for this session.",
+                isError: true);
+        }
+
+        private void X19HotkeyPressed()
+        {
+            if (_selectedLoaderMode != LoaderLaunchMode.X19 ||
+                _isLiveModChangeRunning ||
+                string.IsNullOrWhiteSpace(_gameDirectory) ||
+                !_gameProcessService.IsGameRunning(
+                    _gameDirectory))
+            {
+                return;
+            }
+
+            List<InstalledMod> rotation =
+                GetX19Rotation();
+
+            if (rotation.Count == 0)
+            {
+                X19SwitchPulseWindow errorPulse =
+                    new X19SwitchPulseWindow();
+
+                errorPulse.ShowOverGame(
+                    _gameProcessService.FindGameWindow(
+                        _gameDirectory));
+
+                errorPulse.ShowError();
+                return;
+            }
+
+            int currentIndex =
+                rotation.FindIndex(mod =>
+                    string.Equals(
+                        mod.Id,
+                        _settings.ActiveModId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            int nextIndex =
+                currentIndex < 0
+                    ? 0
+                    : (currentIndex + 1) % rotation.Count;
+
+            InstalledMod nextMod =
+                rotation[nextIndex];
+
+            if (rotation.Count == 1 &&
+                string.Equals(
+                    nextMod.Id,
+                    _settings.ActiveModId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                X19SwitchPulseWindow completePulse =
+                    new X19SwitchPulseWindow();
+
+                completePulse.ShowOverGame(
+                    _gameProcessService.FindGameWindow(
+                        _gameDirectory));
+
+                completePulse.ShowSuccess();
+                return;
+            }
+
+            _isX19SwitchRequest = true;
+            ToggleModRequested(
+                nextMod.Id);
+        }
+
         private async void ToggleModRequested(
     string modId)
         {
             if (_isLiveModChangeRunning)
             {
+                _isX19SwitchRequest = false;
                 return;
             }
 
@@ -1421,6 +1557,7 @@ namespace Limelight
 
             if (selectedMod == null)
             {
+                _isX19SwitchRequest = false;
                 return;
             }
 
@@ -1431,6 +1568,7 @@ namespace Limelight
                     "Connect the Dead as Disco installation before activating a mod.",
                     isError: true);
 
+                _isX19SwitchRequest = false;
                 return;
             }
 
@@ -1447,6 +1585,10 @@ namespace Limelight
                 _gameProcessService.IsGameRunning(
                     gameDirectory);
 
+            bool useX19Pulse =
+                _isX19SwitchRequest &&
+                isGameRunning;
+
             if (isCurrentlyActive &&
                 isGameRunning)
             {
@@ -1455,6 +1597,7 @@ namespace Limelight
                     "The active live container cannot be removed safely while Dead as Disco is running.",
                     isError: true);
 
+                _isX19SwitchRequest = false;
                 return;
             }
 
@@ -1475,6 +1618,9 @@ namespace Limelight
             LiveModSwitchingWindow? switchingWindow =
                 null;
 
+            X19SwitchPulseWindow? x19PulseWindow =
+                null;
+
             void CloseSwitchingWindow()
             {
                 if (switchingWindow is null)
@@ -1484,6 +1630,17 @@ namespace Limelight
 
                 switchingWindow.CloseWhenFinished();
                 switchingWindow = null;
+            }
+
+            void CloseX19PulseWindow()
+            {
+                if (x19PulseWindow is null)
+                {
+                    return;
+                }
+
+                x19PulseWindow.CloseWhenFinished();
+                x19PulseWindow = null;
             }
 
             try
@@ -1505,17 +1662,30 @@ namespace Limelight
                     bool isFirstLiveSwitch =
                         _nextLiveMountOrder == 1000;
 
-                    switchingWindow =
-                        new LiveModSwitchingWindow(
-                            selectedMod.DisplayName,
-                            isFirstLiveSwitch);
-
                     IntPtr gameWindowHandle =
                         _gameProcessService.FindGameWindow(
                             gameDirectory);
 
-                    switchingWindow.ShowOverGame(
-                        gameWindowHandle);
+                    if (useX19Pulse)
+                    {
+                        // X19 is meant to feel instant and unobtrusive, so I only
+                        // show Limelight's pulsing mark while the switch is moving.
+                        x19PulseWindow =
+                            new X19SwitchPulseWindow();
+
+                        x19PulseWindow.ShowOverGame(
+                            gameWindowHandle);
+                    }
+                    else
+                    {
+                        switchingWindow =
+                            new LiveModSwitchingWindow(
+                                selectedMod.DisplayName,
+                                isFirstLiveSwitch);
+
+                        switchingWindow.ShowOverGame(
+                            gameWindowHandle);
+                    }
 
                     if (!_liveLoaderBridgeService.IsOnline())
                     {
@@ -1538,11 +1708,20 @@ namespace Limelight
                         LevelTransitionBlocker.Visibility =
                             Visibility.Visible;
 
-                        switchingWindow.ShowError(
-                            safetyCheck.Message);
+                        if (x19PulseWindow is not null)
+                        {
+                            x19PulseWindow.ShowError();
+                            x19PulseWindow = null;
+                        }
+                        else if (switchingWindow is not null)
+                        {
+                            switchingWindow.ShowError(
+                                safetyCheck.Message);
 
-                        // The overlay now owns its timed closing animation.
-                        switchingWindow = null;
+                            // The overlay now owns its timed closing animation.
+                            switchingWindow = null;
+                        }
+
                         return;
                     }
 
@@ -1550,9 +1729,19 @@ namespace Limelight
                         selectedMod,
                         gameDirectory,
                         (phase, progress) =>
-                            switchingWindow?.Report(
-                                phase,
-                                progress));
+                        {
+                            if (x19PulseWindow is not null)
+                            {
+                                x19PulseWindow.Report(
+                                    progress);
+                            }
+                            else
+                            {
+                                switchingWindow?.Report(
+                                    phase,
+                                    progress);
+                            }
+                        });
 
                     _settings.ActiveModId =
                         selectedMod.Id;
@@ -1594,7 +1783,13 @@ namespace Limelight
                             : $"{selectedMod.DisplayName} is active and ready for the next launch.";
 
                 if (isGameRunning &&
-                    switchingWindow is not null)
+                    x19PulseWindow is not null)
+                {
+                    x19PulseWindow.ShowSuccess();
+                    x19PulseWindow = null;
+                }
+                else if (isGameRunning &&
+                         switchingWindow is not null)
                 {
                     switchingWindow.ShowSuccess(
                         notificationMessage);
@@ -1613,7 +1808,13 @@ namespace Limelight
             catch (Exception exception)
             {
                 if (isGameRunning &&
-                    switchingWindow is not null)
+                    x19PulseWindow is not null)
+                {
+                    x19PulseWindow.ShowError();
+                    x19PulseWindow = null;
+                }
+                else if (isGameRunning &&
+                         switchingWindow is not null)
                 {
                     switchingWindow.ShowError(
                         exception.Message);
@@ -1632,8 +1833,10 @@ namespace Limelight
             finally
             {
                 CloseSwitchingWindow();
+                CloseX19PulseWindow();
 
                 _isLiveModChangeRunning = false;
+                _isX19SwitchRequest = false;
 
                 UpdateGameRunningStatus();
             }
@@ -1874,10 +2077,97 @@ namespace Limelight
             SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
+            LiveLoadersPageControl.Visibility =
+                Visibility.Collapsed;
+
             MyModsPageControl.Visibility =
                 Visibility.Visible;
 
             SetSelectedNavigation(showMyMods: true);
+        }
+
+        private void ShowLiveLoaders_Click(
+            object sender,
+            MouseButtonEventArgs e)
+        {
+            ShowLiveLoadersPage();
+        }
+
+        private void ShowLiveLoadersPage()
+        {
+            // I refresh first so imported or removed mods are immediately
+            // reflected in the user's X19 rotation.
+            RefreshLibrarySummary();
+
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
+                Visibility.Visible;
+
+            _selectedNavigationPage =
+                NavigationPage.LiveLoaders;
+
+            ApplyNavigationAppearance();
+        }
+
+        private void X19GroupChanged(
+            IReadOnlyList<string> selectedModIds)
+        {
+            // I remove duplicates before saving so every hotkey press advances
+            // through one predictable copy of each selected character.
+            _settings.X19LoaderModIds =
+                selectedModIds
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+            _settingsService.Save(_settings);
+        }
+
+        private void OpenX19HotkeySettingsRequested()
+        {
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Visible;
+
+            RefreshSettingsPage();
+
+            SetSelectedNavigation(
+                showMyMods: false,
+                showSettings: true);
+        }
+
+        private void X19HotkeyChanged(
+            string hotkeyGesture)
+        {
+            _settings.X19HotkeyGesture =
+                hotkeyGesture;
+
+            _settingsService.Save(_settings);
+
+            // I refresh the loader page too so its hotkey badge changes
+            // immediately instead of waiting for another navigation visit.
+            RefreshLibrarySummary();
         }
 
         private async void TestLiveLoader_Click(
@@ -1959,6 +2249,9 @@ namespace Limelight
             BrowseNexusPageControl.Visibility =
                 Visibility.Collapsed;
 
+            LiveLoadersPageControl.Visibility =
+                Visibility.Collapsed;
+
             DashboardPage.Visibility =
                 Visibility.Visible;
 
@@ -1976,6 +2269,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
                 Visibility.Collapsed;
 
             SettingsPageControl.Visibility =
@@ -2019,6 +2315,12 @@ namespace Limelight
                 MyModsNavigationIcon,
                 MyModsNavigationText,
                 _selectedNavigationPage == NavigationPage.MyMods);
+
+            ApplyNavigationItemAppearance(
+                LiveLoadersNavigation,
+                LiveLoadersNavigationIcon,
+                LiveLoadersNavigationText,
+                _selectedNavigationPage == NavigationPage.LiveLoaders);
 
             ApplyNavigationItemAppearance(
                 BrowseNexusNavigation,
@@ -2125,6 +2427,8 @@ namespace Limelight
                  _selectedNavigationPage == NavigationPage.Dashboard) ||
                 (navigation == MyModsNavigation &&
                  _selectedNavigationPage == NavigationPage.MyMods) ||
+                (navigation == LiveLoadersNavigation &&
+                 _selectedNavigationPage == NavigationPage.LiveLoaders) ||
                 (navigation == SettingsNavigation &&
                  _selectedNavigationPage == NavigationPage.Settings) ||
                 (navigation == BrowseNexusNavigation &&
@@ -2147,6 +2451,13 @@ namespace Limelight
             {
                 icon = MyModsNavigationIcon;
                 label = MyModsNavigationText;
+                return;
+            }
+
+            if (navigation == LiveLoadersNavigation)
+            {
+                icon = LiveLoadersNavigationIcon;
+                label = LiveLoadersNavigationText;
                 return;
             }
 
@@ -2436,6 +2747,9 @@ namespace Limelight
                 isGameRunning,
                 session,
                 stagingSnapshot);
+
+            SettingsPageControl.ShowX19Hotkey(
+                _settings.X19HotkeyGesture);
         }
 
         private async void RepairLiveLoaderRequested()
@@ -2639,6 +2953,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
                 Visibility.Collapsed;
 
             BrowseNexusPageControl.Visibility =
@@ -3336,6 +3653,12 @@ namespace Limelight
                 availableMods,
                 _settings.ActiveModId);
 
+            LiveLoadersPageControl.ShowConfiguration(
+                availableMods,
+                _settings.X19LoaderModIds,
+                _settings.ActiveModId,
+                _settings.X19HotkeyGesture);
+
             InstalledModCountText.Text =
                 installedCount.ToString();
 
@@ -3468,6 +3791,36 @@ namespace Limelight
                 return;
             }
 
+            List<InstalledMod> x19Rotation =
+                GetX19Rotation();
+
+            LoaderModeSelectionWindow modeWindow =
+                new LoaderModeSelectionWindow(
+                    x19Rotation.Count,
+                    _settings.X19HotkeyGesture)
+                {
+                    Owner = this
+                };
+
+            bool? modeAccepted =
+                modeWindow.ShowDialog();
+
+            if (modeAccepted != true ||
+                modeWindow.SelectedMode is null)
+            {
+                if (modeWindow.ConfigureX19Requested)
+                {
+                    ShowLiveLoadersPage();
+                }
+
+                return;
+            }
+
+            _selectedLoaderMode =
+                modeWindow.SelectedMode.Value;
+
+            _globalHotkeyService.Unregister();
+
             try
             {
                 Ue4ssDetectionResult loader =
@@ -3516,9 +3869,46 @@ namespace Limelight
                 // window where a user can switch mods during LoadMap.
                 await InitialiseLiveLoaderForRunningGameAsync(
                     waitForGameProcess: true);
+
+                // The process timer may notice the game a fraction earlier than
+                // this launch path. I wait for that shared setup to finish before
+                // deciding whether X19 can register its hotkey.
+                DateTime initialisationDeadline =
+                    DateTime.UtcNow.AddMinutes(6);
+
+                while (_isLiveLoaderInitializationRunning &&
+                       DateTime.UtcNow < initialisationDeadline)
+                {
+                    await Task.Delay(100);
+                }
+
+                if (_selectedLoaderMode ==
+                    LoaderLaunchMode.X19)
+                {
+                    if (_liveLoaderBridgeService.IsOnline() &&
+                        _hasInitialisedCurrentGameSession &&
+                        !_isLiveLoaderInitializationRunning)
+                    {
+                        EnableX19Hotkey();
+                    }
+                    else
+                    {
+                        _selectedLoaderMode =
+                            LoaderLaunchMode.Normal;
+
+                        ShowNotification(
+                            "X19 COULD NOT START",
+                            "The Live Loader did not come online, so the X19 hotkey is unavailable for this session.",
+                            isError: true);
+                    }
+                }
             }
             catch (Exception exception)
             {
+                _globalHotkeyService.Unregister();
+                _selectedLoaderMode =
+                    LoaderLaunchMode.Normal;
+
                 MessageBox.Show(
                     "Dead as Disco could not be started.\n\n" +
                     exception.Message,

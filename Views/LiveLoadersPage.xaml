@@ -1,0 +1,442 @@
+<UserControl x:Class="Limelight.Views.LiveLoadersPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}"
+             Foreground="{StaticResource TextBrush}"
+             FontFamily="Bahnschrift, Segoe UI">
+
+    <UserControl.Resources>
+        <Style x:Key="X19CheckBoxStyle"
+               TargetType="CheckBox">
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextBrush}"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="VerticalContentAlignment"
+                    Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border x:Name="SelectionBox"
+                                    Width="24"
+                                    Height="24"
+                                    Background="#0D1020"
+                                    BorderBrush="{StaticResource BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                <TextBlock x:Name="SelectionMark"
+                                           Text="◆"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontSize="10"
+                                           Foreground="{StaticResource PinkBrush}"
+                                           Visibility="Collapsed"/>
+                            </Border>
+
+                            <ContentPresenter Grid.Column="1"
+                                              Margin="12,0,0,0"
+                                              VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="SelectionBox"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource CyanBrush}"/>
+                            </Trigger>
+
+                            <Trigger Property="IsChecked"
+                                     Value="True">
+                                <Setter TargetName="SelectionBox"
+                                        Property="Background"
+                                        Value="#29203E"/>
+                                <Setter TargetName="SelectionBox"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource PinkBrush}"/>
+                                <Setter TargetName="SelectionMark"
+                                        Property="Visibility"
+                                        Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="38,30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Page heading -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="LIVE LOADERS"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource CyanBrush}"/>
+
+                <TextBlock Text="CHOOSE HOW THE SHOW CHANGES"
+                           Margin="0,5,0,0"
+                           FontSize="27"
+                           FontWeight="Bold"/>
+
+                <TextBlock Text="Use Limelight normally, or build an X19 rotation for instant hotkey switching."
+                           Margin="0,8,0,0"
+                           FontSize="13"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Padding="14,8"
+                    VerticalAlignment="Top"
+                    Background="{StaticResource RaisedPanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <TextBlock x:Name="SelectedCountText"
+                           Text="0 MODS SELECTED"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PinkBrush}"/>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1"
+                      Margin="0,26,0,0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer.Resources>
+                <Style TargetType="ScrollBar"
+                       BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+            </ScrollViewer.Resources>
+
+            <StackPanel Margin="0,0,12,24">
+
+                <!-- Both loaders remain visible so their roles are easy to compare. -->
+                <UniformGrid Columns="2">
+                    <Border Margin="0,0,8,0"
+                            Padding="22"
+                            MinHeight="174"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource CyanBrush}"
+                            BorderThickness="1"
+                            CornerRadius="11">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="42"
+                                            Height="42"
+                                            Margin="0,0,14,0"
+                                            Background="#172B3B"
+                                            BorderBrush="{StaticResource CyanBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="9">
+                                        <TextBlock Text="L"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="21"
+                                                   FontWeight="Bold"
+                                                   FontStyle="Italic"/>
+                                    </Border>
+
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="LIVE LOADER"
+                                                   FontSize="16"
+                                                   FontWeight="Bold"/>
+                                        <TextBlock Text="THE ORIGINAL"
+                                                   Margin="0,3,0,0"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource CyanBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <Border Grid.Column="1"
+                                        Padding="10,6"
+                                        VerticalAlignment="Top"
+                                        Background="#172B3B"
+                                        CornerRadius="7">
+                                    <TextBlock Text="NORMAL"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource CyanBrush}"/>
+                                </Border>
+                            </Grid>
+
+                            <TextBlock Grid.Row="1"
+                                       Margin="0,18,0,16"
+                                       Text="Launch with the currently active mod and switch characters from Limelight whenever you choose."
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       LineHeight="19"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+
+                            <TextBlock Grid.Row="2"
+                                       Text="CONTROLLED FROM MY MODS"
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Margin="8,0,0,0"
+                            Padding="22"
+                            MinHeight="174"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource PinkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="11">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Width="42"
+                                            Height="42"
+                                            Margin="0,0,14,0"
+                                            Background="#30203B"
+                                            BorderBrush="{StaticResource PinkBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="9">
+                                        <TextBlock Text="X19"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="13"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource PinkBrush}"/>
+                                    </Border>
+
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="X19 LLOADER"
+                                                   FontSize="16"
+                                                   FontWeight="Bold"/>
+                                        <TextBlock Text="HOTKEY ROTATION"
+                                                   Margin="0,3,0,0"
+                                                   FontSize="10"
+                                                   FontWeight="Bold"
+                                                   Foreground="{StaticResource PinkBrush}"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <Border Grid.Column="1"
+                                        Padding="10,6"
+                                        VerticalAlignment="Top"
+                                        Background="#30203B"
+                                        CornerRadius="7">
+                                    <TextBlock Text="X19 MODE"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource PinkBrush}"/>
+                                </Border>
+                            </Grid>
+
+                            <TextBlock Grid.Row="1"
+                                       Margin="0,18,0,16"
+                                       Text="Build a private character rotation, then move to the next selected mod with the press of a key. Inspired by a dear friend "
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       LineHeight="19"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+
+                            <StackPanel Grid.Row="2"
+                                        Orientation="Horizontal">
+                                <TextBlock Text="CURRENT HOTKEY  "
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                <TextBlock x:Name="HotkeyText"
+                                           Text="F8"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource PinkBrush}"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </UniformGrid>
+
+                <!-- This status explains why X19 cannot launch with an empty rotation. -->
+                <Border Margin="0,18,0,0"
+                        Padding="20"
+                        Background="{StaticResource RaisedPanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="11">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Width="44"
+                                Height="44"
+                                Margin="0,0,16,0"
+                                Background="#28213F"
+                                CornerRadius="9">
+                            <TextBlock Text="◆"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="15"
+                                       Foreground="{StaticResource PinkBrush}"/>
+                        </Border>
+
+                        <StackPanel Grid.Column="1"
+                                    VerticalAlignment="Center">
+                            <TextBlock x:Name="GroupStatusTitleText"
+                                       Text="GROUP NEEDS MODS"
+                                       FontSize="13"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource PinkBrush}"/>
+                            <TextBlock x:Name="GroupStatusDetailText"
+                                       Margin="0,5,0,0"
+                                       Text="Choose at least one mod before launching with X19 LLoader."
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Content="CHANGE HOTKEY"
+                                Margin="20,0,0,0"
+                                VerticalAlignment="Center"
+                                Click="OpenHotkeySettings_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                    </Grid>
+                </Border>
+
+                <Grid Margin="0,25,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel>
+                        <TextBlock Text="X19 ROTATION"
+                                   FontSize="13"
+                                   FontWeight="Bold"/>
+                        <TextBlock Text="Select the characters that the hotkey should cycle through."
+                                   Margin="0,5,0,0"
+                                   FontSize="12"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Bottom">
+                        <Button Content="SELECT ALL"
+                                Margin="0,0,8,0"
+                                Click="SelectAll_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                        <Button Content="CLEAR GROUP"
+                                Click="ClearGroup_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                    </StackPanel>
+                </Grid>
+
+                <Grid MinHeight="150">
+                    <TextBlock x:Name="InstalledModsEmptyText"
+                               Text="Import a mod before building an X19 rotation."
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="14"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <ItemsControl x:Name="X19ModsList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10"
+                                        Padding="18"
+                                        Background="{StaticResource PanelBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="10">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                  Checked="ModSelection_Changed"
+                                                  Unchecked="ModSelection_Changed"
+                                                  Style="{StaticResource X19CheckBoxStyle}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontSize="14"
+                                                           FontWeight="Bold"/>
+                                                <TextBlock Text="Include this character in the X19 hotkey rotation."
+                                                           Margin="0,4,0,0"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                            </StackPanel>
+                                        </CheckBox>
+
+                                        <Border Grid.Column="1"
+                                                Padding="10,6"
+                                                VerticalAlignment="Center"
+                                                Background="#172B3B"
+                                                CornerRadius="7">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility"
+                                                            Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}"
+                                                                     Value="True">
+                                                            <Setter Property="Visibility"
+                                                                    Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+
+                                            <TextBlock Text="ACTIVE NOW"
+                                                       FontSize="10"
+                                                       FontWeight="Bold"
+                                                       Foreground="{StaticResource CyanBrush}"/>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

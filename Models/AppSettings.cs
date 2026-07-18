@@ -11,6 +11,16 @@ namespace Limelight.Models
         public string ActiveModId { get; set; } =
             string.Empty;
 
+        // I keep the X19 group separate from the main library so users
+        // can choose exactly which characters appear in the rotation.
+        public List<string> X19LoaderModIds { get; set; } =
+            new List<string>();
+
+        // C is unlikely to conflict with normal gameplay, but the user
+        // can replace it from Limelight's Settings page.
+        public string X19HotkeyGesture { get; set; } =
+            "C";
+
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 

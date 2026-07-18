@@ -85,6 +85,71 @@
                 </Grid>
             </Border>
 
+            <!-- X19 listens globally, so this key remains available while the game has focus. -->
+            <Border Margin="0,16,0,0"
+                    Padding="24"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource PinkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="X19 LLOADER HOTKEY"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+
+                        <TextBlock Text="IN-GAME ROTATION CONTROL"
+                                   Margin="0,9,0,0"
+                                   FontSize="18"
+                                   FontWeight="Bold"/>
+
+                        <TextBlock x:Name="X19HotkeyStatusText"
+                                   Text="Choose the key that advances to the next character in your X19 group."
+                                   Margin="0,7,24,0"
+                                   MaxWidth="650"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            MinWidth="104"
+                            Height="58"
+                            Margin="20,0"
+                            Padding="18,0"
+                            VerticalAlignment="Center"
+                            Background="#0D1020"
+                            BorderBrush="{StaticResource PinkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                        <TextBlock x:Name="X19HotkeyText"
+                                   Text="F8"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                    </Border>
+
+                    <Button x:Name="CaptureX19HotkeyButton"
+                            Grid.Column="2"
+                            Content="CHANGE HOTKEY"
+                            MinWidth="138"
+                            VerticalAlignment="Center"
+                            Click="CaptureX19Hotkey_Click"
+                            PreviewKeyDown="CaptureX19Hotkey_PreviewKeyDown"
+                            Style="{StaticResource SecondaryButton}"/>
+                </Grid>
+            </Border>
+
             <!-- This card keeps the private testing boundary obvious before anybody connects a personal key. -->
             <Border Margin="0,16,0,0"
                     Padding="24"
