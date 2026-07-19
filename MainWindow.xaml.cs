@@ -76,6 +76,7 @@ namespace Limelight
         private bool _isLiveLoaderSetupRunning;
         private bool _isLiveModChangeRunning;
         private bool _isX19SwitchRequest;
+        private bool _isX19SafetyProbeRunning;
         private bool _isLiveLoaderInitializationRunning;
         private bool _hasInitialisedCurrentGameSession;
         private bool _wasGameRunning;
@@ -1559,10 +1560,11 @@ namespace Limelight
                 isError: true);
         }
 
-        private void X19HotkeyPressed()
+        private async void X19HotkeyPressed()
         {
             if (_selectedLoaderMode != LoaderLaunchMode.X19 ||
                 _isLiveModChangeRunning ||
+                _isX19SafetyProbeRunning ||
                 string.IsNullOrWhiteSpace(_gameDirectory) ||
                 !_gameProcessService.IsGameRunning(
                     _gameDirectory) ||
@@ -1572,57 +1574,91 @@ namespace Limelight
                 return;
             }
 
-            List<InstalledMod> rotation =
-                GetX19Rotation();
+            _isX19SafetyProbeRunning = true;
 
-            if (rotation.Count == 0)
+            try
             {
-                X19SwitchPulseWindow errorPulse =
-                    new X19SwitchPulseWindow();
+                // X19 never queues a key press. If Unreal is loading, streaming,
+                // or retiring the previous model, the current character stays put.
+                LiveLoaderCommandResult safetyCheck =
+                    await _liveLoaderCommandService
+                        .CanSwitchModsAsync();
 
-                errorPulse.ShowOverGame(
-                    _gameProcessService.FindGameWindow(
-                        _gameDirectory));
+                if (!safetyCheck.Success ||
+                    _selectedLoaderMode != LoaderLaunchMode.X19 ||
+                    _isLiveModChangeRunning ||
+                    !_gameProcessService.IsGameWindowForeground(
+                        _gameDirectory))
+                {
+                    ShowX19BlockedPulse();
+                    return;
+                }
 
-                errorPulse.ShowError();
-                return;
-            }
+                List<InstalledMod> rotation =
+                    GetX19Rotation();
 
-            int currentIndex =
-                rotation.FindIndex(mod =>
+                if (rotation.Count == 0)
+                {
+                    ShowX19BlockedPulse();
+                    return;
+                }
+
+                int currentIndex =
+                    rotation.FindIndex(mod =>
+                        string.Equals(
+                            mod.Id,
+                            _settings.ActiveModId,
+                            StringComparison.OrdinalIgnoreCase));
+
+                int nextIndex =
+                    currentIndex < 0
+                        ? 0
+                        : (currentIndex + 1) % rotation.Count;
+
+                InstalledMod nextMod =
+                    rotation[nextIndex];
+
+                if (rotation.Count == 1 &&
                     string.Equals(
-                        mod.Id,
+                        nextMod.Id,
                         _settings.ActiveModId,
-                        StringComparison.OrdinalIgnoreCase));
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    X19SwitchPulseWindow completePulse =
+                        new X19SwitchPulseWindow();
 
-            int nextIndex =
-                currentIndex < 0
-                    ? 0
-                    : (currentIndex + 1) % rotation.Count;
+                    completePulse.ShowOverGame(
+                        _gameProcessService.FindGameWindow(
+                            _gameDirectory));
 
-            InstalledMod nextMod =
-                rotation[nextIndex];
+                    completePulse.ShowSuccess();
+                    return;
+                }
 
-            if (rotation.Count == 1 &&
-                string.Equals(
-                    nextMod.Id,
-                    _settings.ActiveModId,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                X19SwitchPulseWindow completePulse =
-                    new X19SwitchPulseWindow();
-
-                completePulse.ShowOverGame(
-                    _gameProcessService.FindGameWindow(
-                        _gameDirectory));
-
-                completePulse.ShowSuccess();
-                return;
+                _isX19SwitchRequest = true;
+                ToggleModRequested(
+                    nextMod.Id);
             }
+            catch
+            {
+                ShowX19BlockedPulse();
+            }
+            finally
+            {
+                _isX19SafetyProbeRunning = false;
+            }
+        }
 
-            _isX19SwitchRequest = true;
-            ToggleModRequested(
-                nextMod.Id);
+        private void ShowX19BlockedPulse()
+        {
+            X19SwitchPulseWindow errorPulse =
+                new X19SwitchPulseWindow();
+
+            errorPulse.ShowOverGame(
+                _gameProcessService.FindGameWindow(
+                    _gameDirectory));
+
+            errorPulse.ShowError();
         }
 
         private async void ToggleModRequested(
@@ -1757,7 +1793,8 @@ namespace Limelight
                         _gameProcessService.FindGameWindow(
                             gameDirectory);
 
-                    if (useX19Pulse)
+                    if (useX19Pulse &&
+                        !isFirstLiveSwitch)
                     {
                         // X19 is meant to feel instant and unobtrusive, so I only
                         // show Limelight's pulsing mark while the switch is moving.
@@ -1769,6 +1806,9 @@ namespace Limelight
                     }
                     else
                     {
+                        // The first X19 scan can take long enough to make the
+                        // game look frozen. I show the full in-game progress card
+                        // once, then return to the quiet pulse for later swaps.
                         switchingWindow =
                             new LiveModSwitchingWindow(
                                 selectedMod.DisplayName,

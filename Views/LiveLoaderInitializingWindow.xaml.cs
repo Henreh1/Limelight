@@ -9,6 +9,7 @@ namespace Limelight.Views
     {
         private const uint SwpNoActivate = 0x0010;
         private const uint SwpNoOwnerZOrder = 0x0200;
+        private const int SwRestore = 9;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeRect
@@ -40,6 +41,16 @@ namespace Limelight.Views
                 Show();
                 return;
             }
+
+            // I return focus to Dead as Disco before showing the card. This
+            // makes the setup feel like part of the game's loading screen
+            // instead of a dialog sitting on top of the manager.
+            ShowWindowAsync(
+                gameWindowHandle,
+                SwRestore);
+
+            SetForegroundWindow(
+                gameWindowHandle);
 
             // Making the game window the native owner keeps this card above
             // Dead as Disco without placing it above every other application.
@@ -137,5 +148,16 @@ namespace Limelight.Views
             int width,
             int height,
             uint flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindowAsync(
+            IntPtr windowHandle,
+            int showCommand);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(
+            IntPtr windowHandle);
     }
 }

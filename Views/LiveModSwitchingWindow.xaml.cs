@@ -13,6 +13,7 @@ namespace Limelight.Views
     {
         private const uint SwpNoActivate = 0x0010;
         private const uint SwpNoOwnerZOrder = 0x0200;
+        private const int SwRestore = 9;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeRect
@@ -103,6 +104,16 @@ namespace Limelight.Views
                 AnimateIn();
                 return;
             }
+
+            // The first preparation pass can briefly hold the game thread. I
+            // bring the game forward first so its progress card is visible
+            // instead of leaving the user looking at Limelight.
+            ShowWindowAsync(
+                gameWindowHandle,
+                SwRestore);
+
+            SetForegroundWindow(
+                gameWindowHandle);
 
             // I make Dead as Disco the native owner so this card stays above
             // the game without covering unrelated applications.
@@ -577,5 +588,16 @@ namespace Limelight.Views
             int width,
             int height,
             uint flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindowAsync(
+            IntPtr windowHandle,
+            int showCommand);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(
+            IntPtr windowHandle);
     }
 }
