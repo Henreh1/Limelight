@@ -70,6 +70,10 @@ namespace Limelight.Views
             _resultTimer.Tick +=
                 ResultTimer_Tick;
 
+            Loaded +=
+                (_, _) =>
+                    StartProgressAnimation();
+
             Report(
                 "CHECKING MOD PACKAGE",
                 12);
@@ -196,7 +200,7 @@ namespace Limelight.Views
                     phase);
 
             ProgressText.Text =
-                $"{safeProgress}%";
+                "WORKING";
 
             _phaseStartedAt =
     DateTime.UtcNow;
@@ -209,25 +213,6 @@ namespace Limelight.Views
 
             UpdateEta();
 
-            DoubleAnimation progressAnimation =
-                new()
-                {
-                    To = safeProgress,
-                    Duration =
-                        TimeSpan.FromMilliseconds(
-                            220),
-                    EasingFunction =
-                        new QuadraticEase
-                        {
-                            EasingMode =
-                                EasingMode.EaseOut
-                        }
-                };
-
-            SwitchProgress.BeginAnimation(
-                System.Windows.Controls.Primitives
-                    .RangeBase.ValueProperty,
-                progressAnimation);
         }
 
         public void ShowSuccess(
@@ -268,15 +253,8 @@ namespace Limelight.Views
             StatusIcon.Foreground =
                 cyanBrush;
 
-            SwitchProgress.Foreground =
-                cyanBrush;
-
-            SwitchProgress.BeginAnimation(
-                System.Windows.Controls.Primitives
-                    .RangeBase.ValueProperty,
-                null);
-
-            SwitchProgress.Value = 100;
+            CompleteProgressAnimation(
+                cyanBrush);
 
             PopupShell.BorderBrush =
                 cyanBrush;
@@ -324,8 +302,8 @@ namespace Limelight.Views
             StatusIcon.Foreground =
                 pinkBrush;
 
-            SwitchProgress.Foreground =
-                pinkBrush;
+            CompleteProgressAnimation(
+                pinkBrush);
 
             PopupShell.BorderBrush =
                 pinkBrush;
@@ -340,6 +318,9 @@ namespace Limelight.Views
             _canClose = true;
             _resultTimer.Stop();
             _etaTimer.Stop();
+            SwitchProgressTransform.BeginAnimation(
+                TranslateTransform.XProperty,
+                null);
             Close();
         }
 
@@ -396,6 +377,88 @@ namespace Limelight.Views
                             260),
                     EasingFunction = easing
                 });
+        }
+
+        private void StartProgressAnimation()
+        {
+            if (_resultShown)
+            {
+                return;
+            }
+
+            double trackWidth =
+                SwitchProgressTrack.ActualWidth;
+
+            if (trackWidth <= 0)
+            {
+                return;
+            }
+
+            double indicatorWidth =
+                Math.Clamp(
+                    trackWidth * 0.28,
+                    82,
+                    118);
+
+            SwitchProgressIndicator.Width =
+                indicatorWidth;
+
+            SwitchProgressIndicator.Background =
+                new LinearGradientBrush(
+                    new GradientStopCollection
+                    {
+                        new(
+                            Color.FromArgb(
+                                0,
+                                57,
+                                221,
+                                245),
+                            0),
+                        new(
+                            Color.FromRgb(
+                                57,
+                                221,
+                                245),
+                            0.45),
+                        new(
+                            Color.FromArgb(
+                                0,
+                                57,
+                                221,
+                                245),
+                            1)
+                    },
+                    new Point(0, 0.5),
+                    new Point(1, 0.5));
+
+            // This light never claims to know Unreal's exact percentage. It
+            // simply keeps moving while the current operation is alive.
+            SwitchProgressTransform.BeginAnimation(
+                TranslateTransform.XProperty,
+                new DoubleAnimation
+                {
+                    From = -indicatorWidth,
+                    To = trackWidth,
+                    Duration =
+                        TimeSpan.FromMilliseconds(
+                            1150),
+                    RepeatBehavior =
+                        RepeatBehavior.Forever
+                });
+        }
+
+        private void CompleteProgressAnimation(
+            Brush resultBrush)
+        {
+            SwitchProgressTransform.BeginAnimation(
+                TranslateTransform.XProperty,
+                null);
+
+            SwitchProgressTransform.X = 0;
+            SwitchProgressIndicator.Width =
+                SwitchProgressTrack.ActualWidth;
+            SwitchProgressIndicator.Background =
+                resultBrush;
         }
 
         private void StartResultTimer(

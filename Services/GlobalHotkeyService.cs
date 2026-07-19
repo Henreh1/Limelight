@@ -25,9 +25,12 @@ namespace Limelight.Services
         private LowLevelKeyboardProcedure? _keyboardProcedure;
         private IntPtr _keyboardHook;
         private Dispatcher? _dispatcher;
+        private DispatcherTimer? _controllerPollTimer;
         private Func<bool>? _activationPredicate;
+        private XInputButton _controllerButton;
         private int _virtualKey;
         private uint _modifiers;
+        private bool _controllerButtonHeld;
         private bool _keyHeld;
 
         public event Action? Pressed;
@@ -43,6 +46,47 @@ namespace Limelight.Services
 
             Unregister();
 
+            _dispatcher =
+                owner.Dispatcher;
+
+            _activationPredicate =
+                activationPredicate;
+
+            if (XInputControllerService.TryParseGesture(
+                    gesture,
+                    out XInputButton controllerButton))
+            {
+                _controllerButton =
+                    controllerButton;
+
+                if (XInputControllerService.TryReadCombinedButtons(
+                        out XInputButton currentButtons))
+                {
+                    _controllerButtonHeld =
+                        (currentButtons & controllerButton) != 0;
+                }
+
+                _controllerPollTimer =
+                    new DispatcherTimer(
+                        DispatcherPriority.Input,
+                        owner.Dispatcher)
+                    {
+                        Interval =
+                            TimeSpan.FromMilliseconds(
+                                35)
+                    };
+
+                _controllerPollTimer.Tick +=
+                    ControllerPollTimer_Tick;
+
+                _controllerPollTimer.Start();
+
+                errorMessage =
+                    string.Empty;
+
+                return true;
+            }
+
             if (!TryParseGesture(
                     gesture,
                     out Key key,
@@ -53,12 +97,6 @@ namespace Limelight.Services
 
                 return false;
             }
-
-            _dispatcher =
-                owner.Dispatcher;
-
-            _activationPredicate =
-                activationPredicate;
 
             _virtualKey =
                 KeyInterop.VirtualKeyFromKey(key);
@@ -98,6 +136,13 @@ namespace Limelight.Services
 
         public void Unregister()
         {
+            if (_controllerPollTimer is not null)
+            {
+                _controllerPollTimer.Stop();
+                _controllerPollTimer.Tick -=
+                    ControllerPollTimer_Tick;
+            }
+
             if (_keyboardHook != IntPtr.Zero)
             {
                 UnhookWindowsHookEx(
@@ -107,15 +152,66 @@ namespace Limelight.Services
             _keyboardHook = IntPtr.Zero;
             _keyboardProcedure = null;
             _dispatcher = null;
+            _controllerPollTimer = null;
             _activationPredicate = null;
+            _controllerButton = XInputButton.None;
             _virtualKey = 0;
             _modifiers = 0;
+            _controllerButtonHeld = false;
             _keyHeld = false;
         }
 
         public void Dispose()
         {
             Unregister();
+        }
+
+        private void ControllerPollTimer_Tick(
+            object? sender,
+            EventArgs e)
+        {
+            if (!XInputControllerService.TryReadCombinedButtons(
+                    out XInputButton currentButtons))
+            {
+                _controllerButtonHeld = false;
+                return;
+            }
+
+            bool buttonPressed =
+                (currentButtons & _controllerButton) != 0;
+
+            bool isNewPress =
+                buttonPressed &&
+                !_controllerButtonHeld;
+
+            _controllerButtonHeld =
+                buttonPressed;
+
+            if (!isNewPress)
+            {
+                return;
+            }
+
+            bool isActive;
+
+            try
+            {
+                isActive =
+                    _activationPredicate?.Invoke() == true;
+            }
+            catch
+            {
+                isActive = false;
+            }
+
+            if (!isActive)
+            {
+                // Limelight ignores the controller everywhere except an
+                // active Dead as Disco X19 session.
+                return;
+            }
+
+            Pressed?.Invoke();
         }
 
         private IntPtr KeyboardMessageReceived(

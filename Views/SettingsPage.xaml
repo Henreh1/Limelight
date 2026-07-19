@@ -414,7 +414,8 @@
                     </ScrollViewer.Resources>
 
                     <StackPanel Margin="0,0,12,30">
-                        <!-- X19 listens globally, but Limelight only accepts it while the game is selected. -->
+                        <!-- X19 listens for one keyboard or controller input, but
+                             Limelight only accepts it while the game is selected. -->
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -435,7 +436,7 @@
                                                FontWeight="Bold"/>
 
                                     <TextBlock x:Name="X19HotkeyStatusText"
-                                               Text="Choose the key that advances to the next character in your X19 group. It is active only while Dead as Disco is selected."
+                                               Text="Choose a keyboard combination or controller button that advances the X19 group. D-pad and stick-click bindings avoid most gameplay conflicts."
                                                Margin="0,7,24,0"
                                                MaxWidth="650"
                                                FontSize="12"
@@ -444,7 +445,7 @@
                                 </StackPanel>
 
                                 <Border Grid.Column="1"
-                                        MinWidth="104"
+                                        MinWidth="152"
                                         Height="58"
                                         Margin="20,0"
                                         Padding="18,0"
@@ -457,14 +458,14 @@
                                                Text="F8"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
-                                               FontSize="18"
+                                               FontSize="15"
                                                FontWeight="Bold"
                                                Foreground="{StaticResource PinkBrush}"/>
                                 </Border>
 
                                 <Button x:Name="CaptureX19HotkeyButton"
                                         Grid.Column="2"
-                                        Content="CHANGE HOTKEY"
+                                        Content="CHANGE BINDING"
                                         MinWidth="138"
                                         VerticalAlignment="Center"
                                         Click="CaptureX19Hotkey_Click"

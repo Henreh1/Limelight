@@ -5,12 +5,15 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace Limelight.Views
 {
     public partial class SettingsPage : UserControl
     {
+        private readonly DispatcherTimer _controllerCaptureTimer;
         private bool _isCapturingX19Hotkey;
+        private XInputButton _previousControllerButtons;
         private bool _discordPresenceEnabled;
         private bool _resourceOverlayEnabled;
         private bool _isUpdatingResourceOverlay;
@@ -28,6 +31,21 @@ namespace Limelight.Views
         public SettingsPage()
         {
             InitializeComponent();
+
+            _controllerCaptureTimer =
+                new DispatcherTimer
+                {
+                    Interval =
+                        TimeSpan.FromMilliseconds(
+                            35)
+                };
+
+            _controllerCaptureTimer.Tick +=
+                ControllerCaptureTimer_Tick;
+
+            Unloaded +=
+                (_, _) =>
+                    _controllerCaptureTimer.Stop();
         }
 
         public void ShowX19Hotkey(
@@ -120,11 +138,16 @@ namespace Limelight.Views
         {
             _isCapturingX19Hotkey = true;
 
+            XInputControllerService.TryReadCombinedButtons(
+                out _previousControllerButtons);
+
+            _controllerCaptureTimer.Start();
+
             CaptureX19HotkeyButton.Content =
-                "PRESS A KEY";
+                "PRESS INPUT";
 
             X19HotkeyStatusText.Text =
-                "Press the new key combination now. Press Escape to cancel.";
+                "Press a keyboard combination or controller button now. Press Escape to cancel.";
 
             CaptureX19HotkeyButton.Focus();
             Keyboard.Focus(CaptureX19HotkeyButton);
@@ -185,14 +208,15 @@ namespace Limelight.Views
             bool saveChange)
         {
             _isCapturingX19Hotkey = false;
+            _controllerCaptureTimer.Stop();
 
             CaptureX19HotkeyButton.Content =
-                "CHANGE HOTKEY";
+                "CHANGE BINDING";
 
             X19HotkeyStatusText.Text =
                 saveChange
-                    ? "The X19 hotkey is ready and will only work while Dead as Disco is selected."
-                    : "The existing X19 hotkey was kept.";
+                    ? "The X19 binding is ready and will only work while Dead as Disco is selected."
+                    : "The existing X19 binding was kept.";
 
             if (!saveChange)
             {
@@ -203,6 +227,38 @@ namespace Limelight.Views
                 gesture;
 
             X19HotkeyChanged?.Invoke(gesture);
+        }
+
+        private void ControllerCaptureTimer_Tick(
+            object? sender,
+            EventArgs e)
+        {
+            if (!_isCapturingX19Hotkey ||
+                !XInputControllerService.TryReadCombinedButtons(
+                    out XInputButton currentButtons))
+            {
+                return;
+            }
+
+            XInputButton newlyPressedButtons =
+                currentButtons &
+                ~_previousControllerButtons;
+
+            _previousControllerButtons =
+                currentButtons;
+
+            if (!XInputControllerService.TryCreateGesture(
+                    newlyPressedButtons,
+                    out string gesture))
+            {
+                return;
+            }
+
+            // Capturing the edge rather than the held state prevents the
+            // button used to open Settings from becoming the X19 binding.
+            FinishHotkeyCapture(
+                gesture,
+                saveChange: true);
         }
 
         private static bool IsModifierKey(

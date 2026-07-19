@@ -191,10 +191,10 @@
                                         BorderBrush="{StaticResource PinkBrush}"
                                         BorderThickness="1"
                                         CornerRadius="10">
-                                    <TextBlock Text="X19"
+                                    <TextBlock Text="X"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center"
-                                               FontSize="15"
+                                               FontSize="27"
                                                FontWeight="Bold"
                                                Foreground="{StaticResource PinkBrush}"/>
                                 </Border>

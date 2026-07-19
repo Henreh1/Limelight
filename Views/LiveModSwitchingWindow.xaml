@@ -16,39 +16,6 @@
         FontFamily="Bahnschrift, Segoe UI"
         Foreground="{StaticResource TextBrush}">
 
-    <Window.Resources>
-        <Style x:Key="OverlayProgressBarStyle"
-               TargetType="ProgressBar">
-            <Setter Property="Height"
-                    Value="7"/>
-            <Setter Property="Background"
-                    Value="#252943"/>
-            <Setter Property="Foreground"
-                    Value="{StaticResource CyanBrush}"/>
-            <Setter Property="BorderThickness"
-                    Value="0"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ProgressBar">
-                        <Border Background="{TemplateBinding Background}"
-                                CornerRadius="4"
-                                SnapsToDevicePixels="True">
-
-                            <Grid x:Name="PART_Track"
-                                  ClipToBounds="True">
-
-                                <Border x:Name="PART_Indicator"
-                                        HorizontalAlignment="Left"
-                                        Background="{TemplateBinding Foreground}"
-                                        CornerRadius="4"/>
-                            </Grid>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-    </Window.Resources>
-
     <!-- I keep this card click-through so it never steals control from the game. -->
     <Border x:Name="PopupShell"
             Margin="10"
@@ -128,9 +95,9 @@
                         VerticalAlignment="Center">
 
                 <TextBlock x:Name="ProgressText"
-                           Text="12%"
+                           Text="WORKING"
                            HorizontalAlignment="Right"
-                           FontSize="14"
+                           FontSize="11"
                            FontWeight="Bold"
                            Foreground="{StaticResource CyanBrush}"/>
 
@@ -155,14 +122,42 @@
                        TextTrimming="CharacterEllipsis"
                        Foreground="{StaticResource MutedTextBrush}"/>
 
-            <ProgressBar x:Name="SwitchProgress"
-                         Grid.Row="2"
-                         Grid.ColumnSpan="3"
-                         Minimum="0"
-                         Maximum="100"
-                         Value="12"
-                         Margin="0,15,0,0"
-                         Style="{StaticResource OverlayProgressBarStyle}"/>
+            <!-- A moving light makes it clear that Limelight is still working
+                 even while Unreal holds the game thread for several seconds. -->
+            <Border Grid.Row="2"
+                    Grid.ColumnSpan="3"
+                    Height="7"
+                    Margin="0,15,0,0"
+                    Background="#252943"
+                    CornerRadius="4"
+                    SnapsToDevicePixels="True">
+
+                <Grid x:Name="SwitchProgressTrack"
+                      ClipToBounds="True">
+
+                    <Border x:Name="SwitchProgressIndicator"
+                            Width="112"
+                            HorizontalAlignment="Left"
+                            CornerRadius="4">
+
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0"
+                                                 EndPoint="1,0">
+                                <GradientStop Offset="0"
+                                              Color="#0039DDF5"/>
+                                <GradientStop Offset="0.45"
+                                              Color="#FF39DDF5"/>
+                                <GradientStop Offset="1"
+                                              Color="#0039DDF5"/>
+                            </LinearGradientBrush>
+                        </Border.Background>
+
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="SwitchProgressTransform"/>
+                        </Border.RenderTransform>
+                    </Border>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>
