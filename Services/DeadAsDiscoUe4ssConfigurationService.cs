@@ -213,6 +213,9 @@ namespace Limelight.Services
 
             try
             {
+                // The current game build needs this resolver before UE4SS can
+                // finish starting. The pattern has one verified match in the
+                // Dead as Disco shipping executable.
                 WriteTextIfChanged(
                     fNamePath,
                     FNameConstructorSignature);

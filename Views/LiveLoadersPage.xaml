@@ -339,6 +339,48 @@
                     </Grid>
                 </Border>
 
+                <Border Margin="0,18,0,0"
+                        Padding="20"
+                        Background="{StaticResource PanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="11">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="PLAY ORDER"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+                            <TextBlock Text="Follow your hand-picked order or let X19 choose a different character at random."
+                                       Margin="0,5,20,0"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Button x:Name="SequentialModeButton"
+                                    Content="SEQUENTIAL"
+                                    Tag="SEQUENTIAL"
+                                    Margin="0,0,8,0"
+                                    Click="RotationMode_Click"
+                                    Style="{StaticResource SecondaryButton}"/>
+                            <Button x:Name="ShuffleModeButton"
+                                    Content="SHUFFLE"
+                                    Tag="SHUFFLE"
+                                    Click="RotationMode_Click"
+                                    Style="{StaticResource SecondaryButton}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <Grid Margin="0,25,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -349,7 +391,7 @@
                         <TextBlock Text="X19 ROTATION"
                                    FontSize="13"
                                    FontWeight="Bold"/>
-                        <TextBlock Text="Select the characters that the hotkey should cycle through."
+                        <TextBlock Text="Select characters, then drag selected cards into the order you want."
                                    Margin="0,5,0,0"
                                    FontSize="12"
                                    Foreground="{StaticResource MutedTextBrush}"/>
@@ -381,13 +423,19 @@
                             <DataTemplate>
                                 <Border Margin="0,0,0,10"
                                         Padding="18"
+                                        AllowDrop="True"
                                         Background="{StaticResource PanelBrush}"
                                         BorderBrush="{StaticResource BorderBrush}"
                                         BorderThickness="1"
-                                        CornerRadius="10">
+                                        CornerRadius="10"
+                                        PreviewMouseLeftButtonDown="ModCard_MouseLeftButtonDown"
+                                        PreviewMouseMove="ModCard_MouseMove"
+                                        DragOver="ModCard_DragOver"
+                                        Drop="ModCard_Drop">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
 
@@ -407,6 +455,33 @@
                                         </CheckBox>
 
                                         <Border Grid.Column="1"
+                                                Margin="14,0,0,0"
+                                                Padding="9,6"
+                                                VerticalAlignment="Center"
+                                                Background="#252943"
+                                                CornerRadius="7">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Visibility"
+                                                            Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected}"
+                                                                     Value="True">
+                                                            <Setter Property="Visibility"
+                                                                    Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+
+                                            <TextBlock Text="DRAG"
+                                                       FontSize="9"
+                                                       FontWeight="Bold"
+                                                       Foreground="{StaticResource PinkBrush}"/>
+                                        </Border>
+
+                                        <Border Grid.Column="2"
+                                                Margin="10,0,0,0"
                                                 Padding="10,6"
                                                 VerticalAlignment="Center"
                                                 Background="#172B3B"

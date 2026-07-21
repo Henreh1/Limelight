@@ -181,6 +181,9 @@ namespace Limelight
             LiveLoadersPageControl.X19GroupChanged +=
                 X19GroupChanged;
 
+            LiveLoadersPageControl.X19ShuffleChanged +=
+                X19ShuffleChanged;
+
             LiveLoadersPageControl.OpenHotkeySettingsRequested +=
                 OpenX19HotkeySettingsRequested;
 
@@ -527,10 +530,29 @@ namespace Limelight
                 DateTime bridgeDeadline =
                     DateTime.UtcNow.AddMinutes(2);
 
+                DateTime? gameMissingSince = null;
+
                 while (!_liveLoaderBridgeService.IsOnline())
                 {
-                    if (!_gameProcessService.IsGameRunning(
-                            gameDirectory))
+                    bool gameIsRunning =
+                        _gameProcessService.IsGameRunning(
+                            gameDirectory);
+
+                    if (gameIsRunning)
+                    {
+                        gameMissingSince = null;
+                    }
+                    else
+                    {
+                        gameMissingSince ??= DateTime.UtcNow;
+                    }
+
+                    // Windows can briefly omit a process while the launcher
+                    // hands control to the shipping executable. I wait for a
+                    // sustained absence before treating the game as closed.
+                    if (gameMissingSince.HasValue &&
+                        DateTime.UtcNow - gameMissingSince.Value >=
+                        TimeSpan.FromSeconds(8))
                     {
                         throw new InvalidOperationException(
                             "Dead as Disco closed before the live loader was ready.");
@@ -567,6 +589,20 @@ namespace Limelight
                             StringComparison.OrdinalIgnoreCase) &&
                         Directory.Exists(
                             mod.InstallDirectory));
+
+                LiveLoaderCommandResult startupSafety =
+                    await WaitForInitialLiveWorldAsync(
+                        gameDirectory,
+                        (phase, progress) =>
+                            initialisingWindow.Report(
+                                phase,
+                                progress));
+
+                if (!startupSafety.Success)
+                {
+                    throw new InvalidOperationException(
+                        startupSafety.Message);
+                }
 
                 if (activeMod is not null)
                 {
@@ -1529,6 +1565,37 @@ namespace Limelight
                 .ToList();
         }
 
+        private int GetNextX19RotationIndex(
+            int rotationCount,
+            int currentIndex)
+        {
+            if (rotationCount <= 1)
+            {
+                return 0;
+            }
+
+            if (!_settings.X19ShuffleEnabled)
+            {
+                return currentIndex < 0
+                    ? 0
+                    : (currentIndex + 1) % rotationCount;
+            }
+
+            if (currentIndex < 0)
+            {
+                return Random.Shared.Next(rotationCount);
+            }
+
+            // The offset starts at one, so shuffle still feels random without
+            // choosing the character which is already on stage.
+            int offset =
+                Random.Shared.Next(
+                    1,
+                    rotationCount);
+
+            return (currentIndex + offset) % rotationCount;
+        }
+
         private void EnableX19Hotkey()
         {
             _globalHotkeyService.Unregister();
@@ -1611,9 +1678,9 @@ namespace Limelight
                             StringComparison.OrdinalIgnoreCase));
 
                 int nextIndex =
-                    currentIndex < 0
-                        ? 0
-                        : (currentIndex + 1) % rotation.Count;
+                    GetNextX19RotationIndex(
+                        rotation.Count,
+                        currentIndex);
 
                 InstalledMod nextMod =
                     rotation[nextIndex];
@@ -2083,6 +2150,82 @@ namespace Limelight
             return result;
         }
 
+        private async Task<LiveLoaderCommandResult> WaitForInitialLiveWorldAsync(
+            string gameDirectory,
+            Action<string, int>? reportProgress)
+        {
+            DateTime deadline =
+                DateTime.UtcNow.AddMinutes(4);
+
+            LiveLoaderCommandResult result =
+                await _liveLoaderCommandService
+                    .CanSwitchModsAsync();
+
+            int consecutiveReadyChecks = 0;
+
+            while (DateTime.UtcNow < deadline)
+            {
+                if (!_gameProcessService.IsGameRunning(
+                        gameDirectory))
+                {
+                    return new LiveLoaderCommandResult
+                    {
+                        Success = false,
+                        Message =
+                            "Dead as Disco closed before the first game world was ready."
+                    };
+                }
+
+                if (result.Success)
+                {
+                    consecutiveReadyChecks++;
+
+                    // Startup crosses several short-lived Unreal worlds. I wait
+                    // for a few clean checks before mounting the saved active mod.
+                    if (consecutiveReadyChecks >= 3)
+                    {
+                        return result;
+                    }
+
+                    reportProgress?.Invoke(
+                        "VERIFYING THE FIRST GAME WORLD",
+                        31);
+
+                    await Task.Delay(350);
+                }
+                else
+                {
+                    consecutiveReadyChecks = 0;
+
+                    if (!IsLevelTransitionBlock(result.Message) &&
+                        !IsTemporaryLiveSwitchDelay(result.Message))
+                    {
+                        return result;
+                    }
+
+                    // A launch-time transition is expected. Unlike a manual
+                    // switch, this request is safe to wait because no user action
+                    // has been queued and the active mod has not been touched yet.
+                    reportProgress?.Invoke(
+                        "WAITING FOR THE FIRST LEVEL",
+                        30);
+
+                    await Task.Delay(500);
+                }
+
+                result =
+                    await _liveLoaderCommandService
+                        .CanSwitchModsAsync();
+            }
+
+            return new LiveLoaderCommandResult
+            {
+                Success = false,
+                Message =
+                    "Dead as Disco did not finish its initial level transition in time."
+            };
+        }
+
         private static bool IsTemporaryLiveSwitchDelay(
             string message)
         {
@@ -2411,6 +2554,15 @@ namespace Limelight
                 selectedModIds
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+
+            _settingsService.Save(_settings);
+        }
+
+        private void X19ShuffleChanged(
+            bool shuffleEnabled)
+        {
+            _settings.X19ShuffleEnabled =
+                shuffleEnabled;
 
             _settingsService.Save(_settings);
         }
@@ -4324,7 +4476,8 @@ namespace Limelight
                 availableMods,
                 _settings.X19LoaderModIds,
                 _settings.ActiveModId,
-                _settings.X19HotkeyGesture);
+                _settings.X19HotkeyGesture,
+                _settings.X19ShuffleEnabled);
 
             InstalledModCountText.Text =
                 installedCount.ToString();
@@ -4495,25 +4648,31 @@ namespace Limelight
                     _ue4ssDetectionService.Detect(
                         gameDirectory);
 
-                if (loader.IsInstalled &&
-                    _ue4ssConfigurationService.IsRuntimeCompatible(loader) &&
-                    _liveLoaderBridgeService.HasBridgeFiles(loader))
+                if (!loader.IsInstalled ||
+                    !_ue4ssConfigurationService.IsRuntimeCompatible(loader) ||
+                    !_liveLoaderBridgeService.HasBridgeFiles(loader))
                 {
-                    try
-                    {
-                        // Repair the managed settings, signatures and enable
-                        // line in case another mod tool changed them while
-                        // Limelight was already open.
-                        _ue4ssConfigurationService.Apply(loader);
-                        _liveLoaderBridgeService.EnsureInstalled(loader);
-                        _nativeBridgeInstallerService.EnsureInstalled(
-    loader);
-                    }
-                    catch
-                    {
-                        // The live loader is optional, so a repair problem
-                        // should never prevent the user launching the game.
-                    }
+                    throw new InvalidOperationException(
+                        "The Live Loader needs to be repaired before this launch. " +
+                        "Open Settings, choose Support, then select Repair Live Loader.");
+                }
+
+                try
+                {
+                    // Repair the managed settings, signatures and enable line
+                    // before Steam starts. A failed repair must not turn into a
+                    // delayed loader timeout after the user reaches the game.
+                    _ue4ssConfigurationService.Apply(loader);
+                    _liveLoaderBridgeService.EnsureInstalled(loader);
+                    _nativeBridgeInstallerService.EnsureInstalled(
+                        loader);
+                }
+                catch (Exception exception)
+                {
+                    throw new InvalidOperationException(
+                        "Limelight could not prepare the Live Loader. " +
+                        exception.Message,
+                        exception);
                 }
 
                 ProcessStartInfo startInfo =

@@ -16,6 +16,10 @@ namespace Limelight.Models
         public List<string> X19LoaderModIds { get; set; } =
             new List<string>();
 
+        // Sequential keeps the hand-picked order. Shuffle chooses a different
+        // selected character each time without immediately repeating one.
+        public bool X19ShuffleEnabled { get; set; }
+
         // C is unlikely to conflict with normal gameplay, but the user
         // can replace it from Limelight's Settings page.
         public string X19HotkeyGesture { get; set; } =
