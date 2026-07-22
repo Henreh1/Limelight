@@ -214,7 +214,8 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
+        <Grid x:Name="ApplicationContentRoot"
+              Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="245"/>
                 <ColumnDefinition Width="*"/>
@@ -421,7 +422,8 @@
                     </StackPanel>
 
                     <!-- Game connection status -->
-                    <Border Grid.Row="2"
+                    <Border x:Name="GameConnectionCard"
+                        Grid.Row="2"
                         Margin="16,16,16,22"
                         Padding="14"
                         Background="#111425"
@@ -493,7 +495,8 @@
                             Margin="0,0,10,0"
                             Style="{StaticResource SecondaryButton}"/>
 
-                        <Button Content="LAUNCH GAME"
+                        <Button x:Name="LaunchGameButton"
+                            Content="LAUNCH GAME"
                             Click="LaunchGame_Click"
                             Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
@@ -947,6 +950,140 @@
                     </StackPanel>
                 </Grid>
             </Border>
+
+            <!-- The first-run tour stays inside the main window so each step
+                 can open the real page and point at the feature being explained. -->
+            <Grid x:Name="TutorialOverlay"
+                  Grid.ColumnSpan="2"
+                  Panel.ZIndex="450"
+                  Background="#D900020C"
+                  Visibility="Collapsed">
+
+                <Canvas x:Name="TutorialSpotlightCanvas"
+                        IsHitTestVisible="False">
+
+                    <Border x:Name="TutorialSpotlight"
+                            Background="#0FFFFFFF"
+                            BorderBrush="{StaticResource PinkBrush}"
+                            BorderThickness="2"
+                            CornerRadius="10">
+
+                        <Border.Effect>
+                            <DropShadowEffect Color="#FF2FA5"
+                                              BlurRadius="24"
+                                              ShadowDepth="0"
+                                              Opacity="0.75"/>
+                        </Border.Effect>
+                    </Border>
+                </Canvas>
+
+                <Border x:Name="TutorialCard"
+                        Width="500"
+                        Margin="34"
+                        Padding="28"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Background="#171B31"
+                        BorderBrush="#413568"
+                        BorderThickness="1"
+                        CornerRadius="13">
+
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Orientation="Horizontal"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="◆"
+                                           Margin="0,0,10,0"
+                                           FontSize="11"
+                                           Foreground="{StaticResource PinkBrush}"/>
+
+                                <TextBlock x:Name="TutorialEyebrowText"
+                                           Text="WELCOME TO LIMELIGHT"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource CyanBrush}"/>
+                            </StackPanel>
+
+                            <TextBlock x:Name="TutorialStepCounterText"
+                                       Grid.Column="1"
+                                       Text="1 OF 9"
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </Grid>
+
+                        <TextBlock x:Name="TutorialTitleText"
+                                   Text="YOUR MODS. YOUR STAGE."
+                                   Margin="0,14,0,0"
+                                   FontSize="25"
+                                   FontWeight="Black"
+                                   TextWrapping="Wrap"
+                                   Foreground="{StaticResource TextBrush}"/>
+
+                        <Rectangle Width="74"
+                                   Height="3"
+                                   Margin="0,14,0,0"
+                                   HorizontalAlignment="Left"
+                                   Fill="{StaticResource PinkBrush}"/>
+
+                        <TextBlock x:Name="TutorialDescriptionText"
+                                   Margin="0,18,0,0"
+                                   FontSize="13"
+                                   LineHeight="20"
+                                   TextWrapping="Wrap"
+                                   Foreground="#C8C6D8"/>
+
+                        <Border Margin="0,20,0,0"
+                                Padding="13,11"
+                                Background="#101426"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="7">
+
+                            <TextBlock x:Name="TutorialHintText"
+                                       FontSize="11"
+                                       LineHeight="17"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </Border>
+
+                        <Grid Margin="0,24,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Button x:Name="TutorialSkipButton"
+                                    Content="SKIP TOUR"
+                                    Padding="16,10"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="TutorialSkip_Click"/>
+
+                            <Button x:Name="TutorialPreviousButton"
+                                    Grid.Column="2"
+                                    Content="PREVIOUS"
+                                    Margin="0,0,10,0"
+                                    Padding="16,10"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="TutorialPrevious_Click"/>
+
+                            <Button x:Name="TutorialNextButton"
+                                    Grid.Column="3"
+                                    Content="NEXT"
+                                    Padding="20,10"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Click="TutorialNext_Click"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </Grid>
 </Window>

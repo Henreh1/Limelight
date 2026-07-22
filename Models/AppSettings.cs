@@ -33,6 +33,10 @@ namespace Limelight.Models
         // until the user chooses to monitor Limelight.
         public bool ResourceOverlayEnabled { get; set; }
 
+        // A version number lets a future Limelight update introduce a new
+        // tour without repeatedly showing the same guide on every launch.
+        public int CompletedTutorialVersion { get; set; }
+
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 

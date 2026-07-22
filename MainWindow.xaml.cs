@@ -29,6 +29,34 @@ namespace Limelight
             Settings
         }
 
+        private sealed class TutorialStep
+        {
+            public TutorialStep(
+                NavigationPage page,
+                FrameworkElement target,
+                string eyebrow,
+                string title,
+                string description,
+                string hint)
+            {
+                Page = page;
+                Target = target;
+                Eyebrow = eyebrow;
+                Title = title;
+                Description = description;
+                Hint = hint;
+            }
+
+            public NavigationPage Page { get; }
+            public FrameworkElement Target { get; }
+            public string Eyebrow { get; }
+            public string Title { get; }
+            public string Description { get; }
+            public string Hint { get; }
+        }
+
+        private const int CurrentTutorialVersion = 1;
+
         private readonly SettingsService _settingsService;
         private readonly ModLibraryService _modLibraryService;
         private readonly AppSettings _settings;
@@ -84,6 +112,9 @@ namespace Limelight
         private bool _pendingDeploymentAttempted;
         private int _nextLiveMountOrder = 1000;
         private int _notificationSequence;
+        private readonly List<TutorialStep> _tutorialSteps =
+            new List<TutorialStep>();
+        private int _tutorialStepIndex;
         private LoaderLaunchMode _selectedLoaderMode =
             LoaderLaunchMode.Normal;
         private NavigationPage _selectedNavigationPage =
@@ -255,6 +286,7 @@ namespace Limelight
             // showing the existing-mod migration prompt.
             Loaded += MainWindow_Loaded;
             Closed += MainWindow_Closed;
+            SizeChanged += MainWindow_SizeChanged;
         }
 
         private async void MainWindow_Loaded(
@@ -306,6 +338,289 @@ namespace Limelight
                 await InitialiseLiveLoaderForRunningGameAsync(
                     waitForGameProcess: false);
             }
+
+            ShowFirstRunTutorialIfNeeded();
+        }
+
+        private void ShowFirstRunTutorialIfNeeded()
+        {
+            if (_settings.CompletedTutorialVersion >=
+                CurrentTutorialVersion)
+            {
+                return;
+            }
+
+            _tutorialSteps.Clear();
+
+            _tutorialSteps.AddRange(new[]
+            {
+                new TutorialStep(
+                    NavigationPage.Dashboard,
+                    DashboardNavigation,
+                    "WELCOME TO LIMELIGHT",
+                    "YOUR MODS. YOUR STAGE.",
+                    "Limelight manages Dead as Disco character mods, launches the game, and keeps supported replacements available while the game is running.",
+                    "This tour opens each real Limelight page. Nothing will be installed or changed while you look around."),
+                new TutorialStep(
+                    NavigationPage.Dashboard,
+                    GameConnectionCard,
+                    "FIRST CONNECTION",
+                    "POINT LIMELIGHT AT THE GAME",
+                    "Connect the Dead as Disco installation folder once. Limelight remembers it, checks the game status, and keeps all managed files in the correct locations.",
+                    "You can change the connected folder later from Settings."),
+                new TutorialStep(
+                    NavigationPage.Dashboard,
+                    ImportModButton,
+                    "BUILD YOUR LIBRARY",
+                    "IMPORT A MOD ARCHIVE",
+                    "Import a ZIP, RAR, or 7Z mod archive and Limelight will validate it, scan its package contents, and add it to your private character library.",
+                    "Limelight prevents duplicate imports and never edits the original archive."),
+                new TutorialStep(
+                    NavigationPage.MyMods,
+                    MyModsNavigation,
+                    "MY MODS",
+                    "CHOOSE WHO TAKES THE SPOTLIGHT",
+                    "Your installed characters live here. Activate a supported model, review its status, or remove it from Limelight when you no longer need it.",
+                    "When Dead as Disco is running, Activate asks the Live Loader to switch safely."),
+                new TutorialStep(
+                    NavigationPage.LiveLoaders,
+                    LiveLoadersNavigation,
+                    "LIVE LOADERS",
+                    "NORMAL OR X19 MODE",
+                    "Normal mode changes characters from Limelight. X19 LLoader creates an ordered or shuffled group that can rotate from an in-game keyboard or controller shortcut.",
+                    "Select the X19 group before launching the game with X19 mode."),
+                new TutorialStep(
+                    NavigationPage.BrowseNexus,
+                    BrowseNexusNavigation,
+                    "BROWSE NEXUS",
+                    "DISCOVER MODS INSIDE LIMELIGHT",
+                    "Connect a Nexus Mods account from Settings to browse the Dead as Disco catalogue, inspect mod pages, and start supported downloads without leaving Limelight.",
+                    "Personal API keys are for private testing only until Limelight receives its registered Nexus application flow."),
+                new TutorialStep(
+                    NavigationPage.Downloads,
+                    DownloadsNavigation,
+                    "DOWNLOADS",
+                    "FOLLOW EVERY TRANSFER",
+                    "The Downloads page shows active progress, completed imports, and any failure that needs attention.",
+                    "Nexus direct downloads require an eligible Nexus account."),
+                new TutorialStep(
+                    NavigationPage.Settings,
+                    SettingsNavigation,
+                    "SETTINGS AND SUPPORT",
+                    "KEEP THE SHOW RUNNING",
+                    "Settings contains game connection, Live Loader controls, Nexus access, Discord activity, optional resource monitoring, repair tools, and private diagnostic reports.",
+                    "Diagnostic reports remove the saved Nexus key before they are created."),
+                new TutorialStep(
+                    NavigationPage.Dashboard,
+                    LaunchGameButton,
+                    "READY FOR THE SPOTLIGHT",
+                    "LAUNCH WHEN YOU ARE READY",
+                    "Launch Dead as Disco from here after choosing a character and loader mode. Limelight will prepare the managed bridge automatically and remain available for safe live changes.",
+                    "You can replay the important pages at any time from the navigation bar.")
+            });
+
+            _tutorialStepIndex = 0;
+            TutorialOverlay.Visibility =
+                Visibility.Visible;
+
+            ShowTutorialStep();
+        }
+
+        private void ShowTutorialStep()
+        {
+            if (_tutorialSteps.Count == 0)
+            {
+                return;
+            }
+
+            TutorialStep step =
+                _tutorialSteps[_tutorialStepIndex];
+
+            NavigateForTutorial(step.Page);
+
+            TutorialEyebrowText.Text =
+                step.Eyebrow;
+            TutorialTitleText.Text =
+                step.Title;
+            TutorialDescriptionText.Text =
+                step.Description;
+            TutorialHintText.Text =
+                step.Hint;
+            TutorialStepCounterText.Text =
+                $"{_tutorialStepIndex + 1} OF {_tutorialSteps.Count}";
+
+            TutorialPreviousButton.IsEnabled =
+                _tutorialStepIndex > 0;
+            TutorialPreviousButton.Opacity =
+                _tutorialStepIndex > 0
+                    ? 1
+                    : 0.45;
+
+            TutorialNextButton.Content =
+                _tutorialStepIndex ==
+                _tutorialSteps.Count - 1
+                    ? "FINISH TOUR"
+                    : "NEXT";
+
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                    PositionTutorialSpotlight(step.Target)),
+                DispatcherPriority.Loaded);
+        }
+
+        private void NavigateForTutorial(
+            NavigationPage page)
+        {
+            switch (page)
+            {
+                case NavigationPage.MyMods:
+                    ShowMyModsPage();
+                    break;
+
+                case NavigationPage.LiveLoaders:
+                    ShowLiveLoadersPage();
+                    break;
+
+                case NavigationPage.BrowseNexus:
+                    ShowBrowseNexusPage();
+                    break;
+
+                case NavigationPage.Downloads:
+                    ShowDownloadsPage();
+                    break;
+
+                case NavigationPage.Settings:
+                    ShowSettingsPage();
+                    break;
+
+                default:
+                    ShowDashboardPage();
+                    break;
+            }
+        }
+
+        private void PositionTutorialSpotlight(
+            FrameworkElement target)
+        {
+            if (TutorialOverlay.Visibility !=
+                    Visibility.Visible ||
+                !target.IsVisible ||
+                target.ActualWidth <= 0 ||
+                target.ActualHeight <= 0)
+            {
+                return;
+            }
+
+            try
+            {
+                Point targetPosition =
+                    target.TransformToAncestor(
+                            ApplicationContentRoot)
+                        .Transform(new Point(0, 0));
+
+                const double spotlightPadding = 7;
+
+                Canvas.SetLeft(
+                    TutorialSpotlight,
+                    Math.Max(
+                        0,
+                        targetPosition.X - spotlightPadding));
+
+                Canvas.SetTop(
+                    TutorialSpotlight,
+                    Math.Max(
+                        0,
+                        targetPosition.Y - spotlightPadding));
+
+                TutorialSpotlight.Width =
+                    target.ActualWidth +
+                    spotlightPadding * 2;
+
+                TutorialSpotlight.Height =
+                    target.ActualHeight +
+                    spotlightPadding * 2;
+
+                // The card uses the opposite side so the highlighted control
+                // remains visible instead of sitting underneath the guide.
+                TutorialCard.HorizontalAlignment =
+                    targetPosition.X < 300
+                        ? HorizontalAlignment.Right
+                        : HorizontalAlignment.Left;
+
+                TutorialCard.VerticalAlignment =
+                    targetPosition.Y <
+                    ApplicationContentRoot.ActualHeight * 0.45
+                        ? VerticalAlignment.Bottom
+                        : VerticalAlignment.Top;
+            }
+            catch (InvalidOperationException)
+            {
+                // A page can still be completing its first layout pass. The
+                // next size or tutorial step update will position the outline.
+            }
+        }
+
+        private void TutorialPrevious_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (_tutorialStepIndex <= 0)
+            {
+                return;
+            }
+
+            --_tutorialStepIndex;
+            ShowTutorialStep();
+        }
+
+        private void TutorialNext_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (_tutorialStepIndex <
+                _tutorialSteps.Count - 1)
+            {
+                ++_tutorialStepIndex;
+                ShowTutorialStep();
+                return;
+            }
+
+            CompleteTutorial();
+        }
+
+        private void TutorialSkip_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            CompleteTutorial();
+        }
+
+        private void CompleteTutorial()
+        {
+            _settings.CompletedTutorialVersion =
+                CurrentTutorialVersion;
+
+            _settingsService.Save(_settings);
+
+            TutorialOverlay.Visibility =
+                Visibility.Collapsed;
+
+            ShowDashboardPage();
+        }
+
+        private void MainWindow_SizeChanged(
+            object sender,
+            SizeChangedEventArgs e)
+        {
+            if (TutorialOverlay.Visibility !=
+                    Visibility.Visible ||
+                _tutorialSteps.Count == 0)
+            {
+                return;
+            }
+
+            PositionTutorialSpotlight(
+                _tutorialSteps[_tutorialStepIndex].Target);
         }
 
         private void MinimiseWindow_Click(
@@ -1282,66 +1597,6 @@ namespace Limelight
                 .ToList();
         }
 
-        private async Task RetireStaleLiveContainersAsync(
-            string gameDirectory,
-            Action<string, int>? reportProgress)
-        {
-            List<LiveSessionMountRecord> staleContainers =
-                _liveSessionService.GetRetirableMountedContainers(
-                    gameDirectory);
-
-            if (staleContainers.Count == 0)
-            {
-                return;
-            }
-
-            reportProgress?.Invoke(
-                "RETIRING PREVIOUS CONTAINER",
-                20);
-
-            foreach (LiveSessionMountRecord staleContainer in
-                     staleContainers)
-            {
-                LiveLoaderCommandResult unmountResult =
-                    await _liveLoaderCommandService.UnmountPakAsync(
-                        staleContainer.PakPath);
-
-                if (!unmountResult.Success)
-                {
-                    _liveSessionService.RecordRetirementFailure(
-                        staleContainer.PakPath,
-                        unmountResult.Message);
-
-                    // I keep the old container counted when Unreal refuses
-                    // the unmount. Starting another switch would only hide
-                    // the problem behind a newer priority.
-                    throw new InvalidOperationException(
-                        "Limelight could not retire the previous live container. " +
-                        unmountResult.Message +
-                        " Close and reopen Dead as Disco before switching again.");
-                }
-
-                _liveSessionService.RecordUnmountedContainer(
-                    staleContainer.PakPath);
-
-                LiveSessionCleanupResult cleanup =
-                    _liveSessionService.DeleteRetiredContainerFiles(
-                        staleContainer.PakPath,
-                        gameDirectory);
-
-                if (cleanup.Errors.Count > 0)
-                {
-                    // The slot is already safe to reuse. Any file which is
-                    // still busy can wait for the normal closed-game cleanup.
-                    _liveSessionService.RecordRetirementFailure(
-                        staleContainer.PakPath,
-                        string.Join(
-                            "; ",
-                            cleanup.Errors));
-                }
-            }
-        }
-
         private async Task ActivateLiveModAsync(
             InstalledMod mod,
             string gameDirectory,
@@ -1360,11 +1615,11 @@ namespace Limelight
 
             await EnsureLiveWorldStableAsync();
 
-            await RetireStaleLiveContainersAsync(
-                gameDirectory,
-                reportProgress);
-
-            await EnsureLiveWorldStableAsync();
+            // I keep mounted containers alive for the rest of this game
+            // launch. Unreal may retain render and streaming references long
+            // after a switch appears complete, so in-session unmounting can
+            // produce access violations during the next level transition.
+            // Closed-game recovery removes every staged file safely.
 
             if (!_liveSessionService.CanStageContainers(
                     gameDirectory,
@@ -2749,6 +3004,11 @@ namespace Limelight
             object sender,
             MouseButtonEventArgs e)
         {
+            ShowDashboardPage();
+        }
+
+        private void ShowDashboardPage()
+        {
             MyModsPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -2773,6 +3033,11 @@ namespace Limelight
         private void ShowSettings_Click(
             object sender,
             MouseButtonEventArgs e)
+        {
+            ShowSettingsPage();
+        }
+
+        private void ShowSettingsPage()
         {
             DashboardPage.Visibility =
                 Visibility.Collapsed;
