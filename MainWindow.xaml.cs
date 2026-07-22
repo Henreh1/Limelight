@@ -896,6 +896,21 @@ namespace Limelight
                         nativePing.Message);
                 }
 
+                initialisingWindow.Report(
+                    "PREPARING THE MOUNT BRIDGE",
+                    29,
+                    "Limelight is locating Unreal's live-mount functions. The first scan can take a little while, but the game will remain responsive.");
+
+                LiveLoaderCommandResult mountResolver =
+                    await _liveLoaderCommandService
+                        .ScanMountFunctionsAsync();
+
+                if (!mountResolver.Success)
+                {
+                    throw new InvalidOperationException(
+                        mountResolver.Message);
+                }
+
                 InstalledMod? activeMod =
                     _settings.InstalledMods.FirstOrDefault(mod =>
                         string.Equals(

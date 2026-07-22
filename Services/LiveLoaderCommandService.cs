@@ -78,8 +78,15 @@ namespace Limelight.Services
         public Task<LiveLoaderCommandResult> ScanMountFunctionsAsync(
             CancellationToken cancellationToken = default)
         {
+            // I warm the native resolver before the first mount. Its result is
+            // cached by the bridge, which keeps the expensive scan away from
+            // Unreal's game thread when the active mod is finally mounted.
             return SendAsync(
-                "scan_mount_functions",
+                "resolve_mount",
+                "native-command.txt",
+                "native-response.txt",
+                arguments: null,
+                timeout: TimeSpan.FromMinutes(3),
                 cancellationToken);
         }
 
