@@ -1,0 +1,198 @@
+<Window x:Class="Limelight.Views.StartupSplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Limelight"
+        Width="590"
+        Height="410"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        FontFamily="Bahnschrift, Segoe UI"
+        Opacity="0">
+
+    <Window.Resources>
+        <Storyboard x:Key="LogoPulseStoryboard"
+                    RepeatBehavior="Forever"
+                    AutoReverse="True">
+            <DoubleAnimation Storyboard.TargetName="LogoScale"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="1"
+                             To="1.055"
+                             Duration="0:0:1.15"/>
+
+            <DoubleAnimation Storyboard.TargetName="LogoScale"
+                             Storyboard.TargetProperty="ScaleY"
+                             From="1"
+                             To="1.055"
+                             Duration="0:0:1.15"/>
+
+            <DoubleAnimation Storyboard.TargetName="OuterGlow"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0.38"
+                             To="0.82"
+                             Duration="0:0:1.15"/>
+        </Storyboard>
+
+        <Storyboard x:Key="LoadingProgressStoryboard">
+            <DoubleAnimation Storyboard.TargetName="LoadingScale"
+                             Storyboard.TargetProperty="ScaleX"
+                             From="0.015"
+                             To="1"
+                             Duration="0:0:10"
+                             FillBehavior="HoldEnd">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut"/>
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </Window.Resources>
+
+    <Border Margin="24"
+            Background="#F2080912"
+            BorderBrush="#34395B"
+            BorderThickness="1"
+            CornerRadius="18">
+
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="28"
+                              ShadowDepth="0"
+                              Opacity="0.72"
+                              Color="#05050B"/>
+        </Border.Effect>
+
+        <Grid Margin="40,32,40,26">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel Grid.Row="0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+
+                <!-- The logo keeps moving gently so startup never feels frozen. -->
+                <Grid Width="170"
+                      Height="170"
+                      HorizontalAlignment="Center"
+                      RenderTransformOrigin="0.5,0.5">
+
+                    <Grid.RenderTransform>
+                        <ScaleTransform x:Name="LogoScale"
+                                        ScaleX="1"
+                                        ScaleY="1"/>
+                    </Grid.RenderTransform>
+
+                    <Ellipse x:Name="OuterGlow"
+                             Margin="1"
+                             Stroke="{StaticResource CyanBrush}"
+                             StrokeThickness="2"
+                             Opacity="0.38">
+                        <Ellipse.Effect>
+                            <DropShadowEffect BlurRadius="18"
+                                              ShadowDepth="0"
+                                              Opacity="0.6"
+                                              Color="#35E7FF"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
+
+                    <Ellipse Margin="20"
+                             Fill="#182033"
+                             Stroke="{StaticResource PinkBrush}"
+                             StrokeThickness="4">
+                        <Ellipse.Effect>
+                            <DropShadowEffect BlurRadius="13"
+                                              ShadowDepth="0"
+                                              Opacity="0.5"
+                                              Color="#FF3CAC"/>
+                        </Ellipse.Effect>
+                    </Ellipse>
+
+                    <TextBlock Text="L"
+                               Margin="0,2,0,0"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="{StaticResource TextBrush}"
+                               FontSize="76"
+                               FontWeight="Black"
+                               FontStyle="Italic"/>
+                </Grid>
+
+                <TextBlock Margin="0,22,0,0"
+                           Text="LIMELIGHT"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource TextBrush}"
+                           FontSize="32"
+                           FontWeight="Black"
+                           FontStyle="Italic"/>
+
+                <TextBlock x:Name="LoadingStageText"
+                           Margin="0,7,0,0"
+                           Text="PREPARING THE SPOTLIGHT"
+                           HorizontalAlignment="Center"
+                           Foreground="{StaticResource CyanBrush}"
+                           FontSize="12"
+                           FontWeight="Bold"/>
+            </StackPanel>
+
+            <Grid Grid.Row="1"
+                  Margin="0,20,0,0"
+                  Height="7"
+                  ClipToBounds="True">
+
+                <Border Background="#252A45"
+                        CornerRadius="4"/>
+
+                <Border HorizontalAlignment="Stretch"
+                        Background="{StaticResource PinkBrush}"
+                        CornerRadius="4"
+                        RenderTransformOrigin="0,0.5">
+
+                    <Border.RenderTransform>
+                        <ScaleTransform x:Name="LoadingScale"
+                                        ScaleX="0.015"
+                                        ScaleY="1"/>
+                    </Border.RenderTransform>
+
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="8"
+                                          ShadowDepth="0"
+                                          Opacity="0.75"
+                                          Color="#FF3CAC"/>
+                    </Border.Effect>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="2"
+                  Margin="0,14,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="VersionText"
+                           Grid.Column="0"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           FontSize="11"
+                           FontWeight="SemiBold"/>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal">
+                    <TextBlock Text="MADE BY "
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+
+                    <TextBlock Text="HENREH"
+                               Foreground="{StaticResource PinkBrush}"
+                               FontSize="11"
+                               FontWeight="Bold"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>
