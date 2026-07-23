@@ -7,7 +7,7 @@ namespace Limelight.Services
 {
     public sealed class ModAssetScannerService
     {
-        public const int CurrentManifestVersion = 2;
+        public const int CurrentManifestVersion = 3;
 
         public List<ModAssetPackage> Scan(
             string modDirectory)

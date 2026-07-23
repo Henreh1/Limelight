@@ -1,19 +1,13 @@
 ﻿using Limelight.Models;
 using Limelight.Services;
-using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace Limelight.Views
 {
     public partial class SettingsPage : UserControl
     {
-        private readonly DispatcherTimer _controllerCaptureTimer;
-        private bool _isCapturingX19Hotkey;
-        private XInputButton _previousControllerButtons;
         private bool _discordPresenceEnabled;
         private bool _resourceOverlayEnabled;
         private bool _isUpdatingResourceOverlay;
@@ -24,42 +18,12 @@ namespace Limelight.Views
         public event Action? NativeTestRequested;
         public event Action<string>? NexusConnectRequested;
         public event Action? NexusDisconnectRequested;
-        public event Action<string>? X19HotkeyChanged;
         public event Action<bool>? DiscordPresenceChanged;
         public event Action<bool>? ResourceOverlayChanged;
 
         public SettingsPage()
         {
             InitializeComponent();
-
-            _controllerCaptureTimer =
-                new DispatcherTimer
-                {
-                    Interval =
-                        TimeSpan.FromMilliseconds(
-                            35)
-                };
-
-            _controllerCaptureTimer.Tick +=
-                ControllerCaptureTimer_Tick;
-
-            Unloaded +=
-                (_, _) =>
-                    _controllerCaptureTimer.Stop();
-        }
-
-        public void ShowX19Hotkey(
-            string hotkeyGesture)
-        {
-            if (_isCapturingX19Hotkey)
-            {
-                return;
-            }
-
-            X19HotkeyText.Text =
-                string.IsNullOrWhiteSpace(hotkeyGesture)
-                    ? "NOT SET"
-                    : hotkeyGesture.ToUpperInvariant();
         }
 
         public void ShowDiscordPresence(
@@ -130,192 +94,6 @@ namespace Limelight.Views
                 StatusBrush(enabled);
 
             ResourceOverlayChanged?.Invoke(enabled);
-        }
-
-        private void CaptureX19Hotkey_Click(
-            object sender,
-            RoutedEventArgs e)
-        {
-            _isCapturingX19Hotkey = true;
-
-            XInputControllerService.TryReadCombinedButtons(
-                out _previousControllerButtons);
-
-            _controllerCaptureTimer.Start();
-
-            CaptureX19HotkeyButton.Content =
-                "PRESS INPUT";
-
-            X19HotkeyStatusText.Text =
-                "Press a keyboard combination or controller button now. Press Escape to cancel.";
-
-            CaptureX19HotkeyButton.Focus();
-            Keyboard.Focus(CaptureX19HotkeyButton);
-        }
-
-        private void CaptureX19Hotkey_PreviewKeyDown(
-            object sender,
-            KeyEventArgs e)
-        {
-            if (!_isCapturingX19Hotkey)
-            {
-                return;
-            }
-
-            e.Handled = true;
-
-            Key pressedKey =
-                e.Key == Key.System
-                    ? e.SystemKey
-                    : e.Key;
-
-            if (pressedKey == Key.Escape)
-            {
-                FinishHotkeyCapture(
-                    X19HotkeyText.Text,
-                    saveChange: false);
-
-                return;
-            }
-
-            if (IsModifierKey(pressedKey) ||
-                pressedKey == Key.None)
-            {
-                X19HotkeyStatusText.Text =
-                    "Add a letter, number, or function key to the combination.";
-
-                return;
-            }
-
-            ModifierKeys modifiers =
-                Keyboard.Modifiers &
-                (ModifierKeys.Control |
-                 ModifierKeys.Alt |
-                 ModifierKeys.Shift);
-
-            string gesture =
-                CreateGestureText(
-                    pressedKey,
-                    modifiers);
-
-            FinishHotkeyCapture(
-                gesture,
-                saveChange: true);
-        }
-
-        private void FinishHotkeyCapture(
-            string gesture,
-            bool saveChange)
-        {
-            _isCapturingX19Hotkey = false;
-            _controllerCaptureTimer.Stop();
-
-            CaptureX19HotkeyButton.Content =
-                "CHANGE BINDING";
-
-            X19HotkeyStatusText.Text =
-                saveChange
-                    ? "The X19 binding is ready and will only work while Dead as Disco is selected."
-                    : "The existing X19 binding was kept.";
-
-            if (!saveChange)
-            {
-                return;
-            }
-
-            X19HotkeyText.Text =
-                gesture;
-
-            X19HotkeyChanged?.Invoke(gesture);
-        }
-
-        private void ControllerCaptureTimer_Tick(
-            object? sender,
-            EventArgs e)
-        {
-            if (!_isCapturingX19Hotkey ||
-                !XInputControllerService.TryReadCombinedButtons(
-                    out XInputButton currentButtons))
-            {
-                return;
-            }
-
-            XInputButton newlyPressedButtons =
-                currentButtons &
-                ~_previousControllerButtons;
-
-            _previousControllerButtons =
-                currentButtons;
-
-            if (!XInputControllerService.TryCreateGesture(
-                    newlyPressedButtons,
-                    out string gesture))
-            {
-                return;
-            }
-
-            // Capturing the edge rather than the held state prevents the
-            // button used to open Settings from becoming the X19 binding.
-            FinishHotkeyCapture(
-                gesture,
-                saveChange: true);
-        }
-
-        private static bool IsModifierKey(
-            Key key)
-        {
-            return key is
-                Key.LeftCtrl or
-                Key.RightCtrl or
-                Key.LeftAlt or
-                Key.RightAlt or
-                Key.LeftShift or
-                Key.RightShift or
-                Key.LWin or
-                Key.RWin;
-        }
-
-        private static string CreateGestureText(
-            Key key,
-            ModifierKeys modifiers)
-        {
-            List<string> parts =
-                new();
-
-            if (modifiers.HasFlag(ModifierKeys.Control))
-            {
-                parts.Add("CTRL");
-            }
-
-            if (modifiers.HasFlag(ModifierKeys.Alt))
-            {
-                parts.Add("ALT");
-            }
-
-            if (modifiers.HasFlag(ModifierKeys.Shift))
-            {
-                parts.Add("SHIFT");
-            }
-
-            parts.Add(
-                key switch
-                {
-                    Key.D0 => "0",
-                    Key.D1 => "1",
-                    Key.D2 => "2",
-                    Key.D3 => "3",
-                    Key.D4 => "4",
-                    Key.D5 => "5",
-                    Key.D6 => "6",
-                    Key.D7 => "7",
-                    Key.D8 => "8",
-                    Key.D9 => "9",
-                    _ => key.ToString().ToUpperInvariant()
-                });
-
-            return string.Join(
-                "+",
-                parts);
         }
 
         public void ShowStatus(

@@ -161,10 +161,16 @@
                                             </Button.Style>
                                         </Button>
 
+                                        <Button Content="RENAME"
+                                                Tag="{Binding Id}"
+                                                Click="RenameMod_Click"
+                                                Margin="0,0,8,0"
+                                                Style="{StaticResource SecondaryButton}"/>
+
                                         <Button Content="REMOVE"
-                                        Tag="{Binding Id}"
-                                        Click="RemoveMod_Click"
-                                        Style="{StaticResource SecondaryButton}"/>
+                                                Tag="{Binding Id}"
+                                                Click="RemoveMod_Click"
+                                                Style="{StaticResource SecondaryButton}"/>
                                     </StackPanel>
 
                                 </Grid>
@@ -173,6 +179,69 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </ScrollViewer>
+        </Grid>
+
+        <Grid x:Name="RenameOverlay"
+              Grid.RowSpan="2"
+              Panel.ZIndex="20"
+              Visibility="Collapsed"
+              Background="#D9070914">
+            <Border Width="520"
+                    Padding="26"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{StaticResource RaisedPanelBrush}"
+                    BorderBrush="{StaticResource PinkBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14">
+                <StackPanel>
+                    <TextBlock Text="RENAME MOD"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <TextBlock Text="GIVE THIS MOD A CLEANER NAME"
+                               Margin="0,8,0,0"
+                               FontSize="22"
+                               FontWeight="Bold"/>
+
+                    <Border Margin="0,20,0,0"
+                            Padding="14,4"
+                            Background="#0D1020"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                        <TextBox x:Name="RenameTextBox"
+                                 MaxLength="80"
+                                 Padding="0,8"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CaretBrush="{StaticResource CyanBrush}"
+                                 Foreground="{StaticResource PinkBrush}"
+                                 FontSize="15"
+                                 PreviewKeyDown="RenameTextBox_PreviewKeyDown"/>
+                    </Border>
+
+                    <TextBlock x:Name="RenameValidationText"
+                               Margin="0,10,0,0"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <StackPanel Margin="0,22,0,0"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                        <Button Content="CANCEL"
+                                Click="CancelRename_Click"
+                                Margin="0,0,10,0"
+                                Style="{StaticResource SecondaryButton}"/>
+
+                        <Button Content="SAVE NAME"
+                                Click="SaveRename_Click"
+                                Style="{StaticResource PrimaryButton}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

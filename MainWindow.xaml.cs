@@ -209,14 +209,17 @@ namespace Limelight
             MyModsPageControl.RemoveModRequested +=
                 RemoveModRequested;
 
+            MyModsPageControl.RenameModRequested +=
+                RenameModRequested;
+
             LiveLoadersPageControl.X19GroupChanged +=
                 X19GroupChanged;
 
             LiveLoadersPageControl.X19ShuffleChanged +=
                 X19ShuffleChanged;
 
-            LiveLoadersPageControl.OpenHotkeySettingsRequested +=
-                OpenX19HotkeySettingsRequested;
+            LiveLoadersPageControl.X19HotkeyChanged +=
+                X19HotkeyChanged;
 
             SettingsPageControl.RepairRequested +=
                 RepairLiveLoaderRequested;
@@ -232,9 +235,6 @@ namespace Limelight
 
             SettingsPageControl.NexusDisconnectRequested +=
                 NexusDisconnectRequested;
-
-            SettingsPageControl.X19HotkeyChanged +=
-                X19HotkeyChanged;
 
             SettingsPageControl.DiscordPresenceChanged +=
                 DiscordPresenceChanged;
@@ -1612,6 +1612,69 @@ namespace Limelight
                 .ToList();
         }
 
+        private async Task RetireStaleLiveContainersAsync(
+            string gameDirectory,
+            Action<string, int>? reportProgress)
+        {
+            List<LiveSessionMountRecord> staleContainers =
+                _liveSessionService.GetRetirableMountedContainers(
+                    gameDirectory);
+
+            if (staleContainers.Count == 0)
+            {
+                return;
+            }
+
+            reportProgress?.Invoke(
+                "RETIRING PREVIOUS CONTAINER",
+                20);
+
+            foreach (LiveSessionMountRecord staleContainer in
+                     staleContainers)
+            {
+                // I check both sides of the unmount because a level change
+                // can begin while the native bridge is finishing its work.
+                await EnsureLiveWorldStableAsync();
+
+                LiveLoaderCommandResult unmountResult =
+                    await _liveLoaderCommandService.UnmountPakAsync(
+                        staleContainer.PakPath);
+
+                if (!unmountResult.Success)
+                {
+                    _liveSessionService.RecordRetirementFailure(
+                        staleContainer.PakPath,
+                        unmountResult.Message);
+
+                    throw new InvalidOperationException(
+                        "Limelight could not retire the previous live container. " +
+                        unmountResult.Message +
+                        " Wait until the current level is fully visible, then try again.");
+                }
+
+                await EnsureLiveWorldStableAsync();
+
+                _liveSessionService.RecordUnmountedContainer(
+                    staleContainer.PakPath);
+
+                LiveSessionCleanupResult cleanup =
+                    _liveSessionService.DeleteRetiredContainerFiles(
+                        staleContainer.PakPath,
+                        gameDirectory);
+
+                if (cleanup.Errors.Count > 0)
+                {
+                    // The slot is safe to reuse once Unreal confirms the
+                    // unmount. Busy files can wait for closed-game cleanup.
+                    _liveSessionService.RecordRetirementFailure(
+                        staleContainer.PakPath,
+                        string.Join(
+                            "; ",
+                            cleanup.Errors));
+                }
+            }
+        }
+
         private async Task ActivateLiveModAsync(
             InstalledMod mod,
             string gameDirectory,
@@ -1630,11 +1693,13 @@ namespace Limelight
 
             await EnsureLiveWorldStableAsync();
 
-            // I keep mounted containers alive for the rest of this game
-            // launch. Unreal may retain render and streaming references long
-            // after a switch appears complete, so in-session unmounting can
-            // produce access violations during the next level transition.
-            // Closed-game recovery removes every staged file safely.
+            // I keep the active generation and the incoming generation only.
+            // This stops X19 rotations from consuming a new safety slot on
+            // every press while leaving the current assets available until
+            // their replacement is ready to mount.
+            await RetireStaleLiveContainersAsync(
+                gameDirectory,
+                reportProgress);
 
             if (!_liveSessionService.CanStageContainers(
                     gameDirectory,
@@ -1755,15 +1820,67 @@ namespace Limelight
 
                 await EnsureLiveWorldStableAsync();
 
-                LiveLoaderCommandResult reloadResult =
-                    await _liveLoaderCommandService.ReloadAssetsAsync(
-                        livePackages.Select(package =>
-                            package.ObjectPath));
+                List<ModAssetPackage> dependencyPackages =
+                    livePackages
+                        .Where(package =>
+                            package.Kind !=
+                                ModAssetKind.SkeletalMesh)
+                        .ToList();
 
-                if (!reloadResult.Success)
+                List<ModAssetPackage> meshPackages =
+                    livePackages
+                        .Where(package =>
+                            package.Kind ==
+                                ModAssetKind.SkeletalMesh)
+                        .ToList();
+
+                LiveLoaderCommandResult dependencyReloadResult =
+                    dependencyPackages.Count == 0
+                        ? new LiveLoaderCommandResult
+                        {
+                            Success = true
+                        }
+                        : await _liveLoaderCommandService.ReloadAssetsAsync(
+                            dependencyPackages.Select(package =>
+                                package.ObjectPath));
+
+                if (!dependencyReloadResult.Success)
                 {
                     throw new InvalidOperationException(
-                        reloadResult.Message);
+                        dependencyReloadResult.Message);
+                }
+
+                LiveLoaderCommandResult meshReloadResult =
+                    await _liveLoaderCommandService.ReloadAssetsAsync(
+                        meshPackages.Select(package =>
+                            package.ObjectPath));
+
+                if (!meshReloadResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        meshReloadResult.Message);
+                }
+
+                if (dependencyPackages.Count > 0)
+                {
+                    // Some material dependencies do not become loadable until
+                    // the replacement mesh has opened its package. A short
+                    // second pass fills those references before Charlie is
+                    // reapplied, which prevents an otherwise valid model from
+                    // appearing black.
+                    await Task.Delay(180);
+                    await EnsureLiveWorldStableAsync();
+
+                    LiveLoaderCommandResult dependencyRetryResult =
+                        await _liveLoaderCommandService.ReloadAssetsAsync(
+                            dependencyPackages.Select(package =>
+                                package.ObjectPath));
+
+                    if (!dependencyRetryResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            dependencyRetryResult.Message);
+                    }
                 }
 
                 await EnsureLiveWorldStableAsync();
@@ -2743,6 +2860,48 @@ namespace Limelight
             }
         }
 
+        private void RenameModRequested(
+            string modId,
+            string displayName)
+        {
+            InstalledMod? selectedMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        modId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (selectedMod is null)
+            {
+                return;
+            }
+
+            string cleanedName =
+                string.Join(
+                    " ",
+                    displayName
+                        .Split(
+                            ' ',
+                            StringSplitOptions.RemoveEmptyEntries))
+                .Trim();
+
+            if (cleanedName.Length == 0)
+            {
+                return;
+            }
+
+            selectedMod.CustomDisplayName =
+                cleanedName;
+
+            _settingsService.Save(_settings);
+            RefreshLibrarySummary();
+
+            ShowNotification(
+                "MOD RENAMED",
+                $"{selectedMod.DisplayName} is now shown with its new name.",
+                isError: false);
+        }
+
         private void ShowMyMods_Click(
     object sender,
     MouseButtonEventArgs e)
@@ -2837,33 +2996,6 @@ namespace Limelight
             _settingsService.Save(_settings);
         }
 
-        private void OpenX19HotkeySettingsRequested()
-        {
-            DashboardPage.Visibility =
-                Visibility.Collapsed;
-
-            MyModsPageControl.Visibility =
-                Visibility.Collapsed;
-
-            BrowseNexusPageControl.Visibility =
-                Visibility.Collapsed;
-
-            DownloadsPageControl.Visibility =
-                Visibility.Collapsed;
-
-            LiveLoadersPageControl.Visibility =
-                Visibility.Collapsed;
-
-            SettingsPageControl.Visibility =
-                Visibility.Visible;
-
-            RefreshSettingsPage();
-
-            SetSelectedNavigation(
-                showMyMods: false,
-                showSettings: true);
-        }
-
         private void X19HotkeyChanged(
             string hotkeyGesture)
         {
@@ -2871,6 +3003,12 @@ namespace Limelight
                 hotkeyGesture;
 
             _settingsService.Save(_settings);
+
+            if (_selectedLoaderMode ==
+                LoaderLaunchMode.X19)
+            {
+                EnableX19Hotkey();
+            }
 
             // I refresh the loader page too so its hotkey badge changes
             // immediately instead of waiting for another navigation visit.
@@ -3594,7 +3732,8 @@ namespace Limelight
                     (mod.NexusModId == file.ModId &&
                      mod.NexusFileId == file.FileId) ||
                     string.Equals(
-                        mod.DisplayName,
+                        InstalledMod.CreateDisplayName(
+                            mod.Name),
                         InstalledMod.CreateDisplayName(displayName),
                         StringComparison.OrdinalIgnoreCase));
 
@@ -3787,9 +3926,6 @@ namespace Limelight
                 isGameRunning,
                 session,
                 stagingSnapshot);
-
-            SettingsPageControl.ShowX19Hotkey(
-                _settings.X19HotkeyGesture);
 
             SettingsPageControl.ShowDiscordPresence(
                 _settings.DiscordRichPresenceEnabled);

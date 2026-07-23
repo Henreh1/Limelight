@@ -11,6 +11,9 @@ namespace Limelight.Models
         public string Name { get; set; } =
             "Unnamed mod";
 
+        public string CustomDisplayName { get; set; } =
+            string.Empty;
+
         public string InstallDirectory { get; set; } =
             string.Empty;
 
@@ -31,7 +34,9 @@ namespace Limelight.Models
 
         [JsonIgnore]
         public string DisplayName =>
-    CreateDisplayName(Name);
+            string.IsNullOrWhiteSpace(CustomDisplayName)
+                ? CreateDisplayName(Name)
+                : CustomDisplayName.Trim();
 
         public static string CreateDisplayName(
             string originalName)

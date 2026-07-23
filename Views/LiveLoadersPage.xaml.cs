@@ -1,4 +1,5 @@
 ﻿using Limelight.Models;
+using Limelight.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -6,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace Limelight.Views
 {
@@ -29,16 +31,39 @@ namespace Limelight.Views
 
         private bool _isRefreshing;
         private bool _shuffleEnabled;
+        private readonly DispatcherTimer _controllerCaptureTimer;
+        private bool _isCapturingX19Hotkey;
+        private XInputButton _previousControllerButtons;
+        private string _savedHotkeyGesture =
+            "F8";
         private Point _dragStartPoint;
         private X19ModChoice? _draggedChoice;
 
         public event Action<IReadOnlyList<string>>? X19GroupChanged;
         public event Action<bool>? X19ShuffleChanged;
-        public event Action? OpenHotkeySettingsRequested;
+        public event Action<string>? X19HotkeyChanged;
 
         public LiveLoadersPage()
         {
             InitializeComponent();
+
+            _controllerCaptureTimer =
+                new DispatcherTimer
+                {
+                    Interval =
+                        TimeSpan.FromMilliseconds(
+                            35)
+                };
+
+            _controllerCaptureTimer.Tick +=
+                ControllerCaptureTimer_Tick;
+
+            Unloaded +=
+                (_, _) =>
+                {
+                    _controllerCaptureTimer.Stop();
+                    _isCapturingX19Hotkey = false;
+                };
         }
 
         public void ShowConfiguration(
@@ -99,10 +124,16 @@ namespace Limelight.Views
             X19ModsList.ItemsSource = null;
             X19ModsList.ItemsSource = _modChoices;
 
-            HotkeyText.Text =
+            _savedHotkeyGesture =
                 string.IsNullOrWhiteSpace(hotkeyGesture)
-                    ? "NOT SET"
-                    : hotkeyGesture.ToUpperInvariant();
+                    ? "F8"
+                    : hotkeyGesture;
+
+            if (!_isCapturingX19Hotkey)
+            {
+                HotkeyText.Text =
+                    _savedHotkeyGesture.ToUpperInvariant();
+            }
 
             InstalledModsEmptyText.Visibility =
                 _modChoices.Count == 0
@@ -307,11 +338,196 @@ namespace Limelight.Views
             e.Handled = true;
         }
 
-        private void OpenHotkeySettings_Click(
+        private void CaptureX19Hotkey_Click(
             object sender,
             RoutedEventArgs e)
         {
-            OpenHotkeySettingsRequested?.Invoke();
+            _isCapturingX19Hotkey = true;
+
+            XInputControllerService.TryReadCombinedButtons(
+                out _previousControllerButtons);
+
+            _controllerCaptureTimer.Start();
+
+            CaptureX19HotkeyButton.Content =
+                "PRESS INPUT";
+
+            GroupStatusTitleText.Text =
+                "LISTENING FOR INPUT";
+
+            GroupStatusDetailText.Text =
+                "Press a keyboard combination or controller button now. Press Escape to keep the current binding.";
+
+            GroupStatusTitleText.Foreground =
+                (Brush)FindResource("PinkBrush");
+
+            CaptureX19HotkeyButton.Focus();
+            Keyboard.Focus(
+                CaptureX19HotkeyButton);
+        }
+
+        private void CaptureX19Hotkey_PreviewKeyDown(
+            object sender,
+            KeyEventArgs e)
+        {
+            if (!_isCapturingX19Hotkey)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            Key pressedKey =
+                e.Key == Key.System
+                    ? e.SystemKey
+                    : e.Key;
+
+            if (pressedKey == Key.Escape)
+            {
+                FinishHotkeyCapture(
+                    _savedHotkeyGesture,
+                    saveChange: false);
+
+                return;
+            }
+
+            if (IsModifierKey(pressedKey) ||
+                pressedKey == Key.None)
+            {
+                GroupStatusDetailText.Text =
+                    "Add a letter, number, or function key to the combination.";
+
+                return;
+            }
+
+            ModifierKeys modifiers =
+                Keyboard.Modifiers &
+                (ModifierKeys.Control |
+                 ModifierKeys.Alt |
+                 ModifierKeys.Shift);
+
+            FinishHotkeyCapture(
+                CreateGestureText(
+                    pressedKey,
+                    modifiers),
+                saveChange: true);
+        }
+
+        private void FinishHotkeyCapture(
+            string gesture,
+            bool saveChange)
+        {
+            _isCapturingX19Hotkey = false;
+            _controllerCaptureTimer.Stop();
+
+            CaptureX19HotkeyButton.Content =
+                "CHANGE HOTKEY";
+
+            if (saveChange)
+            {
+                _savedHotkeyGesture =
+                    gesture;
+
+                HotkeyText.Text =
+                    gesture.ToUpperInvariant();
+
+                X19HotkeyChanged?.Invoke(
+                    gesture);
+            }
+
+            RefreshGroupSummary();
+        }
+
+        private void ControllerCaptureTimer_Tick(
+            object? sender,
+            EventArgs e)
+        {
+            if (!_isCapturingX19Hotkey ||
+                !XInputControllerService.TryReadCombinedButtons(
+                    out XInputButton currentButtons))
+            {
+                return;
+            }
+
+            XInputButton newlyPressedButtons =
+                currentButtons &
+                ~_previousControllerButtons;
+
+            _previousControllerButtons =
+                currentButtons;
+
+            if (!XInputControllerService.TryCreateGesture(
+                    newlyPressedButtons,
+                    out string gesture))
+            {
+                return;
+            }
+
+            // I capture the button edge so a held controller input cannot
+            // register repeatedly while the assignment card is listening.
+            FinishHotkeyCapture(
+                gesture,
+                saveChange: true);
+        }
+
+        private static bool IsModifierKey(
+            Key key)
+        {
+            return key is
+                Key.LeftCtrl or
+                Key.RightCtrl or
+                Key.LeftAlt or
+                Key.RightAlt or
+                Key.LeftShift or
+                Key.RightShift or
+                Key.LWin or
+                Key.RWin;
+        }
+
+        private static string CreateGestureText(
+            Key key,
+            ModifierKeys modifiers)
+        {
+            List<string> parts =
+                new();
+
+            if (modifiers.HasFlag(
+                    ModifierKeys.Control))
+            {
+                parts.Add("CTRL");
+            }
+
+            if (modifiers.HasFlag(
+                    ModifierKeys.Alt))
+            {
+                parts.Add("ALT");
+            }
+
+            if (modifiers.HasFlag(
+                    ModifierKeys.Shift))
+            {
+                parts.Add("SHIFT");
+            }
+
+            parts.Add(
+                key switch
+                {
+                    Key.D0 => "0",
+                    Key.D1 => "1",
+                    Key.D2 => "2",
+                    Key.D3 => "3",
+                    Key.D4 => "4",
+                    Key.D5 => "5",
+                    Key.D6 => "6",
+                    Key.D7 => "7",
+                    Key.D8 => "8",
+                    Key.D9 => "9",
+                    _ => key.ToString().ToUpperInvariant()
+                });
+
+            return string.Join(
+                "+",
+                parts);
         }
 
         private void SaveGroupSelection()

@@ -330,11 +330,13 @@
                                        Foreground="{StaticResource MutedTextBrush}"/>
                         </StackPanel>
 
-                        <Button Grid.Column="2"
+                        <Button x:Name="CaptureX19HotkeyButton"
+                                Grid.Column="2"
                                 Content="CHANGE HOTKEY"
                                 Margin="20,0,0,0"
                                 VerticalAlignment="Center"
-                                Click="OpenHotkeySettings_Click"
+                                Click="CaptureX19Hotkey_Click"
+                                PreviewKeyDown="CaptureX19Hotkey_PreviewKeyDown"
                                 Style="{StaticResource SecondaryButton}"/>
                     </Grid>
                 </Border>
