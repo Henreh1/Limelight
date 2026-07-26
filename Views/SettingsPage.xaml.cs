@@ -13,6 +13,7 @@ namespace Limelight.Views
         private bool _isUpdatingResourceOverlay;
 
         public event Action? RepairRequested;
+        public event Action? CreatePrivateTestReportRequested;
         public event Action? ExportDiagnosticsRequested;
         public event Action? ChangeGameFolderRequested;
         public event Action? NativeTestRequested;
@@ -185,6 +186,31 @@ namespace Limelight.Views
                 NativeTestButton.IsEnabled
                     ? 1
                     : 0.45;
+        }
+
+        public void ShowCompatibility(
+            LocalCompatibilityResult compatibility)
+        {
+            CompatibilityVersionText.Text =
+                $"GAME {compatibility.DetectedGameLabel}  |  " +
+                $"LIMELIGHT {compatibility.LimelightVersion}  |  " +
+                $"NATIVE BRIDGE {compatibility.NativeBridgeVersion}  |  " +
+                $"UE4SS {compatibility.Ue4ssVersion}";
+
+            CompatibilityStatusText.Text =
+                compatibility.Status;
+
+            CompatibilityStatusText.Foreground =
+                StatusBrush(
+                    compatibility.IsLiveLoaderCompatible);
+
+            CompatibilityDetailText.Text =
+                compatibility.Detail;
+        }
+
+        public void ShowSupportCategory()
+        {
+            SettingsCategoryTabs.SelectedIndex = 3;
         }
 
         public void ShowNexusStatus(
@@ -369,6 +395,13 @@ namespace Limelight.Views
             RoutedEventArgs e)
         {
             ExportDiagnosticsRequested?.Invoke();
+        }
+
+        private void CreatePrivateTestReportButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            CreatePrivateTestReportRequested?.Invoke();
         }
 
         private void NexusConnectButton_Click(

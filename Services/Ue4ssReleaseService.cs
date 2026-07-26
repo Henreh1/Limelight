@@ -23,6 +23,12 @@ namespace Limelight.Services
 
     public sealed class Ue4ssReleaseService
     {
+        public const string CompatibleVersion =
+            "3.0.1-1009";
+
+        public const string CompatibleCommit =
+            "c2ac2464";
+
         public const string CompatiblePackageName =
             "UE4SS_v3.0.1-1009-gc2ac2464.zip";
 

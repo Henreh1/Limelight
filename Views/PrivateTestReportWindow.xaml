@@ -1,0 +1,395 @@
+<Window x:Class="Limelight.Views.PrivateTestReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="900"
+        Height="820"
+        MinWidth="760"
+        MinHeight="680"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Bahnschrift, Segoe UI">
+
+    <Window.Resources>
+        <Style x:Key="ReportFieldLabelStyle"
+               TargetType="TextBlock">
+            <Setter Property="Margin" Value="0,0,0,7"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+        </Style>
+
+        <Style x:Key="ReportTextBoxStyle"
+               TargetType="TextBox">
+            <Setter Property="Padding" Value="13,10"/>
+            <Setter Property="Background" Value="#0D1020"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource CyanBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource CyanBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="ReportComboItemStyle"
+               TargetType="ComboBoxItem">
+            <Setter Property="Padding" Value="12,9"/>
+            <Setter Property="Background" Value="#1A1E35"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="ItemBackground"
+                                Padding="{TemplateBinding Padding}"
+                                Background="{TemplateBinding Background}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#2A2544"/>
+                                <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBackground" Property="Background" Value="#25203B"/>
+                                <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ReportComboBoxStyle"
+               TargetType="ComboBox">
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Background" Value="#1A1E35"/>
+            <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource ReportComboItemStyle}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Background="Transparent"
+                                          BorderThickness="0"
+                                          Focusable="False"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Surface"
+                                                Background="#1A1E35"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="7">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="34"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Path Grid.Column="1"
+                                                      Width="8"
+                                                      Height="5"
+                                                      Data="M 0 0 L 4 4 L 8 0"
+                                                      Stroke="{StaticResource PinkBrush}"
+                                                      StrokeThickness="1.5"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Surface" Property="Background" Value="#25203B"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <ContentPresenter Margin="13,0,36,0"
+                                              HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              TextElement.Foreground="{StaticResource PinkBrush}"/>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade">
+                                <Border MinWidth="280"
+                                        Margin="0,4,0,0"
+                                        Padding="1"
+                                        Background="#1A1E35"
+                                        BorderBrush="{StaticResource PinkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="7">
+                                    <ScrollViewer MaxHeight="230">
+                                        <StackPanel IsItemsHost="True"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ReportCloseButtonStyle"
+               TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+                    <Setter Property="Foreground" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{StaticResource BackgroundBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="13">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="42"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border Background="#0C0E1D"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="13,13,0,0"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                <Grid>
+                    <StackPanel Margin="18,0,0,0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="&#x25C6;"
+                                   Margin="0,0,10,0"
+                                   FontSize="10"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                        <TextBlock Text="PRIVATE TEST REPORT"
+                                   FontSize="11"
+                                   FontWeight="Bold"/>
+                    </StackPanel>
+
+                    <Button HorizontalAlignment="Right"
+                            Style="{StaticResource ReportCloseButtonStyle}"
+                            Click="Cancel_Click"
+                            ToolTip="Close">
+                        <Path Width="11"
+                              Height="11"
+                              Data="M 0.8,0.8 L 10.2,10.2 M 10.2,0.8 L 0.8,10.2"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeThickness="1.4"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto">
+                <ScrollViewer.Resources>
+                    <Style TargetType="ScrollBar"
+                           BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+                </ScrollViewer.Resources>
+
+                <StackPanel Margin="30,26,30,24">
+                    <TextBlock Text="TELL US WHAT MISSED ITS CUE"
+                               FontSize="25"
+                               FontWeight="Bold"/>
+                    <TextBlock Text="Limelight will add private diagnostics automatically. Add only the details and files that help reproduce the problem."
+                               Margin="0,7,0,22"
+                               FontSize="12"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <TextBlock Text="ISSUE TITLE"
+                               Style="{StaticResource ReportFieldLabelStyle}"/>
+                    <TextBox x:Name="SummaryBox"
+                             MaxLength="140"
+                             Style="{StaticResource ReportTextBoxStyle}"/>
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Text="AREA"
+                                       Style="{StaticResource ReportFieldLabelStyle}"/>
+                            <ComboBox x:Name="AreaBox"
+                                      SelectedIndex="0"
+                                      Style="{StaticResource ReportComboBoxStyle}">
+                                <ComboBoxItem Content="LIVE LOADER"/>
+                                <ComboBoxItem Content="X19 LLOADER"/>
+                                <ComboBoxItem Content="MOD IMPORT OR LIBRARY"/>
+                                <ComboBoxItem Content="NEXUS OR DOWNLOADS"/>
+                                <ComboBoxItem Content="STARTUP OR INSTALLATION"/>
+                                <ComboBoxItem Content="USER INTERFACE"/>
+                                <ComboBoxItem Content="OTHER"/>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="OUTCOME"
+                                       Style="{StaticResource ReportFieldLabelStyle}"/>
+                            <ComboBox x:Name="OutcomeBox"
+                                      SelectedIndex="0"
+                                      Style="{StaticResource ReportComboBoxStyle}">
+                                <ComboBoxItem Content="NO CRASH"/>
+                                <ComboBoxItem Content="GAME CREATED A DUMP BUT CONTINUED"/>
+                                <ComboBoxItem Content="GAME CLOSED"/>
+                                <ComboBoxItem Content="LIMELIGHT CLOSED"/>
+                                <ComboBoxItem Content="FREEZE OR HANG"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock Text="STEPS TO REPRODUCE"
+                               Margin="0,16,0,7"
+                               Style="{StaticResource ReportFieldLabelStyle}"/>
+                    <TextBox x:Name="StepsBox"
+                             Height="82"
+                             AcceptsReturn="True"
+                             Style="{StaticResource ReportTextBoxStyle}"/>
+
+                    <Grid Margin="0,16,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel>
+                            <TextBlock Text="EXPECTED RESULT"
+                                       Style="{StaticResource ReportFieldLabelStyle}"/>
+                            <TextBox x:Name="ExpectedBox"
+                                     Height="92"
+                                     AcceptsReturn="True"
+                                     Style="{StaticResource ReportTextBoxStyle}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="WHAT ACTUALLY HAPPENED"
+                                       Style="{StaticResource ReportFieldLabelStyle}"/>
+                            <TextBox x:Name="ActualBox"
+                                     Height="92"
+                                     AcceptsReturn="True"
+                                     Style="{StaticResource ReportTextBoxStyle}"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Margin="0,18,0,0"
+                            Padding="16"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel>
+                                <TextBlock Text="OPTIONAL EVIDENCE"
+                                           FontSize="11"
+                                           FontWeight="Bold"/>
+                                <TextBlock x:Name="AttachmentSummaryText"
+                                           Text="No screenshots, logs, or crash dumps selected."
+                                           Margin="0,6,18,0"
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+
+                            <Button Grid.Column="1"
+                                    Content="ADD FILES"
+                                    Click="AddFiles_Click"
+                                    Style="{StaticResource SecondaryButton}"/>
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Text="Binary screenshots and crash dumps may contain technical or personal data. They are included only when you select them."
+                               Margin="2,8,0,0"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <TextBlock x:Name="ValidationText"
+                               Margin="0,15,0,0"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource PinkBrush}"
+                               Visibility="Collapsed"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="2"
+                    Padding="22,16"
+                    Background="#0C0E1D"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,13,13">
+                <Grid>
+                    <TextBlock Text="USER NAMES, SAVED PATHS, AND THE NEXUS KEY ARE REMOVED FROM THE GENERATED TEXT REPORT."
+                               VerticalAlignment="Center"
+                               FontSize="9"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <StackPanel HorizontalAlignment="Right"
+                                Orientation="Horizontal">
+                        <Button Content="CANCEL"
+                                Click="Cancel_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+                        <Button Content="CREATE REPORT ZIP"
+                                Margin="10,0,0,0"
+                                Click="Create_Click"
+                                Style="{StaticResource PrimaryButton}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

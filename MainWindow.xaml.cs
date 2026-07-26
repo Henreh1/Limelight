@@ -73,7 +73,9 @@ namespace Limelight
         private readonly LiveModStagingService _liveModStagingService;
         private readonly LiveSessionService _liveSessionService;
         private readonly NativeBridgeInstallerService _nativeBridgeInstallerService;
+        private readonly CompatibilityService _compatibilityService;
         private readonly DiagnosticReportService _diagnosticReportService;
+        private readonly PrivateTestReportService _privateTestReportService;
         private readonly NexusApiService _nexusApiService;
         private readonly DownloadHistoryService _downloadHistoryService;
         private readonly NexusCredentialService _nexusCredentialService;
@@ -165,6 +167,13 @@ namespace Limelight
             _nativeBridgeInstallerService =
                 new NativeBridgeInstallerService();
 
+            _compatibilityService =
+                new CompatibilityService(
+                    _ue4ssDetectionService,
+                    _ue4ssConfigurationService,
+                    _liveLoaderBridgeService,
+                    _nativeBridgeInstallerService);
+
             _liveLoaderCommandService =
                 new LiveLoaderCommandService();
 
@@ -176,6 +185,9 @@ namespace Limelight
 
             _diagnosticReportService =
                 new DiagnosticReportService();
+
+            _privateTestReportService =
+                new PrivateTestReportService();
 
             _nexusApiService =
                 new NexusApiService();
@@ -226,6 +238,9 @@ namespace Limelight
 
             SettingsPageControl.ExportDiagnosticsRequested +=
                 ExportDiagnosticsRequested;
+
+            SettingsPageControl.CreatePrivateTestReportRequested +=
+                CreatePrivateTestReportRequested;
 
             SettingsPageControl.ChangeGameFolderRequested +=
                 ChangeGameFolderRequested;
@@ -305,6 +320,8 @@ namespace Limelight
             {
                 string gameDirectory =
                     _gameDirectory;
+
+                ClearLiveLoaderSessionBypass();
 
                 // A previous crash can leave staged containers behind. They
                 // are safe to remove once Windows confirms the game is closed.
@@ -698,6 +715,8 @@ namespace Limelight
             if (gameJustStopped)
             {
                 _globalHotkeyService.Unregister();
+                ClearLiveLoaderSessionBypass();
+
                 _selectedLoaderMode =
                     LoaderLaunchMode.Normal;
 
@@ -721,11 +740,15 @@ namespace Limelight
 
             if (gameJustStarted)
             {
-                _liveSessionService.EnsureSession(
-                    _gameDirectory!);
+                if (_selectedLoaderMode !=
+                    LoaderLaunchMode.Disabled)
+                {
+                    _liveSessionService.EnsureSession(
+                        _gameDirectory!);
 
-                await InitialiseLiveLoaderForRunningGameAsync(
-                    waitForGameProcess: false);
+                    await InitialiseLiveLoaderForRunningGameAsync(
+                        waitForGameProcess: false);
+                }
             }
 
             RefreshSettingsPage();
@@ -744,6 +767,24 @@ namespace Limelight
             _gameStatusTimer.Stop();
             _globalHotkeyService.Dispose();
             _discordPresenceService.Dispose();
+
+            // The bridge has already made its startup decision by this point.
+            // Clearing the marker here keeps a later direct game launch normal.
+            ClearLiveLoaderSessionBypass();
+        }
+
+        private void ClearLiveLoaderSessionBypass()
+        {
+            try
+            {
+                _liveLoaderBridgeService.SetSessionBypass(
+                    isDisabled: false);
+            }
+            catch
+            {
+                // The marker expires by itself, so cleanup must never prevent
+                // Limelight or the game from closing normally.
+            }
         }
 
         private async Task InitialiseLiveLoaderForRunningGameAsync(
@@ -751,6 +792,8 @@ namespace Limelight
         {
             if (_isLiveLoaderInitializationRunning ||
                 _hasInitialisedCurrentGameSession ||
+                _selectedLoaderMode ==
+                    LoaderLaunchMode.Disabled ||
                 string.IsNullOrWhiteSpace(_gameDirectory))
             {
                 return;
@@ -1044,6 +1087,18 @@ namespace Limelight
                     (Brush)FindResource("PinkBrush");
             }
 
+            if (isGameRunning &&
+                _selectedLoaderMode ==
+                    LoaderLaunchMode.Disabled)
+            {
+                SetLiveLoaderDisplay(
+                    "DISABLED",
+                    "This session is using the deployed mod without live switching, loader scans, or X19 controls.",
+                    isHealthy: true);
+
+                return;
+            }
+
             Ue4ssDetectionResult loader =
                 _ue4ssDetectionService.Detect(
                     gameDirectory);
@@ -1229,6 +1284,19 @@ namespace Limelight
 
             if (string.IsNullOrWhiteSpace(gameDirectory))
             {
+                return;
+            }
+
+            LocalCompatibilityResult compatibility =
+                _compatibilityService.Check(
+                    gameDirectory);
+
+            if (!compatibility.GameBuildDetected ||
+                !compatibility.GameBuildCompatible)
+            {
+                // I leave ordinary mod management alone on an unknown game
+                // build. Only the version-sensitive Live Loader is held back.
+                _hasHandledLiveLoaderPrompt = true;
                 return;
             }
 
@@ -2160,6 +2228,19 @@ namespace Limelight
             bool isGameRunning =
                 _gameProcessService.IsGameRunning(
                     gameDirectory);
+
+            if (isGameRunning &&
+                _selectedLoaderMode ==
+                    LoaderLaunchMode.Disabled)
+            {
+                ShowNotification(
+                    "LIVE LOADER DISABLED",
+                    "This game session was launched without live switching. Close Dead as Disco before changing the deployed mod.",
+                    isError: true);
+
+                _isX19SwitchRequest = false;
+                return;
+            }
 
             bool useX19Pulse =
                 _isX19SwitchRequest &&
@@ -3927,11 +4008,22 @@ namespace Limelight
                 session,
                 stagingSnapshot);
 
+            ShowSettingsCompatibility(
+                gameDirectory);
+
             SettingsPageControl.ShowDiscordPresence(
                 _settings.DiscordRichPresenceEnabled);
 
             SettingsPageControl.ShowResourceOverlay(
                 _settings.ResourceOverlayEnabled);
+        }
+
+        private void ShowSettingsCompatibility(
+            string? gameDirectory)
+        {
+            SettingsPageControl.ShowCompatibility(
+                _compatibilityService.Check(
+                    gameDirectory));
         }
 
         private void RefreshDiscordPresence(
@@ -3970,9 +4062,15 @@ namespace Limelight
                 };
 
             string loaderMode =
-                _selectedLoaderMode == LoaderLaunchMode.X19
-                    ? "X19 LLoader"
-                    : "Live Loader";
+                _selectedLoaderMode switch
+                {
+                    LoaderLaunchMode.X19 =>
+                        "X19 LLoader",
+                    LoaderLaunchMode.Disabled =>
+                        "No Live Loader",
+                    _ =>
+                        "Live Loader"
+                };
 
             _discordPresenceService.Update(
                 isGameRunning,
@@ -4006,6 +4104,23 @@ namespace Limelight
                     "Game is running",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
+
+                return;
+            }
+
+            LocalCompatibilityResult compatibility =
+                _compatibilityService.Check(
+                    gameDirectory);
+
+            if (!compatibility.GameBuildDetected ||
+                !compatibility.GameBuildCompatible)
+            {
+                MessageBox.Show(
+                    compatibility.Detail +
+                    "\n\nLimelight will not install version-sensitive Live Loader files into this game build.",
+                    "Unsupported game build",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
 
                 return;
             }
@@ -4090,6 +4205,74 @@ namespace Limelight
             }
         }
 
+        private async void CreatePrivateTestReportRequested()
+        {
+            var reportWindow =
+                new PrivateTestReportWindow
+                {
+                    Owner = this
+                };
+
+            if (reportWindow.ShowDialog() != true ||
+                reportWindow.ReportRequest is null)
+            {
+                return;
+            }
+
+            var fileDialog =
+                new SaveFileDialog
+                {
+                    Title = "Save Limelight private test report",
+                    Filter = "ZIP archives (*.zip)|*.zip",
+                    FileName =
+                        $"Limelight-Test-Report-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+                    AddExtension = true,
+                    DefaultExt = ".zip"
+                };
+
+            if (fileDialog.ShowDialog(this) != true)
+            {
+                return;
+            }
+
+            try
+            {
+                string automaticDiagnostics =
+                    await CreateSanitizedDiagnosticReportAsync();
+
+                string loaderMode =
+                    _selectedLoaderMode switch
+                    {
+                        LoaderLaunchMode.X19 => "X19 LLoader",
+                        LoaderLaunchMode.Disabled => "No Live Loader",
+                        _ => "Live Loader"
+                    };
+
+                await _privateTestReportService.CreateArchiveAsync(
+                    fileDialog.FileName,
+                    reportWindow.ReportRequest,
+                    automaticDiagnostics,
+                    loaderMode,
+                    _gameDirectory,
+                    _nexusApiKey);
+
+                MessageBox.Show(
+                    "The private test report is ready to send. Limelight removed saved paths and private account values from its generated text.",
+                    "Test report created",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(
+                    "Limelight could not create the private test report.\n\n" +
+                    exception.Message,
+                    "Report failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+        }
+
         private async void ExportDiagnosticsRequested()
         {
             var fileDialog =
@@ -4110,36 +4293,8 @@ namespace Limelight
 
             try
             {
-                string? gameDirectory =
-                    _gameDirectory;
-
-                bool isGameRunning =
-                    !string.IsNullOrWhiteSpace(gameDirectory) &&
-                    _gameProcessService.IsGameRunning(
-                        gameDirectory);
-
-                Ue4ssDetectionResult loader =
-                    _ue4ssDetectionService.Detect(
-                        gameDirectory);
-
-                LiveSessionState session =
-                    _liveSessionService.Load();
-
-                LiveSessionCleanupResult stagingSnapshot =
-                    string.IsNullOrWhiteSpace(gameDirectory)
-                        ? new LiveSessionCleanupResult()
-                        : _liveSessionService.GetStagingSnapshot(
-                            gameDirectory);
-
                 string report =
-                    await Task.Run(() =>
-                        _diagnosticReportService.CreateReport(
-                            _settings,
-                            session,
-                            gameDirectory,
-                            isGameRunning,
-                            loader,
-                            stagingSnapshot));
+                    await CreateSanitizedDiagnosticReportAsync();
 
                 await File.WriteAllTextAsync(
                     fileDialog.FileName,
@@ -4160,6 +4315,41 @@ namespace Limelight
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+        }
+
+        private async Task<string> CreateSanitizedDiagnosticReportAsync()
+        {
+            string? gameDirectory =
+                _gameDirectory;
+
+            bool isGameRunning =
+                !string.IsNullOrWhiteSpace(gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    gameDirectory);
+
+            Ue4ssDetectionResult loader =
+                _ue4ssDetectionService.Detect(
+                    gameDirectory);
+
+            LiveSessionState session =
+                _liveSessionService.Load();
+
+            LiveSessionCleanupResult stagingSnapshot =
+                string.IsNullOrWhiteSpace(gameDirectory)
+                    ? new LiveSessionCleanupResult()
+                    : _liveSessionService.GetStagingSnapshot(
+                        gameDirectory);
+
+            return await Task.Run(() =>
+                _diagnosticReportService.CreateReport(
+                    _settings,
+                    session,
+                    gameDirectory,
+                    isGameRunning,
+                    loader,
+                    _compatibilityService.Check(
+                        gameDirectory),
+                    stagingSnapshot));
         }
 
         private void ShowBrowseNexus_Click(
@@ -5031,10 +5221,15 @@ namespace Limelight
             List<InstalledMod> x19Rotation =
                 GetX19Rotation();
 
+            LocalCompatibilityResult compatibility =
+                _compatibilityService.Check(
+                    gameDirectory);
+
             LoaderModeSelectionWindow modeWindow =
                 new LoaderModeSelectionWindow(
                     x19Rotation.Count,
-                    _settings.X19HotkeyGesture)
+                    _settings.X19HotkeyGesture,
+                    compatibility)
                 {
                     Owner = this
                 };
@@ -5050,6 +5245,12 @@ namespace Limelight
                     ShowLiveLoadersPage();
                 }
 
+                if (modeWindow.OpenSupportRequested)
+                {
+                    ShowSettingsPage();
+                    SettingsPageControl.ShowSupportCategory();
+                }
+
                 return;
             }
 
@@ -5060,35 +5261,55 @@ namespace Limelight
 
             try
             {
-                Ue4ssDetectionResult loader =
-                    _ue4ssDetectionService.Detect(
-                        gameDirectory);
+                _liveLoaderBridgeService.SetSessionBypass(
+                    _selectedLoaderMode ==
+                        LoaderLaunchMode.Disabled);
 
-                if (!loader.IsInstalled ||
-                    !_ue4ssConfigurationService.IsRuntimeCompatible(loader) ||
-                    !_liveLoaderBridgeService.HasBridgeFiles(loader))
+                if (_selectedLoaderMode !=
+                    LoaderLaunchMode.Disabled)
                 {
-                    throw new InvalidOperationException(
-                        "The Live Loader needs to be repaired before this launch. " +
-                        "Open Settings, choose Support, then select Repair Live Loader.");
-                }
+                    // Recheck immediately before touching the game directory.
+                    // Steam may have finished an update while the selector was open.
+                    compatibility =
+                        _compatibilityService.Check(
+                            gameDirectory);
 
-                try
-                {
-                    // Repair the managed settings, signatures and enable line
-                    // before Steam starts. A failed repair must not turn into a
-                    // delayed loader timeout after the user reaches the game.
-                    _ue4ssConfigurationService.Apply(loader);
-                    _liveLoaderBridgeService.EnsureInstalled(loader);
-                    _nativeBridgeInstallerService.EnsureInstalled(
-                        loader);
-                }
-                catch (Exception exception)
-                {
-                    throw new InvalidOperationException(
-                        "Limelight could not prepare the Live Loader. " +
-                        exception.Message,
-                        exception);
+                    if (!compatibility.IsLiveLoaderCompatible)
+                    {
+                        throw new InvalidOperationException(
+                            compatibility.Detail);
+                    }
+
+                    Ue4ssDetectionResult loader =
+                        _ue4ssDetectionService.Detect(
+                            gameDirectory);
+
+                    if (!loader.IsInstalled ||
+                        !_ue4ssConfigurationService.IsRuntimeCompatible(loader) ||
+                        !_liveLoaderBridgeService.HasBridgeFiles(loader))
+                    {
+                        throw new InvalidOperationException(
+                            "The Live Loader needs to be repaired before this launch. " +
+                            "Open Settings, choose Support, then select Repair Live Loader.");
+                    }
+
+                    try
+                    {
+                        // Repair the managed settings, signatures and enable line
+                        // before Steam starts. A failed repair must not turn into a
+                        // delayed loader timeout after the user reaches the game.
+                        _ue4ssConfigurationService.Apply(loader);
+                        _liveLoaderBridgeService.EnsureInstalled(loader);
+                        _nativeBridgeInstallerService.EnsureInstalled(
+                            loader);
+                    }
+                    catch (Exception exception)
+                    {
+                        throw new InvalidOperationException(
+                            "Limelight could not prepare the Live Loader. " +
+                            exception.Message,
+                            exception);
+                    }
                 }
 
                 ProcessStartInfo startInfo =
@@ -5100,29 +5321,37 @@ namespace Limelight
         UseShellExecute = true
     };
 
-                // A fresh game launch must produce a fresh heartbeat before the dashboard
-                // is allowed to report the bridge as online.
-                _liveLoaderBridgeService.ClearHeartbeat();
+                if (_selectedLoaderMode !=
+                    LoaderLaunchMode.Disabled)
+                {
+                    // A fresh game launch must produce a fresh heartbeat before the dashboard
+                    // is allowed to report the bridge as online.
+                    _liveLoaderBridgeService.ClearHeartbeat();
+                }
 
                 // Ask Steam to launch its registered Dead as Disco installation.
                 Process.Start(startInfo);
 
-                // Keep Limelight locked while the runtime comes online and the
-                // active mod is mounted. This removes the tempting-but-unsafe
-                // window where a user can switch mods during LoadMap.
-                await InitialiseLiveLoaderForRunningGameAsync(
-                    waitForGameProcess: true);
-
-                // The process timer may notice the game a fraction earlier than
-                // this launch path. I wait for that shared setup to finish before
-                // deciding whether X19 can register its hotkey.
-                DateTime initialisationDeadline =
-                    DateTime.UtcNow.AddMinutes(6);
-
-                while (_isLiveLoaderInitializationRunning &&
-                       DateTime.UtcNow < initialisationDeadline)
+                if (_selectedLoaderMode !=
+                    LoaderLaunchMode.Disabled)
                 {
-                    await Task.Delay(100);
+                    // Keep Limelight locked while the runtime comes online and the
+                    // active mod is mounted. This removes the tempting-but-unsafe
+                    // window where a user can switch mods during LoadMap.
+                    await InitialiseLiveLoaderForRunningGameAsync(
+                        waitForGameProcess: true);
+
+                    // The process timer may notice the game a fraction earlier than
+                    // this launch path. I wait for that shared setup to finish before
+                    // deciding whether X19 can register its hotkey.
+                    DateTime initialisationDeadline =
+                        DateTime.UtcNow.AddMinutes(6);
+
+                    while (_isLiveLoaderInitializationRunning &&
+                           DateTime.UtcNow < initialisationDeadline)
+                    {
+                        await Task.Delay(100);
+                    }
                 }
 
                 if (_selectedLoaderMode ==
@@ -5149,6 +5378,9 @@ namespace Limelight
             catch (Exception exception)
             {
                 _globalHotkeyService.Unregister();
+                _liveLoaderBridgeService.SetSessionBypass(
+                    isDisabled: false);
+
                 _selectedLoaderMode =
                     LoaderLaunchMode.Normal;
 

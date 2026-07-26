@@ -22,6 +22,27 @@ namespace Limelight.Services
     local runtimeDirectory =
         localAppData .. "\\Limelight\\Runtime"
 
+    local sessionBypassPath =
+        runtimeDirectory .. "\\live-loader-disabled.txt"
+
+    local sessionBypassFile =
+        io.open(sessionBypassPath, "r")
+
+    if sessionBypassFile ~= nil then
+        local sessionBypassExpiry =
+            tonumber(sessionBypassFile:read("*a"))
+
+        sessionBypassFile:close()
+
+        if sessionBypassExpiry ~= nil and
+           sessionBypassExpiry >= os.time() then
+            print("[LimelightBridge] Live Loader disabled for this session\n")
+            return
+        end
+
+        os.remove(sessionBypassPath)
+    end
+
     local heartbeatPath =
         runtimeDirectory .. "\\heartbeat.txt"
 
@@ -1100,6 +1121,40 @@ namespace Limelight.Services
             Path.Combine(
                 RuntimeDirectory,
                 "heartbeat.txt");
+
+        public string SessionBypassPath =>
+            Path.Combine(
+                RuntimeDirectory,
+                "live-loader-disabled.txt");
+
+        public void SetSessionBypass(
+            bool isDisabled)
+        {
+            if (!isDisabled)
+            {
+                if (File.Exists(SessionBypassPath))
+                {
+                    File.Delete(SessionBypassPath);
+                }
+
+                return;
+            }
+
+            Directory.CreateDirectory(
+                RuntimeDirectory);
+
+            // I give the marker an expiry so an interrupted Limelight process
+            // can never leave future game launches without the bridge.
+            long expiry =
+                DateTimeOffset.UtcNow
+                    .AddMinutes(10)
+                    .ToUnixTimeSeconds();
+
+            File.WriteAllText(
+                SessionBypassPath,
+                expiry.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture));
+        }
 
         public void EnsureInstalled(
             Ue4ssDetectionResult installation)

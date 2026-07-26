@@ -853,6 +853,51 @@
 
                     <StackPanel Margin="0,0,12,30">
                         <Border Style="{StaticResource SettingsCardStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel>
+                                    <TextBlock Text="LOCAL COMPATIBILITY"
+                                               FontSize="12"
+                                               FontWeight="Bold"/>
+
+                                    <TextBlock x:Name="CompatibilityVersionText"
+                                               Text="LIMELIGHT | NATIVE BRIDGE | UE4SS"
+                                               Margin="0,10,0,0"
+                                               FontSize="13"
+                                               FontWeight="Bold"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                                    <TextBlock x:Name="CompatibilityDetailText"
+                                               Text="Connect Dead as Disco to check the managed loader files."
+                                               Margin="0,8,0,0"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+                                </StackPanel>
+
+                                <Border Grid.Column="1"
+                                        Margin="24,0,0,0"
+                                        Padding="14,8"
+                                        VerticalAlignment="Top"
+                                        Background="{StaticResource RaisedPanelBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                    <TextBlock x:Name="CompatibilityStatusText"
+                                               Text="NOT CHECKED"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource PinkBrush}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <Border Style="{StaticResource SettingsCardStyle}">
                             <StackPanel>
                                 <TextBlock Text="RECOVERY TOOLS"
                                            FontSize="12"
@@ -864,24 +909,29 @@
                                            TextWrapping="Wrap"
                                            Foreground="{StaticResource MutedTextBrush}"/>
 
-                                <StackPanel Margin="0,18,0,0"
-                                            Orientation="Horizontal">
+                                <WrapPanel Margin="0,18,0,0">
+                                    <Button Content="CREATE TEST REPORT"
+                                            Margin="0,0,12,10"
+                                            Click="CreatePrivateTestReportButton_Click"
+                                            Style="{StaticResource PrimaryButton}"/>
+
                                     <Button x:Name="RepairButton"
                                             Content="REPAIR LIVE LOADER"
+                                            Margin="0,0,12,10"
                                             Click="RepairButton_Click"
                                             Style="{StaticResource PrimaryButton}"/>
 
                                     <Button Content="EXPORT DIAGNOSTIC REPORT"
-                                            Margin="12,0,0,0"
+                                            Margin="0,0,12,10"
                                             Click="ExportButton_Click"
                                             Style="{StaticResource SecondaryButton}"/>
 
                                     <Button x:Name="NativeTestButton"
                                             Content="NATIVE TEST"
-                                            Margin="12,0,0,0"
+                                            Margin="0,0,0,10"
                                             Click="NativeTestButton_Click"
                                             Style="{StaticResource SecondaryButton}"/>
-                                </StackPanel>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>

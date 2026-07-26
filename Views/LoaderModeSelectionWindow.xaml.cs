@@ -7,19 +7,26 @@ namespace Limelight.Views
     public partial class LoaderModeSelectionWindow : Window
     {
         private readonly bool _hasX19Group;
+        private readonly bool _liveLoaderAvailable;
 
         public LoaderLaunchMode? SelectedMode { get; private set; }
 
         public bool ConfigureX19Requested { get; private set; }
 
+        public bool OpenSupportRequested { get; private set; }
+
         public LoaderModeSelectionWindow(
             int x19ModCount,
-            string hotkeyGesture)
+            string hotkeyGesture,
+            LocalCompatibilityResult compatibility)
         {
             InitializeComponent();
 
             _hasX19Group =
                 x19ModCount > 0;
+
+            _liveLoaderAvailable =
+                compatibility.IsLiveLoaderCompatible;
 
             X19CountText.Text =
                 x19ModCount == 1
@@ -35,12 +42,41 @@ namespace Limelight.Views
                 _hasX19Group
                     ? "SELECT X19"
                     : "GROUP REQUIRED";
+
+            NormalLoaderButton.IsEnabled =
+                _liveLoaderAvailable;
+
+            X19LoaderButton.IsEnabled =
+                _liveLoaderAvailable;
+
+            NormalLoaderButton.Opacity =
+                _liveLoaderAvailable ? 1 : 0.45;
+
+            X19LoaderButton.Opacity =
+                _liveLoaderAvailable ? 1 : 0.45;
+
+            if (!_liveLoaderAvailable)
+            {
+                CompatibilityPromptText.Text =
+                    compatibility.Detail;
+
+                CompatibilityPrompt.Visibility =
+                    Visibility.Visible;
+            }
         }
 
         private void NormalLoader_Click(
             object sender,
             RoutedEventArgs e)
         {
+            if (!_liveLoaderAvailable)
+            {
+                CompatibilityPrompt.Visibility =
+                    Visibility.Visible;
+
+                return;
+            }
+
             SelectedMode =
                 LoaderLaunchMode.Normal;
 
@@ -51,6 +87,14 @@ namespace Limelight.Views
             object sender,
             RoutedEventArgs e)
         {
+            if (!_liveLoaderAvailable)
+            {
+                CompatibilityPrompt.Visibility =
+                    Visibility.Visible;
+
+                return;
+            }
+
             if (!_hasX19Group)
             {
                 EmptyGroupPrompt.Visibility =
@@ -65,11 +109,29 @@ namespace Limelight.Views
             DialogResult = true;
         }
 
+        private void NoLiveLoader_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            SelectedMode =
+                LoaderLaunchMode.Disabled;
+
+            DialogResult = true;
+        }
+
         private void ConfigureX19_Click(
             object sender,
             RoutedEventArgs e)
         {
             ConfigureX19Requested = true;
+            DialogResult = false;
+        }
+
+        private void OpenSupport_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            OpenSupportRequested = true;
             DialogResult = false;
         }
 

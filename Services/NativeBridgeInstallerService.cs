@@ -17,8 +17,50 @@ namespace Limelight.Services
         private readonly Assembly _assembly =
             typeof(NativeBridgeInstallerService).Assembly;
 
-        public NativeBridgePayloadManifest Manifest =>
-            LoadManifest();
+        public NativeBridgePayloadManifest Manifest
+        {
+            get
+            {
+                NativeBridgePayloadManifest manifest =
+                    LoadManifest();
+
+                ValidateManifest(manifest);
+                return manifest;
+            }
+        }
+
+        public bool IsEmbeddedPayloadCompatible()
+        {
+            try
+            {
+                NativeBridgePayloadManifest manifest =
+                    Manifest;
+
+                using Stream payload =
+                    _assembly.GetManifestResourceStream(
+                        BinaryResourceName) ??
+                    throw new InvalidOperationException(
+                        "The embedded native bridge DLL could not be found.");
+
+                if (payload.Length != manifest.PayloadSize)
+                {
+                    return false;
+                }
+
+                string actualHash =
+                    Convert.ToHexString(
+                        SHA256.HashData(payload));
+
+                return string.Equals(
+                    actualHash,
+                    manifest.PayloadSha256,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         public NativeBridgePayloadManifest EnsureInstalled(
             Ue4ssDetectionResult installation)
@@ -386,9 +428,17 @@ namespace Limelight.Services
                 string.IsNullOrWhiteSpace(
                     manifest.BridgeVersion) ||
                 string.IsNullOrWhiteSpace(
+                    manifest.MinimumLimelightVersion) ||
+                string.IsNullOrWhiteSpace(
+                    manifest.Ue4ssVersion) ||
+                string.IsNullOrWhiteSpace(
+                    manifest.Ue4ssCommit) ||
+                string.IsNullOrWhiteSpace(
                     manifest.TargetModName) ||
                 string.IsNullOrWhiteSpace(
                     manifest.TargetRelativePath) ||
+                string.IsNullOrWhiteSpace(
+                    manifest.PayloadFileName) ||
                 manifest.PayloadSize <= 0 ||
                 manifest.PayloadSha256.Length != 64 ||
                 !manifest.PayloadSha256.All(
@@ -396,6 +446,30 @@ namespace Limelight.Services
             {
                 throw new InvalidOperationException(
                     "The embedded native bridge manifest is incomplete.");
+            }
+
+            if (!TryReadVersion(
+                    manifest.MinimumLimelightVersion,
+                    out Version? minimumLimelightVersion) ||
+                !TryReadVersion(
+                    ReadApplicationVersion(),
+                    out Version? currentLimelightVersion) ||
+                currentLimelightVersion < minimumLimelightVersion)
+            {
+                throw new InvalidOperationException(
+                    "This native bridge requires a newer Limelight build.");
+            }
+
+            if (!string.Equals(
+                    manifest.Ue4ssVersion,
+                    Ue4ssReleaseService.CompatibleVersion,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !manifest.Ue4ssCommit.StartsWith(
+                    Ue4ssReleaseService.CompatibleCommit,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "The native bridge was packaged for a different UE4SS build.");
             }
 
             if (!string.Equals(
@@ -407,6 +481,37 @@ namespace Limelight.Services
                 throw new InvalidOperationException(
                     "The native bridge manifest contains an unsafe mod name.");
             }
+        }
+
+        private static string ReadApplicationVersion()
+        {
+            Assembly assembly =
+                Assembly.GetEntryAssembly() ??
+                typeof(NativeBridgeInstallerService).Assembly;
+
+            return assembly
+                       .GetCustomAttribute<
+                           AssemblyInformationalVersionAttribute>()?
+                       .InformationalVersion ??
+                   assembly
+                       .GetName()
+                       .Version?
+                       .ToString() ??
+                   string.Empty;
+        }
+
+        private static bool TryReadVersion(
+            string value,
+            out Version? version)
+        {
+            string cleanVersion =
+                value.Split('+', 2)[0]
+                    .Split('-', 2)[0]
+                    .Trim();
+
+            return Version.TryParse(
+                cleanVersion,
+                out version);
         }
     }
 }

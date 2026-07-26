@@ -13,15 +13,24 @@ namespace Limelight.Services
             string? gameDirectory,
             bool isGameRunning,
             Ue4ssDetectionResult loader,
+            LocalCompatibilityResult compatibility,
             LiveSessionCleanupResult stagingSnapshot)
         {
             var report =
                 new StringBuilder();
 
-            Version? version =
-                Assembly.GetEntryAssembly()
-                    ?.GetName()
-                    .Version;
+            Assembly? entryAssembly =
+                Assembly.GetEntryAssembly();
+
+            string version =
+                entryAssembly?
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion ??
+                entryAssembly?
+                    .GetName()
+                    .Version?
+                    .ToString() ??
+                "Unknown";
 
             InstalledMod? activeMod =
                 settings.InstalledMods.FirstOrDefault(mod =>
@@ -33,7 +42,7 @@ namespace Limelight.Services
             report.AppendLine("LIMELIGHT DIAGNOSTIC REPORT");
             report.AppendLine("===========================");
             report.AppendLine($"Created (UTC): {DateTimeOffset.UtcNow:O}");
-            report.AppendLine($"Limelight version: {version?.ToString() ?? "Unknown"}");
+            report.AppendLine($"Limelight version: {version}");
             report.AppendLine($"Windows: {Environment.OSVersion}");
             report.AppendLine($".NET: {Environment.Version}");
             report.AppendLine();
@@ -46,11 +55,30 @@ namespace Limelight.Services
             report.AppendLine($"Pending deployment: {!string.IsNullOrWhiteSpace(settings.PendingDeploymentModId)}");
             report.AppendLine();
 
+            report.AppendLine("COMPATIBILITY");
+            report.AppendLine($"Overall status: {compatibility.Status}");
+            report.AppendLine($"Live Loader allowed: {compatibility.IsLiveLoaderCompatible}");
+            report.AppendLine($"Supported Steam build: {compatibility.SupportedSteamBuildId}");
+            report.AppendLine($"Detected Steam build: {ValueOrNone(compatibility.DetectedSteamBuildId)}");
+            report.AppendLine($"Supported game version: {compatibility.SupportedGameVersion}");
+            report.AppendLine($"Detected game version: {ValueOrNone(compatibility.DetectedGameVersion)}");
+            report.AppendLine($"Game build compatible: {compatibility.GameBuildCompatible}");
+            report.AppendLine($"Compatibility detail: {compatibility.Detail}");
+            report.AppendLine();
+
             report.AppendLine("LIVE LOADER");
+            NativeBridgePayloadManifest? bridgeManifest =
+                SafeBridgeManifest();
+
+            report.AppendLine(
+                $"Expected UE4SS: {bridgeManifest?.Ue4ssVersion ?? "Unknown"}");
+            report.AppendLine(
+                $"Expected native bridge: {bridgeManifest?.BridgeVersion ?? "Unknown"}");
             report.AppendLine($"UE4SS installed: {loader.IsInstalled}");
             report.AppendLine($"UE4SS partial install: {loader.IsPartiallyInstalled}");
             report.AppendLine($"Runtime compatible: {SafeRuntimeCompatibility(loader)}");
             report.AppendLine($"Lua bridge installed: {SafeBridgeInstalled(loader)}");
+            report.AppendLine($"Native bridge current: {SafeNativeBridgeCurrent(loader)}");
             report.AppendLine($"Lua bridge online: {SafeBridgeOnline()}");
             report.AppendLine();
 
@@ -83,7 +111,7 @@ namespace Limelight.Services
                 loader.LogPath,
                 gameDirectory);
 
-            return RedactPaths(
+            return SanitizeText(
                 report.ToString(),
                 gameDirectory);
         }
@@ -137,7 +165,7 @@ namespace Limelight.Services
                 foreach (string line in relevantLines)
                 {
                     report.AppendLine(
-                        RedactPaths(
+                        SanitizeText(
                             line,
                             gameDirectory));
                 }
@@ -149,13 +177,17 @@ namespace Limelight.Services
             }
         }
 
-        private static string RedactPaths(
+        public static string SanitizeText(
             string text,
-            string? gameDirectory)
+            string? gameDirectory,
+            params string?[] secrets)
         {
             var replacements =
                 new List<KeyValuePair<string, string>>
                 {
+                    new(
+                        AppContext.BaseDirectory,
+                        "<APPLICATION_DIRECTORY>"),
                     new(
                         Environment.GetFolderPath(
                             Environment.SpecialFolder.LocalApplicationData),
@@ -189,6 +221,25 @@ namespace Limelight.Services
                 }
             }
 
+            if (!string.IsNullOrWhiteSpace(Environment.UserName))
+            {
+                redacted = redacted.Replace(
+                    Environment.UserName,
+                    "<WINDOWS_USER>",
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            foreach (string? secret in secrets)
+            {
+                if (!string.IsNullOrWhiteSpace(secret))
+                {
+                    redacted = redacted.Replace(
+                        secret,
+                        "<PRIVATE_VALUE>",
+                        StringComparison.Ordinal);
+                }
+            }
+
             return redacted;
         }
 
@@ -213,6 +264,33 @@ namespace Limelight.Services
             {
                 return new LiveLoaderBridgeService()
                     .IsInstalled(loader);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static NativeBridgePayloadManifest? SafeBridgeManifest()
+        {
+            try
+            {
+                return new NativeBridgeInstallerService()
+                    .Manifest;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool SafeNativeBridgeCurrent(
+            Ue4ssDetectionResult loader)
+        {
+            try
+            {
+                return new NativeBridgeInstallerService()
+                    .IsCurrentVersionInstalled(loader);
             }
             catch
             {
