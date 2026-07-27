@@ -1,7 +1,6 @@
 ﻿using Limelight.Models;
 using Limelight.Services;
 using Limelight.Views;
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -1018,13 +1017,12 @@ namespace Limelight
 
             if (initialisationFailure is not null)
             {
-                MessageBox.Show(
-                    "The Live Loader could not finish initialising.\n\n" +
-                    initialisationFailure.Message +
-                    "\n\nDead as Disco can still be played normally, but live switching will remain locked for this launch.",
-                    "Live Loader initialisation failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                ShowLimelightDialog(
+                    "LIVE LOADER COULD NOT INITIALISE",
+                    "Dead as Disco can still be played normally, but live switching will remain locked for this launch.",
+                    LimelightDialogTone.Warning,
+                    details: initialisationFailure.Message,
+                    eyebrow: "LIVE LOADER");
             }
         }
 
@@ -1383,12 +1381,11 @@ namespace Limelight
 
             if (_gameProcessService.IsGameRunning(gameDirectory))
             {
-                MessageBox.Show(
-                    "Close Dead as Disco before setting up the live loader.\n\n" +
-                    "Limelight will ask again the next time it starts.",
-                    "Game is running",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                ShowLimelightDialog(
+                    "CLOSE THE GAME FIRST",
+                    "Dead as Disco must be closed before Limelight can set up the Live Loader. Limelight will ask again next time it starts.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "SETUP PAUSED");
 
                 return;
             }
@@ -1547,13 +1544,12 @@ namespace Limelight
 
             if (setupFailure is not null)
             {
-                MessageBox.Show(
-                    "Limelight could not set up the live loader.\n\n" +
-                    setupFailure.Message +
-                    "\n\nNo mod-library features were disabled.",
-                    "Live-loader setup failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "LIVE LOADER SETUP FAILED",
+                    "No mod-library features were disabled, so Limelight can still manage imported mods normally.",
+                    LimelightDialogTone.Error,
+                    details: setupFailure.Message,
+                    eyebrow: "SETUP MISSED ITS CUE");
 
                 return;
             }
@@ -1563,13 +1559,12 @@ namespace Limelight
                     ? "\n\nExisting loader files were backed up before installation."
                     : string.Empty;
 
-            MessageBox.Show(
-                "The live loader was set up successfully." +
-                backupMessage +
-                "\n\nIt will start the next time Dead as Disco launches.",
-                "Live loader ready",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            ShowLimelightDialog(
+                "LIVE LOADER READY",
+                "The Live Loader was set up successfully. It will start the next time Dead as Disco launches." +
+                backupMessage,
+                LimelightDialogTone.Success,
+                eyebrow: "SETUP COMPLETE");
         }
 
         private async Task CheckForExistingMods()
@@ -1596,16 +1591,16 @@ namespace Limelight
                     ? "1 existing mod"
                     : $"{existingModCount} existing mods";
 
-            MessageBoxResult choice =
-                MessageBox.Show(
-                    $"Limelight found {modLabel} inside the game's ~mods folder.\n\n" +
-                    "Would you like to move them into the Limelight library?\n\n" +
-                    "No files will be removed until the library has been saved.",
-                    "Existing mods found",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+            LimelightDialogChoice choice =
+                ShowLimelightDialog(
+                    "EXISTING MODS FOUND",
+                    $"Limelight found {modLabel} inside the game's ~mods folder. Would you like to move them into the Limelight library?",
+                    LimelightDialogTone.Question,
+                    primaryAction: "MOVE MODS",
+                    secondaryAction: "NOT NOW",
+                    footerHint: "FILES STAY IN PLACE UNTIL THE LIBRARY IS SAVED");
 
-            if (choice != MessageBoxResult.Yes)
+            if (choice != LimelightDialogChoice.Primary)
             {
                 return;
             }
@@ -1634,20 +1629,20 @@ namespace Limelight
 
                 RefreshLibrarySummary();
 
-                MessageBox.Show(
-                    "The existing mods were moved into Limelight successfully.\n\n" +
-                    "Choose the model you want and select Activate.",
-                    "Migration complete",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "MODS JOINED THE LIBRARY",
+                    "The existing mods were moved into Limelight successfully. Choose the model you want and select Activate.",
+                    LimelightDialogTone.Success,
+                    eyebrow: "MIGRATION COMPLETE");
             }
             catch (Exception exception)
             {
-                MessageBox.Show(
-                    $"Limelight could not finish the migration.\n\n{exception.Message}",
-                    "Migration failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "MIGRATION COULD NOT FINISH",
+                    "Limelight left the existing files in place.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "MIGRATION FAILED");
             }
         }
 
@@ -2728,6 +2723,32 @@ namespace Limelight
                     StringComparison.OrdinalIgnoreCase));
         }
 
+        private LimelightDialogChoice ShowLimelightDialog(
+            string heading,
+            string message,
+            LimelightDialogTone tone = LimelightDialogTone.Information,
+            string primaryAction = "OK",
+            string? secondaryAction = null,
+            string? details = null,
+            string? eyebrow = null,
+            string? footerHint = null,
+            bool showCancel = false)
+        {
+            // Keeping the owner here makes every prompt stay with Limelight,
+            // including when the main window is moved to another monitor.
+            return LimelightDialog.Open(
+                this,
+                heading,
+                message,
+                tone,
+                primaryAction,
+                secondaryAction,
+                details,
+                eyebrow,
+                footerHint,
+                showCancel);
+        }
+
         private async void ShowNotification(
             string title,
             string message,
@@ -2849,15 +2870,16 @@ namespace Limelight
                 return;
             }
 
-            MessageBoxResult confirmation =
-                MessageBox.Show(
-                    $"Remove {selectedMod.DisplayName} from Limelight?\n\n" +
-                    "This deletes Limelight's stored copy of the mod.",
-                    "Remove mod",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
+            LimelightDialogChoice confirmation =
+                ShowLimelightDialog(
+                    "REMOVE THIS MOD?",
+                    $"Remove {selectedMod.DisplayName} from Limelight? This deletes Limelight's stored copy of the mod.",
+                    LimelightDialogTone.Question,
+                    primaryAction: "REMOVE MOD",
+                    secondaryAction: "KEEP MOD",
+                    eyebrow: "LIBRARY CHANGE");
 
-            if (confirmation != MessageBoxResult.Yes)
+            if (confirmation != LimelightDialogChoice.Primary)
             {
                 return;
             }
@@ -2873,11 +2895,11 @@ namespace Limelight
                 _gameProcessService.IsGameRunning(
                     _gameDirectory))
             {
-                MessageBox.Show(
+                ShowLimelightDialog(
+                    "ACTIVE MOD IS IN USE",
                     "Close Dead as Disco before removing the active mod from Limelight.",
-                    "Mod is active in the running game",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                    LimelightDialogTone.Warning,
+                    eyebrow: "REMOVE BLOCKED");
 
                 return;
             }
@@ -2933,11 +2955,12 @@ namespace Limelight
             }
             catch (Exception exception)
             {
-                MessageBox.Show(
-                    $"Limelight could not remove this mod.\n\n{exception.Message}",
-                    "Remove failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "MOD COULD NOT BE REMOVED",
+                    "Limelight kept the library entry so nothing is lost.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "REMOVE FAILED");
             }
         }
 
@@ -3174,11 +3197,11 @@ namespace Limelight
         {
             if (!_liveLoaderBridgeService.IsOnline())
             {
-                MessageBox.Show(
+                ShowLimelightDialog(
+                    "LIVE LOADER IS OFFLINE",
                     "Start Dead as Disco and wait for the Live Loader status to show ONLINE.",
-                    "Live Loader is offline",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                    LimelightDialogTone.Information,
+                    eyebrow: "NATIVE TEST");
 
                 return;
             }
@@ -3207,15 +3230,15 @@ namespace Limelight
                             ? "CyanBrush"
                             : "PinkBrush");
 
-                MessageBox.Show(
+                ShowLimelightDialog(
+                    result.Success
+                        ? "NATIVE BRIDGE ONLINE"
+                        : "NATIVE BRIDGE UNAVAILABLE",
                     result.Message,
                     result.Success
-                        ? "Native bridge online"
-                        : "Native bridge unavailable",
-                    MessageBoxButton.OK,
-                    result.Success
-                        ? MessageBoxImage.Information
-                        : MessageBoxImage.Warning);
+                        ? LimelightDialogTone.Success
+                        : LimelightDialogTone.Warning,
+                    eyebrow: "NATIVE TEST");
             }
             catch (Exception exception)
             {
@@ -3225,12 +3248,12 @@ namespace Limelight
                 LiveLoaderStatusText.Foreground =
                     (Brush)FindResource("PinkBrush");
 
-                MessageBox.Show(
-                    "Limelight could not contact its native bridge.\n\n" +
-                    exception.Message,
-                    "Native bridge test failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "NATIVE BRIDGE TEST FAILED",
+                    "Limelight could not contact its native bridge.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "NATIVE TEST");
             }
         }
 
@@ -4085,11 +4108,11 @@ namespace Limelight
         {
             if (string.IsNullOrWhiteSpace(_gameDirectory))
             {
-                MessageBox.Show(
+                ShowLimelightDialog(
+                    "GAME NOT CONNECTED",
                     "Connect Limelight to Dead as Disco before repairing the Live Loader.",
-                    "Game not connected",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                    LimelightDialogTone.Warning,
+                    eyebrow: "REPAIR BLOCKED");
 
                 return;
             }
@@ -4099,11 +4122,11 @@ namespace Limelight
 
             if (_gameProcessService.IsGameRunning(gameDirectory))
             {
-                MessageBox.Show(
-                    "Close Dead as Disco before repairing the Live Loader.",
-                    "Game is running",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "CLOSE THE GAME FIRST",
+                    "Dead as Disco must be closed before Limelight can repair the Live Loader.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "REPAIR BLOCKED");
 
                 return;
             }
@@ -4115,25 +4138,26 @@ namespace Limelight
             if (!compatibility.GameBuildDetected ||
                 !compatibility.GameBuildCompatible)
             {
-                MessageBox.Show(
-                    compatibility.Detail +
-                    "\n\nLimelight will not install version-sensitive Live Loader files into this game build.",
-                    "Unsupported game build",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                ShowLimelightDialog(
+                    "UNSUPPORTED GAME BUILD",
+                    "Limelight will not install version-sensitive Live Loader files into this game build.",
+                    LimelightDialogTone.Warning,
+                    details: compatibility.Detail,
+                    eyebrow: "COMPATIBILITY GATE");
 
                 return;
             }
 
-            MessageBoxResult confirmation =
-                MessageBox.Show(
-                    "Repair Limelight's managed Live Loader files?\n\n" +
-                    "This clears stale live staging files, refreshes the Dead as Disco configuration, and reinstalls Limelight's bridge. Your imported mods are not removed.",
-                    "Repair Live Loader",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
+            LimelightDialogChoice confirmation =
+                ShowLimelightDialog(
+                    "REPAIR THE LIVE LOADER?",
+                    "This clears stale staging files, refreshes the Dead as Disco configuration, and reinstalls Limelight's bridge. Imported mods are not removed.",
+                    LimelightDialogTone.Question,
+                    primaryAction: "START REPAIR",
+                    secondaryAction: "NOT NOW",
+                    eyebrow: "RECOVERY TOOLS");
 
-            if (confirmation != MessageBoxResult.Yes)
+            if (confirmation != LimelightDialogChoice.Primary)
             {
                 return;
             }
@@ -4185,23 +4209,24 @@ namespace Limelight
                         ? string.Empty
                         : $"\n\n{cleanup.Errors.Count} file(s) could not be removed. The diagnostic report will include the session details.";
 
-                MessageBox.Show(
-                    "The Live Loader repair is complete.\n\n" +
-                    $"Limelight cleared {cleanup.DeletedFileCount} staged file(s) and refreshed its bridge.{warning}",
-                    "Repair complete",
-                    MessageBoxButton.OK,
+                ShowLimelightDialog(
                     cleanup.Errors.Count == 0
-                        ? MessageBoxImage.Information
-                        : MessageBoxImage.Warning);
+                        ? "LIVE LOADER REPAIRED"
+                        : "REPAIR FINISHED WITH NOTES",
+                    $"Limelight cleared {cleanup.DeletedFileCount} staged file(s) and refreshed its bridge.{warning}",
+                    cleanup.Errors.Count == 0
+                        ? LimelightDialogTone.Success
+                        : LimelightDialogTone.Warning,
+                    eyebrow: "REPAIR COMPLETE");
             }
             catch (Exception exception)
             {
-                MessageBox.Show(
-                    "Limelight could not complete the Live Loader repair.\n\n" +
-                    exception.Message,
-                    "Repair failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "REPAIR COULD NOT FINISH",
+                    "Limelight did not replace any imported mods.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "REPAIR FAILED");
             }
         }
 
@@ -4219,18 +4244,17 @@ namespace Limelight
                 return;
             }
 
-            var fileDialog =
-                new SaveFileDialog
-                {
-                    Title = "Save Limelight private test report",
-                    Filter = "ZIP archives (*.zip)|*.zip",
-                    FileName =
-                        $"Limelight-Test-Report-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
-                    AddExtension = true,
-                    DefaultExt = ".zip"
-                };
+            string? reportPath =
+                LimelightFilePickerWindow.PickSaveFile(
+                    this,
+                    "Save Limelight private test report",
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.DesktopDirectory),
+                    $"Limelight-Test-Report-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+                    ".zip",
+                    "ZIP ARCHIVES");
 
-            if (fileDialog.ShowDialog(this) != true)
+            if (string.IsNullOrWhiteSpace(reportPath))
             {
                 return;
             }
@@ -4249,44 +4273,43 @@ namespace Limelight
                     };
 
                 await _privateTestReportService.CreateArchiveAsync(
-                    fileDialog.FileName,
+                    reportPath,
                     reportWindow.ReportRequest,
                     automaticDiagnostics,
                     loaderMode,
                     _gameDirectory,
                     _nexusApiKey);
 
-                MessageBox.Show(
+                ShowLimelightDialog(
+                    "TEST REPORT READY",
                     "The private test report is ready to send. Limelight removed saved paths and private account values from its generated text.",
-                    "Test report created",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                    LimelightDialogTone.Success,
+                    eyebrow: "PRIVATE TESTING");
             }
             catch (Exception exception)
             {
-                MessageBox.Show(
-                    "Limelight could not create the private test report.\n\n" +
-                    exception.Message,
-                    "Report failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "REPORT COULD NOT BE CREATED",
+                    "The selected evidence files were left untouched.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "REPORT FAILED");
             }
         }
 
         private async void ExportDiagnosticsRequested()
         {
-            var fileDialog =
-                new SaveFileDialog
-                {
-                    Title = "Save Limelight diagnostic report",
-                    Filter = "Text files (*.txt)|*.txt",
-                    FileName =
-                        $"Limelight-Diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
-                    AddExtension = true,
-                    DefaultExt = ".txt"
-                };
+            string? reportPath =
+                LimelightFilePickerWindow.PickSaveFile(
+                    this,
+                    "Save Limelight diagnostic report",
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.DesktopDirectory),
+                    $"Limelight-Diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+                    ".txt",
+                    "TEXT FILES");
 
-            if (fileDialog.ShowDialog() != true)
+            if (string.IsNullOrWhiteSpace(reportPath))
             {
                 return;
             }
@@ -4297,23 +4320,23 @@ namespace Limelight
                     await CreateSanitizedDiagnosticReportAsync();
 
                 await File.WriteAllTextAsync(
-                    fileDialog.FileName,
+                    reportPath,
                     report);
 
-                MessageBox.Show(
-                    "The diagnostic report was saved. Personal and installation paths were replaced with private labels.",
-                    "Report exported",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "DIAGNOSTIC REPORT EXPORTED",
+                    "The report was saved. Personal and installation paths were replaced with private labels.",
+                    LimelightDialogTone.Success,
+                    eyebrow: "EXPORT COMPLETE");
             }
             catch (Exception exception)
             {
-                MessageBox.Show(
-                    "Limelight could not export the diagnostic report.\n\n" +
-                    exception.Message,
-                    "Export failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "REPORT COULD NOT BE EXPORTED",
+                    "Limelight could not save the diagnostic report.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "EXPORT FAILED");
             }
         }
 
@@ -4364,6 +4387,34 @@ namespace Limelight
             RoutedEventArgs e)
         {
             ShowBrowseNexusPage();
+        }
+
+        private void DocumentationButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            const string documentationUrl =
+                "https://henreh1.github.io/LimelightWiki/";
+
+            try
+            {
+                // I let Windows open the guide in the user's usual browser.
+                Process.Start(
+                    new ProcessStartInfo
+                    {
+                        FileName = documentationUrl,
+                        UseShellExecute = true
+                    });
+            }
+            catch (Exception exception)
+            {
+                ShowLimelightDialog(
+                    "DOCUMENTATION UNAVAILABLE",
+                    "Limelight could not open the documentation in your browser.",
+                    LimelightDialogTone.Warning,
+                    details: exception.Message,
+                    eyebrow: "HELP LINK");
+            }
         }
 
         private void ShowBrowseNexusPage()
@@ -4954,21 +5005,25 @@ namespace Limelight
             object sender,
             RoutedEventArgs e)
         {
-            var fileDialog = new OpenFileDialog
-            {
-                Title = "Choose a Dead as Disco mod",
-                Filter = "ZIP archives (*.zip)|*.zip",
-                Multiselect = false
-            };
+            string? archivePath =
+                LimelightFilePickerWindow.PickFile(
+                    this,
+                    "Choose a Dead as Disco mod",
+                    Path.Combine(
+                        Environment.GetFolderPath(
+                            Environment.SpecialFolder.UserProfile),
+                        "Downloads"),
+                    new[] { ".zip" },
+                    "ZIP ARCHIVES");
 
-            if (fileDialog.ShowDialog() != true)
+            if (string.IsNullOrWhiteSpace(archivePath))
             {
                 return;
             }
 
             string archiveName =
                 Path.GetFileNameWithoutExtension(
-                    fileDialog.FileName);
+                    archivePath);
 
             string incomingModName =
                 InstalledMod.CreateDisplayName(
@@ -4986,17 +5041,15 @@ namespace Limelight
 
             if (existingMod != null)
             {
-                MessageBox.Show(
-                    $"{existingMod.DisplayName} is already in your library.\n\n" +
-                    "Remove the existing copy before importing it again.",
-                    "Mod already installed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "MOD ALREADY INSTALLED",
+                    $"{existingMod.DisplayName} is already in your library. Remove the existing copy before importing it again.",
+                    LimelightDialogTone.Information,
+                    primaryAction: "VIEW MY MODS",
+                    eyebrow: "IMPORT SKIPPED");
 
                 return;
             }
-
-            ImportModButton.IsEnabled = false;
 
             ImportModButton.IsEnabled = false;
             ImportModButton.Content = "IMPORTING...";
@@ -5008,7 +5061,7 @@ namespace Limelight
                 InstalledMod installedMod =
                     await Task.Run(() =>
                         _modLibraryService.Import(
-                            fileDialog.FileName));
+                            archivePath));
 
                 _settings.InstalledMods.Add(
                     installedMod);
@@ -5017,23 +5070,25 @@ namespace Limelight
 
                 RefreshLibrarySummary();
 
-                MessageBox.Show(
-                    $"{installedMod.DisplayName} was added to your library.\n\n" +
-                    $"Package files: {installedMod.PackageFiles.Count}\n" +
-                    $"Assets detected: {installedMod.AssetPackages.Count}\n" +
-                    $"Live-refreshable: " +
-                    $"{installedMod.AssetPackages.Count(package => package.IsSafeForLiveReload)}",
-                    "Mod imported",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "MOD IMPORTED",
+                    $"{installedMod.DisplayName} was added to your library.",
+                    LimelightDialogTone.Success,
+                    details:
+                        $"Package files: {installedMod.PackageFiles.Count}\n" +
+                        $"Assets detected: {installedMod.AssetPackages.Count}\n" +
+                        "Live-refreshable: " +
+                        $"{installedMod.AssetPackages.Count(package => package.IsSafeForLiveReload)}",
+                    eyebrow: "READY FOR THE SPOTLIGHT");
             }
             catch (Exception exception)
             {
-                MessageBox.Show(
-                    $"Limelight could not import this mod.\n\n{exception.Message}",
-                    "Import failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "MOD IMPORT FAILED",
+                    "Limelight could not add this archive to the library.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "IMPORT MISSED ITS CUE");
             }
             finally
             {
@@ -5179,11 +5234,11 @@ namespace Limelight
 
             if (string.IsNullOrWhiteSpace(gameDirectory))
             {
-                MessageBox.Show(
-                    "Connect Limelight to your Dead as Disco folder first.",
-                    "Game not connected",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "GAME NOT CONNECTED",
+                    "Connect Limelight to your Dead as Disco folder before launching the game.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "LAUNCH BLOCKED");
 
                 return;
             }
@@ -5192,11 +5247,11 @@ namespace Limelight
             {
                 // Starting a second copy can cause Steam or the game to display
                 // confusing errors, so keep the already-running instance.
-                MessageBox.Show(
-                    "Dead as Disco is already running.",
-                    "Game already running",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
+                ShowLimelightDialog(
+                    "GAME ALREADY RUNNING",
+                    "Limelight found the existing Dead as Disco session and will not start a second copy.",
+                    LimelightDialogTone.Information,
+                    eyebrow: "LAUNCH SKIPPED");
 
                 return;
             }
@@ -5208,12 +5263,11 @@ namespace Limelight
 
             if (!File.Exists(executablePath))
             {
-                MessageBox.Show(
-                    "Limelight could not find Pagoda.exe.\n\n" +
-                    "Reconnect the game folder in Settings and try again.",
-                    "Game executable missing",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Warning);
+                ShowLimelightDialog(
+                    "GAME EXECUTABLE MISSING",
+                    "Limelight could not find Pagoda.exe. Reconnect the game folder in Settings and try again.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "LAUNCH BLOCKED");
 
                 return;
             }
@@ -5384,12 +5438,12 @@ namespace Limelight
                 _selectedLoaderMode =
                     LoaderLaunchMode.Normal;
 
-                MessageBox.Show(
-                    "Dead as Disco could not be started.\n\n" +
-                    exception.Message,
-                    "Launch failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                ShowLimelightDialog(
+                    "DEAD AS DISCO COULD NOT START",
+                    "Limelight restored its launch state and left the game files unchanged.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "LAUNCH FAILED");
             }
         }
         private async void ConnectGame_Click(
@@ -5414,20 +5468,17 @@ namespace Limelight
         {
             // Ask for the main installation folder instead of making
             // the user locate the internal Paks directory.
-            var folderDialog = new OpenFolderDialog
-            {
-                Title = "Choose the Dead as Disco installation folder",
-                Multiselect = false
-            };
+            string? selectedDirectory =
+                LimelightFilePickerWindow.PickFolder(
+                    this,
+                    "Choose the Dead as Disco installation folder",
+                    _gameDirectory);
 
             // Cancelling leaves the current connection unchanged.
-            if (folderDialog.ShowDialog() != true)
+            if (string.IsNullOrWhiteSpace(selectedDirectory))
             {
                 return;
             }
-
-            string selectedDirectory =
-                folderDialog.FolderName;
 
             if (!TryConnectToGame(
                     selectedDirectory,
@@ -5442,11 +5493,11 @@ namespace Limelight
 
             _settingsService.Save(_settings);
 
-            MessageBox.Show(
+            ShowLimelightDialog(
+                "GAME CONNECTED",
                 "Dead as Disco was connected successfully.",
-                "Limelight",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+                LimelightDialogTone.Success,
+                eyebrow: "DIRECTORY READY");
 
             // A newly selected folder should receive its own optional-loader prompt.
             _hasHandledLiveLoaderPrompt = false;
@@ -5479,12 +5530,11 @@ namespace Limelight
             {
                 if (showError)
                 {
-                    MessageBox.Show(
-                        "Limelight could not find Pagoda.exe and the game's Paks folder.\n\n" +
-                        "Select the main Dead as Disco folder, not the Paks folder itself.",
-                        "Invalid game folder",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning);
+                    ShowLimelightDialog(
+                        "THAT IS NOT THE GAME FOLDER",
+                        "Limelight could not find Pagoda.exe and the game's Paks folder. Select the main Dead as Disco folder, not the Paks folder itself.",
+                        LimelightDialogTone.Warning,
+                        eyebrow: "INVALID DIRECTORY");
                 }
 
                 return false;

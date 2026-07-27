@@ -563,6 +563,11 @@
                                             Margin="10,0,0,0"
                                             Click="BrowseNexus_Click"
                                             Style="{StaticResource SecondaryButton}"/>
+
+                                        <Button Content="DOCUMENTATION"
+                                            Margin="10,0,0,0"
+                                            Click="DocumentationButton_Click"
+                                            Style="{StaticResource SecondaryButton}"/>
                                     </StackPanel>
                                 </StackPanel>
 

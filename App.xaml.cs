@@ -66,12 +66,13 @@ namespace Limelight
             {
                 splash.Close();
 
-                MessageBox.Show(
-                    "Limelight could not finish starting.\n\n" +
-                    exception.Message,
-                    "Limelight startup failed",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
+                LimelightDialog.Open(
+                    owner: null,
+                    heading: "LIMELIGHT COULD NOT START",
+                    message: "The manager could not finish preparing its main window.",
+                    tone: LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "STARTUP FAILED");
 
                 Shutdown(1);
             }

@@ -1,5 +1,4 @@
 using Limelight.Models;
-using Microsoft.Win32;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,25 +22,26 @@ namespace Limelight.Views
             object sender,
             RoutedEventArgs e)
         {
-            var fileDialog =
-                new OpenFileDialog
-                {
-                    Title = "Add evidence to the Limelight test report",
-                    Filter =
-                        "Supported evidence|*.png;*.jpg;*.jpeg;*.webp;*.dmp;*.log;*.txt;*.json;*.ini;*.cfg;*.xml;*.csv|" +
-                        "Images|*.png;*.jpg;*.jpeg;*.webp|" +
-                        "Crash dumps|*.dmp|" +
-                        "Text and logs|*.log;*.txt;*.json;*.ini;*.cfg;*.xml;*.csv|" +
-                        "All files|*.*",
-                    Multiselect = true
-                };
+            IReadOnlyList<string> selectedFiles =
+                LimelightFilePickerWindow.PickFiles(
+                    this,
+                    "Add evidence to the Limelight test report",
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.DesktopDirectory),
+                    new[]
+                    {
+                        ".png", ".jpg", ".jpeg", ".webp", ".dmp",
+                        ".log", ".txt", ".json", ".ini", ".cfg",
+                        ".xml", ".csv"
+                    },
+                    "SUPPORTED EVIDENCE");
 
-            if (fileDialog.ShowDialog(this) != true)
+            if (selectedFiles.Count == 0)
             {
                 return;
             }
 
-            foreach (string path in fileDialog.FileNames)
+            foreach (string path in selectedFiles)
             {
                 if (!_attachmentPaths.Contains(
                         path,

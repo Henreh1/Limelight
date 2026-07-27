@@ -1,0 +1,438 @@
+<Window x:Class="Limelight.Views.LimelightFilePickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="1040"
+        Height="690"
+        MinWidth="880"
+        MinHeight="590"
+        WindowStyle="None"
+        ResizeMode="CanResizeWithGrip"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Foreground="{StaticResource TextBrush}"
+        FontFamily="Bahnschrift, Segoe UI">
+
+    <Window.Resources>
+        <Style x:Key="PickerTitleBarButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="42"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Surface" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="#28213E"/>
+                                <Setter Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Surface" Property="Opacity" Value="0.7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PickerTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Height" Value="40"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Background" Value="#0D1020"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="CaretBrush" Value="{StaticResource CyanBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Style.Triggers>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="{StaticResource CyanBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="PickerPlaceItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0,2"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Surface"
+                                Padding="12,9"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="7">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="#1B1E35"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="#28213E"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PickerFileItemStyle" TargetType="ListViewItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0,1"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border x:Name="RowSurface"
+                                Padding="8,7"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="6">
+                            <GridViewRowPresenter Columns="{TemplateBinding GridView.ColumnCollection}"
+                                                  Content="{TemplateBinding Content}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RowSurface" Property="Background" Value="#1A1E35"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="RowSurface" Property="Background" Value="#2A2544"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="PickerHeaderStyle" TargetType="GridViewColumnHeader">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="9,0"/>
+            <Setter Property="Background" Value="#111426"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+    </Window.Resources>
+
+    <Border Background="{StaticResource BackgroundBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="13">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="42"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Border x:Name="TitleBar"
+                    Background="#0C0E1D"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,0,0,1"
+                    CornerRadius="13,13,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Margin="18,0,0,0"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="&#x25C6;"
+                                   Margin="0,0,10,0"
+                                   FontSize="9"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                        <TextBlock Text="LIMELIGHT EXPLORER"
+                                   FontSize="11"
+                                   FontWeight="Bold"/>
+                    </StackPanel>
+                    <Button x:Name="CloseButton"
+                            Grid.Column="1"
+                            Style="{StaticResource PickerTitleBarButtonStyle}">
+                        <Path Width="11"
+                              Height="11"
+                              Data="M 0.8,0.8 L 10.2,10.2 M 10.2,0.8 L 0.8,10.2"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeThickness="1.4"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="1" Margin="28,22,28,17">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock x:Name="PickerEyebrowText"
+                               Text="CHOOSE A LOCATION"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+                    <TextBlock x:Name="PickerHeadingText"
+                               Text="FIND YOUR FILE"
+                               Margin="0,5,0,0"
+                               FontSize="24"
+                               FontWeight="Bold"/>
+                </StackPanel>
+                <Border Grid.Column="1"
+                        Padding="12,7"
+                        VerticalAlignment="Center"
+                        Background="#171B31"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="7">
+                    <TextBlock x:Name="FilterBadgeText"
+                               Text="ALL FILES"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource PinkBrush}"/>
+                </Border>
+            </Grid>
+
+            <Grid Grid.Row="2" Margin="28,0,28,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="42"/>
+                    <ColumnDefinition Width="42"/>
+                    <ColumnDefinition Width="42"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="BackButton"
+                        Margin="0,0,6,0"
+                        Padding="0"
+                        ToolTip="Back"
+                        Style="{StaticResource SecondaryButton}">
+                    <Viewbox Width="14" Height="14">
+                        <Path Data="M 11,2 L 5,8 L 11,14"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeThickness="1.8"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"/>
+                    </Viewbox>
+                </Button>
+                <Button x:Name="UpButton"
+                        Grid.Column="1"
+                        Margin="0,0,6,0"
+                        Padding="0"
+                        ToolTip="Up one folder"
+                        Style="{StaticResource SecondaryButton}">
+                    <Viewbox Width="14" Height="14">
+                        <Path Data="M 3,7 L 8,2 L 13,7 M 8,2 L 8,14"
+                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                              StrokeThickness="1.7"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"/>
+                    </Viewbox>
+                </Button>
+                <Button x:Name="RefreshButton"
+                        Grid.Column="2"
+                        Margin="0,0,8,0"
+                        Padding="0"
+                        ToolTip="Refresh"
+                        Style="{StaticResource SecondaryButton}">
+                    <Viewbox Width="15" Height="15">
+                        <Canvas Width="16" Height="16">
+                            <Path Data="M 13.5,5.5 A 6,6 0 1 0 14,10.5"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  StrokeThickness="1.7"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"/>
+                            <Path Data="M 9.5,5.5 L 13.5,5.5 L 13.5,1.5"
+                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType={x:Type Button}}}"
+                                  StrokeThickness="1.7"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+                <TextBox x:Name="AddressBox"
+                         Grid.Column="3"
+                         Style="{StaticResource PickerTextBoxStyle}"/>
+            </Grid>
+
+            <Grid Grid.Row="3" Margin="28,0,28,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="205"/>
+                    <ColumnDefinition Width="14"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border Padding="12"
+                        Background="{StaticResource PanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="PLACES"
+                                   Margin="5,2,0,8"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+                        <ListBox x:Name="PlacesList"
+                                 Grid.Row="1"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 ItemContainerStyle="{StaticResource PickerPlaceItemStyle}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="24"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="&#x25C7;"
+                                                   FontSize="11"
+                                                   Foreground="{StaticResource CyanBrush}"/>
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Name}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   FontSize="12"
+                                                   Foreground="{StaticResource TextBrush}"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <Border Grid.Column="2"
+                        Background="{StaticResource PanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock x:Name="CurrentLocationText"
+                                   Margin="16,12"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource CyanBrush}"/>
+                        <ListView x:Name="EntryList"
+                                  Grid.Row="1"
+                                  Margin="7,0"
+                                  Background="Transparent"
+                                  BorderThickness="0"
+                                  ItemContainerStyle="{StaticResource PickerFileItemStyle}"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListView.Resources>
+                                <Style TargetType="ScrollBar" BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+                            </ListView.Resources>
+                            <ListView.View>
+                                <GridView ColumnHeaderContainerStyle="{StaticResource PickerHeaderStyle}">
+                                    <GridViewColumn Width="390" Header="NAME">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Width="24"
+                                                               Text="{Binding Icon}"
+                                                               FontSize="11"
+                                                               Foreground="{Binding Accent}"/>
+                                                    <TextBlock Text="{Binding Name}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               FontSize="12"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Width="115" Header="TYPE" DisplayMemberBinding="{Binding TypeLabel}"/>
+                                    <GridViewColumn Width="145" Header="MODIFIED" DisplayMemberBinding="{Binding ModifiedLabel}"/>
+                                    <GridViewColumn Width="90" Header="SIZE" DisplayMemberBinding="{Binding SizeLabel}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        <TextBlock x:Name="EmptyFolderText"
+                                   Grid.Row="1"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   Text="NO MATCHING FILES HERE"
+                                   FontSize="13"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   Visibility="Collapsed"/>
+                        <Border Grid.Row="2"
+                                Padding="15,10"
+                                Background="#101326"
+                                BorderBrush="{StaticResource BorderBrush}"
+                                BorderThickness="0,1,0,0"
+                                CornerRadius="0,0,10,10">
+                            <TextBlock x:Name="SelectionHintText"
+                                       FontSize="10"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <Border Grid.Row="4"
+                    Margin="0,18,0,0"
+                    Padding="28,17"
+                    Background="#0C0E1D"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="0,1,0,0"
+                    CornerRadius="0,0,13,13">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel x:Name="FileNamePanel"
+                                Margin="0,0,22,0">
+                        <TextBlock Text="FILE NAME"
+                                   Margin="0,0,0,6"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+                        <TextBox x:Name="FileNameBox"
+                                 MinWidth="420"
+                                 Style="{StaticResource PickerTextBoxStyle}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Bottom"
+                                Orientation="Horizontal">
+                        <Button x:Name="CancelButton"
+                                MinWidth="106"
+                                Content="CANCEL"
+                                Style="{StaticResource SecondaryButton}"/>
+                        <Button x:Name="SelectButton"
+                                MinWidth="130"
+                                Margin="10,0,0,0"
+                                Content="SELECT"
+                                Style="{StaticResource PrimaryButton}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
