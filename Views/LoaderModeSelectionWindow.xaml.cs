@@ -43,17 +43,11 @@ namespace Limelight.Views
                     ? "SELECT X19"
                     : "GROUP REQUIRED";
 
-            NormalLoaderButton.IsEnabled =
-                _liveLoaderAvailable;
-
-            X19LoaderButton.IsEnabled =
-                _liveLoaderAvailable;
-
             NormalLoaderButton.Opacity =
-                _liveLoaderAvailable ? 1 : 0.45;
+                _liveLoaderAvailable ? 1 : 0.72;
 
             X19LoaderButton.Opacity =
-                _liveLoaderAvailable ? 1 : 0.45;
+                _liveLoaderAvailable ? 1 : 0.72;
 
             if (!_liveLoaderAvailable)
             {
@@ -71,9 +65,10 @@ namespace Limelight.Views
         {
             if (!_liveLoaderAvailable)
             {
-                CompatibilityPrompt.Visibility =
-                    Visibility.Visible;
-
+                // I send the user straight to Limelight's repair tools instead
+                // of leaving a card on screen that appears to do nothing.
+                OpenSupportRequested = true;
+                DialogResult = false;
                 return;
             }
 
@@ -89,9 +84,9 @@ namespace Limelight.Views
         {
             if (!_liveLoaderAvailable)
             {
-                CompatibilityPrompt.Visibility =
-                    Visibility.Visible;
-
+                // X19 needs the same verified bridge as the normal loader.
+                OpenSupportRequested = true;
+                DialogResult = false;
                 return;
             }
 

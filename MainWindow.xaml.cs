@@ -1,6 +1,7 @@
 ﻿using Limelight.Models;
 using Limelight.Services;
 using Limelight.Views;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -1080,6 +1081,13 @@ namespace Limelight
                     8,
                     "Limelight is waiting for the game process to start.");
 
+                // I show the waiting card before Steam responds so a failed
+                // handoff never looks like an unresponsive Launch button.
+                initialisingWindow.Owner =
+                    this;
+
+                initialisingWindow.Show();
+
                 DateTime processDeadline =
                     DateTime.UtcNow.AddSeconds(
                         waitForGameProcess
@@ -1119,6 +1127,14 @@ namespace Limelight
                         await Task.Delay(100);
                     }
                 }
+
+                // The first card belongs to Limelight while Steam is opening
+                // the game. I replace it here so the next card can belong to
+                // Dead as Disco and stay above its loading screen.
+                initialisingWindow.Close();
+
+                initialisingWindow =
+                    new LiveLoaderInitializingWindow();
 
                 initialisingWindow.Report(
                     "CONNECTING TO UE4SS",
@@ -1532,6 +1548,20 @@ namespace Limelight
             LocalCompatibilityResult compatibility =
                 _compatibilityService.Check(
                     gameDirectory);
+
+            WriteLaunchTrace(
+                "Compatibility checked: " +
+                $"liveLoader={compatibility.IsLiveLoaderCompatible}; " +
+                $"gameConnected={compatibility.GameConnected}; " +
+                $"buildDetected={compatibility.GameBuildDetected}; " +
+                $"buildCompatible={compatibility.GameBuildCompatible}; " +
+                $"embeddedPayload={compatibility.EmbeddedPayloadCompatible}; " +
+                $"ue4ssInstalled={compatibility.Ue4ssInstalled}; " +
+                $"ue4ssCompatible={compatibility.Ue4ssCompatible}; " +
+                $"ue4ssConfigured={compatibility.Ue4ssConfigured}; " +
+                $"luaBridge={compatibility.LuaBridgeInstalled}; " +
+                $"nativeBridge={compatibility.NativeBridgeCurrent}; " +
+                $"detail={compatibility.Detail}");
 
             if (!compatibility.GameBuildDetected ||
                 !compatibility.GameBuildCompatible)
@@ -5952,10 +5982,142 @@ namespace Limelight
                 "SWITCH MODEL";
         }
 
+        private static ProcessStartInfo CreateSteamLaunchStartInfo()
+        {
+            const string steamAppId =
+                "3404260";
+
+            string? steamExecutable =
+                FindSteamExecutable();
+
+            if (!string.IsNullOrWhiteSpace(steamExecutable))
+            {
+                return new ProcessStartInfo
+                {
+                    // Steam's explicit app-launch command is more dependable
+                    // than asking Windows to forward a steam:// link.
+                    FileName = steamExecutable,
+                    Arguments = $"-applaunch {steamAppId}",
+                    WorkingDirectory =
+                        Path.GetDirectoryName(steamExecutable) ??
+                        string.Empty,
+                    UseShellExecute = false
+                };
+            }
+
+            // Keep the registered protocol as a fallback for unusual Steam
+            // installs whose executable path is not available in the registry.
+            return new ProcessStartInfo
+            {
+                FileName =
+                    $"steam://rungameid/{steamAppId}",
+                UseShellExecute = true
+            };
+        }
+
+        private static string? FindSteamExecutable()
+        {
+            string? currentUserSteam =
+                Registry.GetValue(
+                    @"HKEY_CURRENT_USER\Software\Valve\Steam",
+                    "SteamExe",
+                    null) as string;
+
+            string? localMachineSteam =
+                Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Valve\Steam",
+                    "InstallPath",
+                    null) as string;
+
+            string? localMachineSteam64 =
+                Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Valve\Steam",
+                    "InstallPath",
+                    null) as string;
+
+            string? programFilesX86 =
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.ProgramFilesX86);
+
+            string?[] candidates =
+            {
+                currentUserSteam,
+                string.IsNullOrWhiteSpace(localMachineSteam)
+                    ? null
+                    : Path.Combine(localMachineSteam, "steam.exe"),
+                string.IsNullOrWhiteSpace(localMachineSteam64)
+                    ? null
+                    : Path.Combine(localMachineSteam64, "steam.exe"),
+                string.IsNullOrWhiteSpace(programFilesX86)
+                    ? null
+                    : Path.Combine(programFilesX86, "Steam", "steam.exe")
+            };
+
+            foreach (string? candidate in candidates)
+            {
+                if (string.IsNullOrWhiteSpace(candidate))
+                {
+                    continue;
+                }
+
+                string normalizedCandidate =
+                    candidate.Replace('/', Path.DirectorySeparatorChar);
+
+                if (File.Exists(normalizedCandidate))
+                {
+                    return normalizedCandidate;
+                }
+            }
+
+            return null;
+        }
+
+        private static void WriteLaunchTrace(
+            string message)
+        {
+            try
+            {
+                string logDirectory =
+                    Path.Combine(
+                        Environment.GetFolderPath(
+                            Environment.SpecialFolder.LocalApplicationData),
+                        "Limelight",
+                        "Logs");
+
+                Directory.CreateDirectory(logDirectory);
+
+                string logPath =
+                    Path.Combine(
+                        logDirectory,
+                        "launch.log");
+
+                // I keep this trace deliberately small. It only records launch
+                // stages, but gives us a useful answer if Steam ever stays quiet.
+                if (File.Exists(logPath) &&
+                    new FileInfo(logPath).Length > 512 * 1024)
+                {
+                    File.WriteAllText(
+                        logPath,
+                        string.Empty);
+                }
+
+                File.AppendAllText(
+                    logPath,
+                    $"[{DateTimeOffset.Now:O}] {message}{Environment.NewLine}");
+            }
+            catch
+            {
+                // A diagnostic trace must never be allowed to block a launch.
+            }
+        }
+
         private async void LaunchGame_Click(
     object sender,
     RoutedEventArgs e)
         {
+            WriteLaunchTrace(
+                "Launch button selected.");
+
             string? gameDirectory =
                 _gameDirectory;
 
@@ -6018,6 +6180,13 @@ namespace Limelight
             bool? modeAccepted =
                 modeWindow.ShowDialog();
 
+            WriteLaunchTrace(
+                "Loader selector closed: " +
+                $"accepted={modeAccepted}; " +
+                $"mode={modeWindow.SelectedMode?.ToString() ?? "NONE"}; " +
+                $"configureX19={modeWindow.ConfigureX19Requested}; " +
+                $"openSupport={modeWindow.OpenSupportRequested}.");
+
             if (modeAccepted != true ||
                 modeWindow.SelectedMode is null)
             {
@@ -6030,6 +6199,11 @@ namespace Limelight
                 {
                     ShowSettingsPage();
                     SettingsPageControl.ShowSupportCategory();
+
+                    ShowNotification(
+                        "LIVE LOADER NEEDS ATTENTION",
+                        compatibility.Detail,
+                        isError: true);
                 }
 
                 return;
@@ -6037,6 +6211,9 @@ namespace Limelight
 
             _selectedLoaderMode =
                 modeWindow.SelectedMode.Value;
+
+            WriteLaunchTrace(
+                $"Launch mode accepted: {_selectedLoaderMode}.");
 
             _globalHotkeyService.Unregister();
 
@@ -6049,6 +6226,9 @@ namespace Limelight
                 if (_selectedLoaderMode !=
                     LoaderLaunchMode.Disabled)
                 {
+                    WriteLaunchTrace(
+                        "Checking Live Loader readiness.");
+
                     // Recheck immediately before touching the game directory.
                     // Steam may have finished an update while the selector was open.
                     compatibility =
@@ -6067,40 +6247,27 @@ namespace Limelight
 
                     if (!loader.IsInstalled ||
                         !_ue4ssConfigurationService.IsRuntimeCompatible(loader) ||
-                        !_liveLoaderBridgeService.HasBridgeFiles(loader))
+                        !_ue4ssConfigurationService.IsConfigured(loader) ||
+                        !_liveLoaderBridgeService.IsInstalled(loader) ||
+                        !_nativeBridgeInstallerService.IsCurrentVersionInstalled(loader))
                     {
                         throw new InvalidOperationException(
                             "The Live Loader needs to be repaired before this launch. " +
                             "Open Settings, choose Support, then select Repair Live Loader.");
                     }
 
-                    try
-                    {
-                        // Repair the managed settings, signatures and enable line
-                        // before Steam starts. A failed repair must not turn into a
-                        // delayed loader timeout after the user reaches the game.
-                        _ue4ssConfigurationService.Apply(loader);
-                        _liveLoaderBridgeService.EnsureInstalled(loader);
-                        _nativeBridgeInstallerService.EnsureInstalled(
-                            loader);
-                    }
-                    catch (Exception exception)
-                    {
-                        throw new InvalidOperationException(
-                            "Limelight could not prepare the Live Loader. " +
-                            exception.Message,
-                            exception);
-                    }
+                    // Installation and repair belong to the setup and Support
+                    // flows. The launch button only verifies those files so a
+                    // locked game folder cannot hold Steam's request hostage.
+                    WriteLaunchTrace(
+                        "Live Loader readiness check passed.");
                 }
 
                 ProcessStartInfo startInfo =
-    new ProcessStartInfo
-    {
-        // Launch through Steam so Pagoda.exe is not mistaken for
-        // a custom command-line argument.
-        FileName = "steam://rungameid/3404260",
-        UseShellExecute = true
-    };
+                    CreateSteamLaunchStartInfo();
+
+                WriteLaunchTrace(
+                    $"Sending Steam launch request with {startInfo.FileName} {startInfo.Arguments}".TrimEnd());
 
                 if (_selectedLoaderMode !=
                     LoaderLaunchMode.Disabled)
@@ -6111,7 +6278,17 @@ namespace Limelight
                 }
 
                 // Ask Steam to launch its registered Dead as Disco installation.
-                Process.Start(startInfo);
+                using Process? steamLaunch =
+                    Process.Start(startInfo);
+
+                if (steamLaunch is null)
+                {
+                    throw new InvalidOperationException(
+                        "Windows did not accept Limelight's Steam launch request.");
+                }
+
+                WriteLaunchTrace(
+                    "Steam accepted the launch request.");
 
                 if (_selectedLoaderMode !=
                     LoaderLaunchMode.Disabled)
@@ -6158,6 +6335,9 @@ namespace Limelight
             }
             catch (Exception exception)
             {
+                WriteLaunchTrace(
+                    $"Launch failed: {exception.GetType().Name}: {exception.Message}");
+
                 _globalHotkeyService.Unregister();
                 _liveLoaderBridgeService.SetSessionBypass(
                     isDisabled: false);
