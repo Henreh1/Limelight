@@ -18,6 +18,165 @@
         <SolidColorBrush x:Key="TextBrush" Color="#F7F5FF"/>
         <SolidColorBrush x:Key="MutedTextBrush" Color="#9296AF"/>
 
+        <!-- I keep Limelight's motion short and consistent so it feels responsive instead of floaty. -->
+        <CubicEase x:Key="LimelightEaseOut"
+                   EasingMode="EaseOut"/>
+
+        <CubicEase x:Key="LimelightEaseInOut"
+                   EasingMode="EaseInOut"/>
+
+        <!-- Each workspace arrives with the same quiet lift and fade. -->
+        <Style x:Key="PageTransitionStyle"
+               TargetType="FrameworkElement">
+            <Setter Property="RenderTransformOrigin"
+                    Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <TranslateTransform/>
+                </Setter.Value>
+            </Setter>
+
+            <Style.Triggers>
+                <Trigger Property="IsVisible"
+                         Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 From="0"
+                                                 To="1"
+                                                 Duration="0:0:0.20"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 From="10"
+                                                 To="0"
+                                                 Duration="0:0:0.22"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Cards only move by two pixels. The response is visible without making the layout feel restless. -->
+        <Style x:Key="AnimatedCardStyle"
+               TargetType="Border">
+            <Setter Property="RenderTransformOrigin"
+                    Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <TranslateTransform/>
+                </Setter.Value>
+            </Setter>
+
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver"
+                         Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 To="-2"
+                                                 Duration="0:0:0.12"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+
+                    <Trigger.ExitActions>
+                        <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                 To="0"
+                                                 Duration="0:0:0.15"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.ExitActions>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Sidebar movement is deliberately horizontal so it never competes with page motion. -->
+        <Style x:Key="SidebarNavigationItemStyle"
+               TargetType="Border">
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <TranslateTransform/>
+                </Setter.Value>
+            </Setter>
+
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver"
+                         Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                 To="3"
+                                                 Duration="0:0:0.10"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+
+                    <Trigger.ExitActions>
+                        <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                 To="0"
+                                                 Duration="0:0:0.13"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.ExitActions>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Modal cards appear from the centre so warnings still feel firm and intentional. -->
+        <Style x:Key="AnimatedDialogCardStyle"
+               TargetType="Border">
+            <Setter Property="RenderTransformOrigin"
+                    Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform/>
+                </Setter.Value>
+            </Setter>
+
+            <Style.Triggers>
+                <Trigger Property="IsVisible"
+                         Value="True">
+                    <Trigger.EnterActions>
+                        <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 From="0"
+                                                 To="1"
+                                                 Duration="0:0:0.16"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                 From="0.96"
+                                                 To="1"
+                                                 Duration="0:0:0.18"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                 From="0.96"
+                                                 To="1"
+                                                 Duration="0:0:0.18"
+                                                 EasingFunction="{StaticResource LimelightEaseOut}"/>
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </Trigger.EnterActions>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Nexus pages share one slim scrollbar so catalogue, details and files feel like one place. I love branding ! -->
         <Style x:Key="NexusScrollThumbStyle"
                TargetType="Thumb">
@@ -133,7 +292,12 @@
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="ButtonBorder"
                                 Background="{TemplateBinding Background}"
+                                RenderTransformOrigin="0.5,0.5"
                                 CornerRadius="7">
+
+                            <Border.RenderTransform>
+                                <ScaleTransform/>
+                            </Border.RenderTransform>
 
                             <ContentPresenter Margin="{TemplateBinding Padding}"
                                               HorizontalAlignment="Center"
@@ -143,8 +307,44 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="ButtonBorder"
-                                        Property="Opacity"
-                                        Value="0.82"/>
+                                         Property="Opacity"
+                                        Value="0.92"/>
+
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                             To="1.025"
+                                                             Duration="0:0:0.11"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                             To="1.025"
+                                                             Duration="0:0:0.11"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                             To="1"
+                                                             Duration="0:0:0.13"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                            <DoubleAnimation Storyboard.TargetName="ButtonBorder"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                             To="1"
+                                                             Duration="0:0:0.13"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>

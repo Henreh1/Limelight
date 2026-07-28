@@ -183,7 +183,8 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="{StaticResource BackgroundBrush}"
+    <Border Style="{StaticResource AnimatedDialogCardStyle}"
+            Background="{StaticResource BackgroundBrush}"
             BorderBrush="{StaticResource BorderBrush}"
             BorderThickness="1"
             CornerRadius="13">

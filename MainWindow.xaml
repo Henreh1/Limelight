@@ -13,6 +13,7 @@
         WindowStartupLocation="CenterScreen"
         WindowStyle="None"
         ResizeMode="CanResize"
+        StateChanged="MainWindow_StateChanged"
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextBrush}"
         FontFamily="Bahnschrift, Segoe UI"
@@ -25,6 +26,20 @@
                             CornerRadius="0"
                             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
+
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Window.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                     From="0"
+                                     To="1"
+                                     Duration="0:0:0.18"
+                                     EasingFunction="{StaticResource LimelightEaseOut}"/>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </Window.Triggers>
 
     <Window.Resources>
         <Style x:Key="TitleBarButtonStyle"
@@ -50,10 +65,57 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}">
+                        <Border x:Name="TitleBarSurface"
+                                Background="{TemplateBinding Background}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform/>
+                            </Border.RenderTransform>
+
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="TitleBarSurface"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                             To="1.08"
+                                                             Duration="0:0:0.10"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                            <DoubleAnimation Storyboard.TargetName="TitleBarSurface"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                             To="1.08"
+                                                             Duration="0:0:0.10"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard HandoffBehavior="SnapshotAndReplace">
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="TitleBarSurface"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                                             To="1"
+                                                             Duration="0:0:0.13"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+
+                                            <DoubleAnimation Storyboard.TargetName="TitleBarSurface"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                                             To="1"
+                                                             Duration="0:0:0.13"
+                                                             EasingFunction="{StaticResource LimelightEaseOut}"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -90,7 +152,15 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Grid x:Name="WindowVisualRoot"
+          RenderTransformOrigin="0.5,0.5">
+
+        <Grid.RenderTransform>
+            <ScaleTransform x:Name="WindowVisualScale"
+                            ScaleX="1"
+                            ScaleY="1"/>
+        </Grid.RenderTransform>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="42"/>
             <RowDefinition Height="*"/>
@@ -260,6 +330,7 @@
                     <StackPanel Grid.Row="1">
 
                         <Border x:Name="DashboardNavigation"
+            Style="{StaticResource SidebarNavigationItemStyle}"
             Margin="8,3"
             Background="#25203B"
             CornerRadius="8"
@@ -287,6 +358,7 @@
                         </Border>
 
                         <Border x:Name="MyModsNavigation"
+            Style="{StaticResource SidebarNavigationItemStyle}"
             Margin="8,3"
             Background="Transparent"
             CornerRadius="8"
@@ -314,6 +386,7 @@
                         </Border>
 
                         <Border x:Name="ProfilesNavigation"
+                            Style="{StaticResource SidebarNavigationItemStyle}"
                             Margin="8,3"
                             Background="Transparent"
                             CornerRadius="8"
@@ -341,6 +414,7 @@
                         </Border>
 
                         <Border x:Name="LiveLoadersNavigation"
+                            Style="{StaticResource SidebarNavigationItemStyle}"
                             Margin="8,3"
                             Background="Transparent"
                             CornerRadius="8"
@@ -368,6 +442,7 @@
                         </Border>
 
                         <Border x:Name="BrowseNexusNavigation"
+                            Style="{StaticResource SidebarNavigationItemStyle}"
                             Margin="8,3"
                             Background="Transparent"
                             CornerRadius="8"
@@ -395,6 +470,7 @@
                         </Border>
 
                         <Border x:Name="DownloadsNavigation"
+                            Style="{StaticResource SidebarNavigationItemStyle}"
                             Margin="8,3"
                             Background="Transparent"
                             CornerRadius="8"
@@ -422,6 +498,7 @@
                         </Border>
 
                         <Border x:Name="SettingsNavigation"
+                            Style="{StaticResource SidebarNavigationItemStyle}"
                             Margin="8,3"
                             Background="Transparent"
                             CornerRadius="8"
@@ -488,6 +565,7 @@
 
             <!-- Dashboard page -->
             <Grid x:Name="DashboardPage"
+              Style="{StaticResource PageTransitionStyle}"
               Grid.Column="1">
 
                 <Grid.RowDefinitions>
@@ -537,6 +615,7 @@
 
                         <!-- Main spotlight panel -->
                         <Border Padding="30"
+                            Style="{StaticResource AnimatedCardStyle}"
                             CornerRadius="14"
                             BorderBrush="#413568"
                             BorderThickness="1">
@@ -700,6 +779,7 @@
 
                         <!-- The Live Loader deserves enough room to explain what its status means. -->
                         <Border Margin="0,0,0,18"
+                            Style="{StaticResource AnimatedCardStyle}"
                             Padding="22"
                             Background="{StaticResource PanelBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
@@ -775,6 +855,7 @@
 
                         <!-- Library summary -->
                         <Border Padding="26"
+                            Style="{StaticResource AnimatedCardStyle}"
                             Background="{StaticResource PanelBrush}"
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
@@ -814,31 +895,37 @@
 
             <!-- My Mods occupies the same content area as the dashboard. -->
             <views:MyModsPage x:Name="MyModsPageControl"
+                          Style="{StaticResource PageTransitionStyle}"
                           Grid.Column="1"
                           Visibility="Collapsed"/>
 
             <!-- Profiles keep reusable casts separate from the active mod and X19 rotation. -->
             <views:ProfilesPage x:Name="ProfilesPageControl"
+                                Style="{StaticResource PageTransitionStyle}"
                                 Grid.Column="1"
                                 Visibility="Collapsed"/>
 
             <!-- Loader modes and the X19 rotation share one focused workspace. -->
             <views:LiveLoadersPage x:Name="LiveLoadersPageControl"
+                                   Style="{StaticResource PageTransitionStyle}"
                                    Grid.Column="1"
                                    Visibility="Collapsed"/>
 
             <!-- Nexus browsing has its own page so downloading does not crowd the dashboard. -->
             <views:BrowseNexusPage x:Name="BrowseNexusPageControl"
+                               Style="{StaticResource PageTransitionStyle}"
                                Grid.Column="1"
                                Visibility="Collapsed"/>
 
             <!-- Active Nexus transfers and their recent results remain visible here. -->
             <views:DownloadsPage x:Name="DownloadsPageControl"
+                                 Style="{StaticResource PageTransitionStyle}"
                                  Grid.Column="1"
                                  Visibility="Collapsed"/>
 
             <!-- Recovery and diagnostics live here so the dashboard stays simple. -->
             <views:SettingsPage x:Name="SettingsPageControl"
+                            Style="{StaticResource PageTransitionStyle}"
                             Grid.Column="1"
                             Visibility="Collapsed"/>
 
@@ -851,6 +938,7 @@
                 Visibility="Collapsed">
 
                 <Border Width="520"
+                    Style="{StaticResource AnimatedDialogCardStyle}"
                     Padding="32"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"

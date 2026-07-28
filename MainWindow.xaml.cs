@@ -121,6 +121,8 @@ namespace Limelight
             LoaderLaunchMode.Normal;
         private NavigationPage _selectedNavigationPage =
             NavigationPage.Dashboard;
+        private bool _windowTransitionInProgress;
+        private bool _animateWindowAfterRestore;
 
         private string? _gameDirectory;
 
@@ -659,37 +661,232 @@ namespace Limelight
                 _tutorialSteps[_tutorialStepIndex].Target);
         }
 
-        private void MinimiseWindow_Click(
-     object sender,
-     RoutedEventArgs e)
-        {
-            // I let Windows handle this so its native minimise animation is preserved.
-            SystemCommands.MinimizeWindow(
-                this);
-        }
-
-        private void ToggleMaximiseWindow_Click(
+        private async void MinimiseWindow_Click(
             object sender,
             RoutedEventArgs e)
         {
-            if (WindowState == WindowState.Maximized)
+            if (_windowTransitionInProgress)
             {
-                SystemCommands.RestoreWindow(
-                    this);
-
                 return;
             }
 
-            SystemCommands.MaximizeWindow(
-                this);
+            _windowTransitionInProgress =
+                true;
+
+            try
+            {
+                // A custom title bar does not receive Windows' full native
+                // minimise animation. I soften the hand-off so it still
+                // feels connected to the taskbar instead of disappearing.
+                await AnimateWindowVisualAsync(
+                    opacity: 0.35,
+                    scale: 0.965,
+                    milliseconds: 115);
+
+                _animateWindowAfterRestore =
+                    true;
+
+                SystemCommands.MinimizeWindow(
+                    this);
+            }
+            finally
+            {
+                _windowTransitionInProgress =
+                    false;
+            }
         }
 
-        private void CloseWindow_Click(
+        private async void ToggleMaximiseWindow_Click(
             object sender,
             RoutedEventArgs e)
         {
+            if (_windowTransitionInProgress)
+            {
+                return;
+            }
+
+            _windowTransitionInProgress =
+                true;
+
+            try
+            {
+                await AnimateWindowVisualAsync(
+                    opacity: 0.72,
+                    scale: 0.985,
+                    milliseconds: 90);
+
+                if (WindowState == WindowState.Maximized)
+                {
+                    SystemCommands.RestoreWindow(
+                        this);
+                }
+                else
+                {
+                    SystemCommands.MaximizeWindow(
+                        this);
+                }
+
+                // One render pass lets Windows finish changing the outer
+                // bounds before Limelight brings its contents back in.
+                await Dispatcher.InvokeAsync(
+                    () => { },
+                    DispatcherPriority.Render);
+
+                await AnimateWindowVisualAsync(
+                    opacity: 1,
+                    scale: 1,
+                    milliseconds: 165);
+            }
+            finally
+            {
+                _windowTransitionInProgress =
+                    false;
+            }
+        }
+
+        private async void CloseWindow_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (_windowTransitionInProgress)
+            {
+                return;
+            }
+
+            _windowTransitionInProgress =
+                true;
+
+            await AnimateWindowVisualAsync(
+                opacity: 0,
+                scale: 0.98,
+                milliseconds: 105);
+
             SystemCommands.CloseWindow(
                 this);
+        }
+
+        private async void MainWindow_StateChanged(
+            object? sender,
+            EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized ||
+                !_animateWindowAfterRestore)
+            {
+                return;
+            }
+
+            _animateWindowAfterRestore =
+                false;
+
+            _windowTransitionInProgress =
+                true;
+
+            try
+            {
+                await Dispatcher.InvokeAsync(
+                    () => { },
+                    DispatcherPriority.Render);
+
+                await AnimateWindowVisualAsync(
+                    opacity: 1,
+                    scale: 1,
+                    milliseconds: 175);
+            }
+            finally
+            {
+                _windowTransitionInProgress =
+                    false;
+            }
+        }
+
+        private Task AnimateWindowVisualAsync(
+            double opacity,
+            double scale,
+            int milliseconds)
+        {
+            TaskCompletionSource<bool> completion =
+                new();
+
+            Duration duration =
+                TimeSpan.FromMilliseconds(
+                    milliseconds);
+
+            CubicEase easing =
+                new()
+                {
+                    EasingMode = EasingMode.EaseOut
+                };
+
+            DoubleAnimation opacityAnimation =
+                new()
+                {
+                    To = opacity,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+
+            DoubleAnimation scaleXAnimation =
+                new()
+                {
+                    To = scale,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+
+            DoubleAnimation scaleYAnimation =
+                new()
+                {
+                    To = scale,
+                    Duration = duration,
+                    EasingFunction = easing
+                };
+
+            opacityAnimation.Completed +=
+                (_, _) =>
+                {
+                    // Committing the final values releases the animation
+                    // clocks instead of leaving them attached to the window.
+                    WindowVisualRoot.Opacity =
+                        opacity;
+
+                    WindowVisualScale.ScaleX =
+                        scale;
+
+                    WindowVisualScale.ScaleY =
+                        scale;
+
+                    WindowVisualRoot.BeginAnimation(
+                        UIElement.OpacityProperty,
+                        null);
+
+                    WindowVisualScale.BeginAnimation(
+                        ScaleTransform.ScaleXProperty,
+                        null);
+
+                    WindowVisualScale.BeginAnimation(
+                        ScaleTransform.ScaleYProperty,
+                        null);
+
+                    completion.TrySetResult(
+                        true);
+                };
+
+            WindowVisualRoot.BeginAnimation(
+                UIElement.OpacityProperty,
+                opacityAnimation,
+                HandoffBehavior.SnapshotAndReplace);
+
+            WindowVisualScale.BeginAnimation(
+                ScaleTransform.ScaleXProperty,
+                scaleXAnimation,
+                HandoffBehavior.SnapshotAndReplace);
+
+            WindowVisualScale.BeginAnimation(
+                ScaleTransform.ScaleYProperty,
+                scaleYAnimation,
+                HandoffBehavior.SnapshotAndReplace);
+
+            return completion.Task;
         }
         private void CloseLevelTransitionBlocker_Click(
     object sender,
