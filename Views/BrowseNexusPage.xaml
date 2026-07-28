@@ -640,5 +640,106 @@
                                  Panel.ZIndex="11"
                                  Style="{StaticResource PageTransitionStyle}"
                                  Visibility="Collapsed"/>
+
+        <Border Grid.RowSpan="2"
+                Margin="38,88,38,38"
+                Padding="34"
+                Panel.ZIndex="30"
+                Background="#F4080912"
+                BorderBrush="#6B3158"
+                BorderThickness="1"
+                CornerRadius="14">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <StackPanel MaxWidth="760"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <Border Width="76"
+                            Height="76"
+                            HorizontalAlignment="Center"
+                            Background="#1A1E35"
+                            BorderBrush="{StaticResource PinkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="18">
+                        <TextBlock Text="N"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="34"
+                                   FontStyle="Italic"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                    </Border>
+
+                    <TextBlock Text="NEXUS MODS"
+                               Margin="0,24,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <TextBlock Text="THE CATALOGUE IS BETWEEN SETS"
+                               Margin="0,8,0,0"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               FontSize="25"
+                               FontWeight="Bold"/>
+
+                    <TextBlock Text="Nexus authentication, browsing, and direct downloads are temporarily unavailable while Limelight's application registration is reviewed."
+                               MaxWidth="650"
+                               Margin="0,12,0,0"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               FontSize="13"
+                               LineHeight="20"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                    <Border Margin="0,24,0,0"
+                            Padding="18,14"
+                            Background="#14192E"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                        <TextBlock Text="Manual ZIP imports and drag and drop installation are ready now. No Nexus API requests are made by this Preview build."
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   FontSize="12"
+                                   LineHeight="18"
+                                   Foreground="#C8C6D8"/>
+                    </Border>
+                </StackPanel>
+
+                <StackPanel Grid.Row="1"
+                            HorizontalAlignment="Center"
+                            Orientation="Horizontal">
+                    <Border Padding="12,7"
+                            Background="#2A1830"
+                            BorderBrush="{StaticResource PinkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="7">
+                        <TextBlock Text="UNDER CONSTRUCTION"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                    </Border>
+
+                    <Border Margin="10,0,0,0"
+                            Padding="12,7"
+                            Background="#1A1E35"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="7">
+                        <TextBlock Text="AWAITING APPROVAL"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource CyanBrush}"/>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

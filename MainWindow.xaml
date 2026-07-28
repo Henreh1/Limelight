@@ -14,6 +14,11 @@
         WindowStyle="None"
         ResizeMode="CanResize"
         StateChanged="MainWindow_StateChanged"
+        AllowDrop="True"
+        PreviewDragEnter="MainWindow_PreviewDragEnter"
+        PreviewDragOver="MainWindow_PreviewDragOver"
+        PreviewDragLeave="MainWindow_PreviewDragLeave"
+        PreviewDrop="MainWindow_PreviewDrop"
         Background="{StaticResource BackgroundBrush}"
         Foreground="{StaticResource TextBrush}"
         FontFamily="Bahnschrift, Segoe UI"
@@ -873,7 +878,7 @@
                                            FontWeight="Bold"/>
 
                                     <TextBlock x:Name="LibrarySummaryText"
-                                           Text="Your mod library is empty. Import a ZIP archive or browse Nexus Mods to get started."
+                                           Text="Your mod library is empty. Import or drag in a ZIP archive to get started."
                                            Margin="0,10,20,0"
                                            FontSize="13"
                                            TextWrapping="Wrap"
@@ -1210,6 +1215,87 @@
                     </StackPanel>
                 </Border>
             </Grid>
+        </Grid>
+
+        <!-- A full-window cue makes it clear that the archive can be dropped
+             anywhere instead of forcing the user to find a tiny target. -->
+        <Grid x:Name="ModDropOverlay"
+              Grid.RowSpan="2"
+              Panel.ZIndex="700"
+              Background="#EC080912"
+              IsHitTestVisible="False"
+              Visibility="Collapsed">
+
+            <Border Width="570"
+                    Padding="36"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="#171B31"
+                    BorderBrush="{StaticResource CyanBrush}"
+                    BorderThickness="2"
+                    CornerRadius="16"
+                    Style="{StaticResource AnimatedDialogCardStyle}">
+
+                <StackPanel HorizontalAlignment="Center">
+                    <Grid Width="112"
+                          Height="112">
+                        <Ellipse Stroke="{StaticResource CyanBrush}"
+                                 StrokeThickness="2"/>
+                        <Ellipse Margin="14"
+                                 Stroke="{StaticResource PinkBrush}"
+                                 StrokeThickness="4"/>
+                        <TextBlock Text="L"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="46"
+                                   FontStyle="Italic"
+                                   FontWeight="Black"
+                                   Foreground="{StaticResource TextBrush}"/>
+                    </Grid>
+
+                    <TextBlock Text="DROP TO IMPORT"
+                               Margin="0,24,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <TextBlock Text="ADD MODS TO THE LINEUP"
+                               Margin="0,9,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="27"
+                               FontWeight="Black"
+                               Foreground="{StaticResource TextBrush}"/>
+
+                    <Rectangle Width="84"
+                               Height="4"
+                               Margin="0,17,0,0"
+                               Fill="{StaticResource PinkBrush}"/>
+
+                    <TextBlock MaxWidth="450"
+                               Margin="0,19,0,0"
+                               HorizontalAlignment="Center"
+                               Text="Release your ZIP archive anywhere in this window. Limelight will validate it before anything enters your library."
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               FontSize="13"
+                               LineHeight="20"
+                               Foreground="#C8C6D8"/>
+
+                    <Border Margin="0,23,0,0"
+                            Padding="14,8"
+                            HorizontalAlignment="Center"
+                            Background="#101426"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="7">
+                        <TextBlock Text="◆  ZIP ARCHIVES ONLY"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource PinkBrush}"/>
+                    </Border>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Window>

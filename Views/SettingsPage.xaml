@@ -481,6 +481,121 @@
                     </ScrollViewer.Resources>
 
                     <StackPanel Margin="0,0,12,30">
+                        <Border Padding="28"
+                                Background="{StaticResource PanelBrush}"
+                                BorderBrush="#6B3158"
+                                BorderThickness="1"
+                                CornerRadius="12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel MaxWidth="760"
+                                            HorizontalAlignment="Left">
+                                    <TextBlock Text="NEXUS MODS"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource PinkBrush}"/>
+
+                                    <TextBlock Text="AWAITING NEXUS APPROVAL"
+                                               Margin="0,9,0,0"
+                                               FontSize="22"
+                                               FontWeight="Bold"/>
+
+                                    <TextBlock Margin="0,10,20,0"
+                                               Text="Authentication, catalogue browsing, and direct downloads are temporarily paused in this Preview build while Limelight's application registration is reviewed."
+                                               TextWrapping="Wrap"
+                                               FontSize="13"
+                                               LineHeight="19"
+                                               Foreground="{StaticResource MutedTextBrush}"/>
+
+                                    <TextBlock Margin="0,10,20,0"
+                                               Text="Manual ZIP imports and drag and drop installation remain fully available. Any saved Nexus credential stays protected on this Windows account and no API requests are made."
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               LineHeight="18"
+                                               Foreground="#C8C6D8"/>
+
+                                    <UniformGrid Margin="0,22,0,0"
+                                                 Columns="3">
+                                        <Border Margin="0,0,7,0"
+                                                Padding="14"
+                                                Background="#111528"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="MANUAL IMPORT"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="READY"
+                                                           Margin="0,5,0,0"
+                                                           FontSize="13"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource CyanBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Margin="4,0"
+                                                Padding="14"
+                                                Background="#111528"
+                                                BorderBrush="{StaticResource BorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="SAVED CREDENTIAL"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="PRESERVED"
+                                                           Margin="0,5,0,0"
+                                                           FontSize="13"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource CyanBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Margin="7,0,0,0"
+                                                Padding="14"
+                                                Background="#21172C"
+                                                BorderBrush="#6B3158"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <StackPanel>
+                                                <TextBlock Text="API ACTIVITY"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                                <TextBlock Text="PAUSED"
+                                                           Margin="0,5,0,0"
+                                                           FontSize="13"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource PinkBrush}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </UniformGrid>
+                                </StackPanel>
+
+                                <Border Grid.Column="1"
+                                        Padding="13,8"
+                                        VerticalAlignment="Top"
+                                        Background="#2A1830"
+                                        BorderBrush="{StaticResource PinkBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                    <TextBlock Text="UNDER CONSTRUCTION"
+                                               FontSize="10"
+                                               FontWeight="Bold"
+                                               Foreground="{StaticResource PinkBrush}"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- I keep the reviewed integration ready behind this card without exposing its controls. -->
+                        <StackPanel Visibility="Collapsed">
                         <!-- This card keeps the private testing boundary obvious before anybody connects a personal key. -->
                         <Border Style="{StaticResource SettingsCardStyle}">
                             <Grid>
@@ -844,6 +959,7 @@
                                 </Border>
                             </Grid>
                         </Border>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

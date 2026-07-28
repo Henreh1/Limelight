@@ -217,7 +217,7 @@ namespace Limelight.Services
                         DateTimeOffset.UtcNow;
 
                     record.StatusMessage =
-                        "Limelight closed before this download finished. Start it again from Browse Nexus.";
+                        "Limelight closed before this download finished. Nexus downloads are paused in this Preview build.";
 
                     recoveredInterruptedDownload =
                         true;

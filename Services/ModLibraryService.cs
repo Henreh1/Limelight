@@ -1,9 +1,22 @@
 ﻿using Limelight.Models;
 using System.IO;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Limelight.Services
 {
+    public sealed class ModArchiveFingerprintResult
+    {
+        public bool IsValid { get; init; }
+
+        public string Fingerprint { get; init; } =
+            string.Empty;
+
+        public string Message { get; init; } =
+            string.Empty;
+    }
+
     public sealed class ModLibraryService
     {
         private static readonly string[] PackageExtensions =
@@ -34,7 +47,8 @@ namespace Limelight.Services
             string archivePath,
             long nexusModId = 0,
             int nexusFileId = 0,
-            string? displayName = null)
+            string? displayName = null,
+            string? contentFingerprint = null)
         {
             // Validate again here so this service is safe even when called
             // from somewhere other than the current Import button.
@@ -68,6 +82,13 @@ namespace Limelight.Services
                 List<string> packageFiles =
                     FindPackageFiles(stagingDirectory);
 
+                string resolvedFingerprint =
+                    string.IsNullOrWhiteSpace(contentFingerprint)
+                        ? CalculatePackageFileSetFingerprint(
+                            stagingDirectory,
+                            packageFiles)
+                        : contentFingerprint.Trim();
+
                 // I settle the extracted files into their permanent location before
                 // CUE4Parse opens the containers and begins reading their indexes.
                 MoveDirectoryWithRetry(
@@ -85,6 +106,7 @@ namespace Limelight.Services
                         : displayName.Trim(),
                     InstallDirectory = finalDirectory,
                     PackageFiles = packageFiles,
+                    ContentFingerprint = resolvedFingerprint,
                     AssetPackages = assetPackages,
                     AssetManifestVersion =
                         ModAssetScannerService.CurrentManifestVersion,
@@ -105,6 +127,66 @@ namespace Limelight.Services
 
                 throw;
             }
+        }
+
+        public ModArchiveFingerprintResult GetArchiveFingerprintResult(
+            string archivePath)
+        {
+            ModArchiveValidationResult validation =
+                _validator.Validate(archivePath);
+
+            if (!validation.IsValid)
+            {
+                return new ModArchiveFingerprintResult
+                {
+                    IsValid = false,
+                    Message = validation.Message
+                };
+            }
+
+            using ZipArchive archive =
+                ZipFile.OpenRead(archivePath);
+
+            List<string> packageParts =
+                new List<string>();
+
+            foreach (ZipArchiveEntry entry in archive.Entries.Where(entry =>
+                !string.IsNullOrWhiteSpace(entry.Name) &&
+                PackageExtensions.Contains(
+                    Path.GetExtension(entry.Name),
+                    StringComparer.OrdinalIgnoreCase)))
+            {
+                using Stream entryStream =
+                    entry.Open();
+
+                packageParts.Add(
+                    CreatePackageFingerprintPart(
+                        Path.GetExtension(entry.Name),
+                        entry.Length,
+                        entryStream));
+            }
+
+            return new ModArchiveFingerprintResult
+            {
+                IsValid = true,
+                Fingerprint =
+                    CreatePackageSetFingerprint(
+                        packageParts)
+            };
+        }
+
+        public string CalculateInstalledModFingerprint(
+            InstalledMod mod)
+        {
+            if (!string.IsNullOrWhiteSpace(
+                    mod.ContentFingerprint))
+            {
+                return mod.ContentFingerprint.Trim();
+            }
+
+            return CalculatePackageFileSetFingerprint(
+                mod.InstallDirectory,
+                mod.PackageFiles);
         }
 
         private static void MoveDirectoryWithRetry(
@@ -272,6 +354,96 @@ namespace Limelight.Services
                         modDirectory,
                         file))
                 .ToList();
+        }
+
+        private static string CalculatePackageFileSetFingerprint(
+            string modDirectory,
+            IEnumerable<string> packageFiles)
+        {
+            string safeRoot =
+                Path.GetFullPath(modDirectory)
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
+
+            string safeRootPrefix =
+                safeRoot + Path.DirectorySeparatorChar;
+
+            List<string> packageParts =
+                new List<string>();
+
+            foreach (string relativePath in packageFiles)
+            {
+                string packagePath =
+                    Path.GetFullPath(
+                        Path.Combine(
+                            modDirectory,
+                            relativePath));
+
+                if (!packagePath.StartsWith(
+                        safeRootPrefix,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    !File.Exists(packagePath))
+                {
+                    throw new FileNotFoundException(
+                        "An installed package file could not be fingerprinted.",
+                        packagePath);
+                }
+
+                FileInfo packageInfo =
+                    new FileInfo(packagePath);
+
+                using FileStream packageStream =
+                    File.OpenRead(packagePath);
+
+                packageParts.Add(
+                    CreatePackageFingerprintPart(
+                        packageInfo.Extension,
+                        packageInfo.Length,
+                        packageStream));
+            }
+
+            return CreatePackageSetFingerprint(
+                packageParts);
+        }
+
+        private static string CreatePackageFingerprintPart(
+            string extension,
+            long length,
+            Stream content)
+        {
+            string contentHash =
+                Convert.ToHexString(
+                    SHA256.HashData(content));
+
+            return
+                $"{extension.ToLowerInvariant()}:{length}:{contentHash}";
+        }
+
+        private static string CreatePackageSetFingerprint(
+            IEnumerable<string> packageParts)
+        {
+            string[] orderedParts =
+                packageParts
+                    .OrderBy(
+                        part => part,
+                        StringComparer.Ordinal)
+                    .ToArray();
+
+            if (orderedParts.Length == 0)
+            {
+                throw new InvalidDataException(
+                    "No Unreal package files were available to identify this mod.");
+            }
+
+            byte[] fingerprintSource =
+                Encoding.UTF8.GetBytes(
+                    string.Join(
+                        "\n",
+                        orderedParts));
+
+            return Convert.ToHexString(
+                SHA256.HashData(fingerprintSource));
         }
 
         private static string CreateDisplayName(

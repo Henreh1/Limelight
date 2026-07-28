@@ -123,6 +123,7 @@ namespace Limelight
             NavigationPage.Dashboard;
         private bool _windowTransitionInProgress;
         private bool _animateWindowAfterRestore;
+        private bool _isModImportInProgress;
 
         private string? _gameDirectory;
 
@@ -350,7 +351,17 @@ namespace Limelight
             RefreshSettingsPage();
             RefreshDiscordPresence(
                 isGameRunning);
-            await RestoreNexusConnectionAsync();
+
+            if (NexusApiService.IntegrationEnabled)
+            {
+                await RestoreNexusConnectionAsync();
+            }
+            else
+            {
+                // I leave the saved credential untouched while Nexus reviews
+                // Limelight, but this Preview build never opens or validates it.
+                SettingsPageControl.ShowNexusUnavailable();
+            }
 
             // Finish any existing-mod migration before opening another modal window.
             await CheckForExistingMods();
@@ -427,9 +438,9 @@ namespace Limelight
                     NavigationPage.BrowseNexus,
                     BrowseNexusNavigation,
                     "BROWSE NEXUS",
-                    "DISCOVER MODS INSIDE LIMELIGHT",
-                    "Connect a Nexus Mods account from Settings to browse the Dead as Disco catalogue, inspect mod pages, and start supported downloads without leaving Limelight.",
-                    "Personal API keys are for private testing only until Limelight receives its registered Nexus application flow."),
+                    "CATALOGUE ACCESS IS COMING",
+                    "The Nexus catalogue is temporarily paused while Limelight's application registration is reviewed. This page will unlock after approval.",
+                    "For this Preview, import a mod archive from the Dashboard or drag its ZIP directly onto Limelight."),
                 new TutorialStep(
                     NavigationPage.Downloads,
                     DownloadsNavigation,
@@ -4013,6 +4024,12 @@ namespace Limelight
         private async void NexusConnectRequested(
     string apiKey)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                SettingsPageControl.ShowNexusUnavailable();
+                return;
+            }
+
             await ConnectNexusAsync(
                 apiKey,
                 isRestoring: false);
@@ -4020,6 +4037,14 @@ namespace Limelight
 
         private void NexusDisconnectRequested()
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                // The approval gate is not a disconnect request. Keeping the
+                // protected value means the user does not need to enter it again later.
+                SettingsPageControl.ShowNexusUnavailable();
+                return;
+            }
+
             ClearNexusCredentials();
 
             SettingsPageControl.ShowNexusStatus(
@@ -4034,6 +4059,12 @@ namespace Limelight
 
         private async Task RestoreNexusConnectionAsync()
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                SettingsPageControl.ShowNexusUnavailable();
+                return;
+            }
+
             string apiKey =
                 _nexusCredentialService.Unprotect(
                     _settings.ProtectedNexusApiKey);
@@ -4064,6 +4095,12 @@ namespace Limelight
             string apiKey,
             bool isRestoring)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                SettingsPageControl.ShowNexusUnavailable();
+                return;
+            }
+
             SettingsPageControl.ShowNexusStatus(
                 isConnected: false,
                 accountName: null,
@@ -4173,6 +4210,11 @@ namespace Limelight
         private async void NexusViewModRequested(
             NexusModSummary mod)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(_nexusApiKey))
             {
                 BrowseNexusPageControl.ShowModDetailsError(
@@ -4203,6 +4245,11 @@ namespace Limelight
         private async void NexusViewFilesRequested(
             NexusModSummary mod)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(_nexusApiKey))
             {
                 BrowseNexusPageControl.ShowModFilesError(
@@ -4232,6 +4279,15 @@ namespace Limelight
         private async void NexusDownloadRequested(
             NexusModFile file)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                ShowNotification(
+                    "NEXUS APPROVAL PENDING",
+                    NexusApiService.IntegrationUnavailableMessage,
+                    isError: true);
+                return;
+            }
+
             if (_isNexusDownloadRunning)
             {
                 ShowNotification(
@@ -4873,6 +4929,7 @@ namespace Limelight
                 Visibility.Visible;
 
             bool isConnected =
+                NexusApiService.IntegrationEnabled &&
                 _nexusAccount is not null &&
                 !string.IsNullOrWhiteSpace(_nexusApiKey);
 
@@ -4897,6 +4954,11 @@ namespace Limelight
         private async void NexusSearchRequested(
             string query)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                return;
+            }
+
             _nexusSearchQuery =
                 query.Trim();
 
@@ -5456,47 +5518,232 @@ namespace Limelight
                 return;
             }
 
-            string archiveName =
-                Path.GetFileNameWithoutExtension(
-                    archivePath);
+            await ImportModArchiveAsync(
+                archivePath);
+        }
 
-            string incomingModName =
-                InstalledMod.CreateDisplayName(
-                    archiveName);
+        private void MainWindow_PreviewDragEnter(
+            object sender,
+            DragEventArgs e)
+        {
+            UpdateModDropFeedback(e);
+        }
 
-            // Compare the cleaned names because Nexus may give the same
-            // download a different timestamp or token each time.
-            InstalledMod? existingMod =
-                _settings.InstalledMods.FirstOrDefault(mod =>
-                    Directory.Exists(mod.InstallDirectory) &&
-                    string.Equals(
-                        mod.DisplayName,
-                        incomingModName,
-                        StringComparison.OrdinalIgnoreCase));
+        private void MainWindow_PreviewDragOver(
+            object sender,
+            DragEventArgs e)
+        {
+            UpdateModDropFeedback(e);
+        }
 
-            if (existingMod != null)
+        private void MainWindow_PreviewDragLeave(
+            object sender,
+            DragEventArgs e)
+        {
+            Point pointerPosition =
+                e.GetPosition(this);
+
+            // Routed drag events can also fire while the pointer moves between
+            // child controls. I only hide the cue after it leaves the window.
+            if (pointerPosition.X <= 0 ||
+                pointerPosition.Y <= 0 ||
+                pointerPosition.X >= ActualWidth ||
+                pointerPosition.Y >= ActualHeight)
+            {
+                ModDropOverlay.Visibility =
+                    Visibility.Collapsed;
+            }
+
+            e.Handled = true;
+        }
+
+        private async void MainWindow_PreviewDrop(
+            object sender,
+            DragEventArgs e)
+        {
+            ModDropOverlay.Visibility =
+                Visibility.Collapsed;
+
+            e.Handled = true;
+
+            string[] archivePaths =
+                GetDroppedZipArchives(
+                    e.Data);
+
+            if (archivePaths.Length == 0)
             {
                 ShowLimelightDialog(
-                    "MOD ALREADY INSTALLED",
-                    $"{existingMod.DisplayName} is already in your library. Remove the existing copy before importing it again.",
-                    LimelightDialogTone.Information,
-                    primaryAction: "VIEW MY MODS",
-                    eyebrow: "IMPORT SKIPPED");
+                    "ZIP ARCHIVE REQUIRED",
+                    "Drop one or more Dead as Disco mod ZIP archives into Limelight.",
+                    LimelightDialogTone.Error,
+                    eyebrow: "IMPORT MISSED ITS CUE");
 
                 return;
             }
 
+            // Multiple archives are handled in the order Windows provides
+            // them, using exactly the same checks as the Import Mod button.
+            foreach (string archivePath in archivePaths)
+            {
+                await ImportModArchiveAsync(
+                    archivePath);
+            }
+        }
+
+        private void UpdateModDropFeedback(
+            DragEventArgs e)
+        {
+            bool canImport =
+                !_isModImportInProgress &&
+                GetDroppedZipArchives(
+                        e.Data)
+                    .Length > 0;
+
+            e.Effects = canImport
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+
+            ModDropOverlay.Visibility = canImport
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            e.Handled = true;
+        }
+
+        private static string[] GetDroppedZipArchives(
+            IDataObject data)
+        {
+            if (!data.GetDataPresent(
+                    DataFormats.FileDrop))
+            {
+                return Array.Empty<string>();
+            }
+
+            string[] droppedPaths =
+                data.GetData(
+                    DataFormats.FileDrop) as string[]
+                ?? Array.Empty<string>();
+
+            return droppedPaths
+                .Where(path =>
+                    File.Exists(path) &&
+                    string.Equals(
+                        Path.GetExtension(path),
+                        ".zip",
+                        StringComparison.OrdinalIgnoreCase))
+                .Distinct(
+                    StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
+
+        private async Task ImportModArchiveAsync(
+            string archivePath)
+        {
+            if (_isModImportInProgress)
+            {
+                ShowLimelightDialog(
+                    "IMPORT ALREADY IN PROGRESS",
+                    "Let Limelight finish adding the current archive before importing another mod.",
+                    LimelightDialogTone.Information,
+                    eyebrow: "ONE CUE AT A TIME");
+
+                return;
+            }
+
+            if (!File.Exists(archivePath) ||
+                !string.Equals(
+                    Path.GetExtension(archivePath),
+                    ".zip",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                ShowLimelightDialog(
+                    "ZIP ARCHIVE REQUIRED",
+                    "Limelight can only import mod archives saved as ZIP files.",
+                    LimelightDialogTone.Error,
+                    eyebrow: "IMPORT MISSED ITS CUE");
+
+                return;
+            }
+
+            _isModImportInProgress = true;
             ImportModButton.IsEnabled = false;
             ImportModButton.Content = "IMPORTING...";
 
             try
             {
+                ModArchiveFingerprintResult fingerprintResult =
+                    await Task.Run(() =>
+                        _modLibraryService.GetArchiveFingerprintResult(
+                            archivePath));
+
+                if (!fingerprintResult.IsValid)
+                {
+                    ShowLimelightDialog(
+                        "NOT A MOD ARCHIVE",
+                        "Limelight could not find a supported Dead as Disco mod in this ZIP.",
+                        LimelightDialogTone.Error,
+                        details: fingerprintResult.Message,
+                        eyebrow: "IMPORT SKIPPED");
+
+                    return;
+                }
+
+                string incomingFingerprint =
+                    fingerprintResult.Fingerprint;
+
+                List<(InstalledMod Mod, string Fingerprint)> libraryFingerprints =
+                    await Task.Run(
+                        CalculateLibraryFingerprints);
+
+                bool fingerprintsAdded = false;
+
+                foreach ((InstalledMod mod, string fingerprint) in
+                         libraryFingerprints)
+                {
+                    if (string.IsNullOrWhiteSpace(
+                            mod.ContentFingerprint))
+                    {
+                        // Older libraries did not store fingerprints. I fill
+                        // them in once so renamed legacy mods are protected too.
+                        mod.ContentFingerprint = fingerprint;
+                        fingerprintsAdded = true;
+                    }
+                }
+
+                if (fingerprintsAdded)
+                {
+                    _settingsService.Save(
+                        _settings);
+                }
+
+                InstalledMod? existingMod =
+                    libraryFingerprints
+                        .FirstOrDefault(item =>
+                            string.Equals(
+                                item.Fingerprint,
+                                incomingFingerprint,
+                                StringComparison.OrdinalIgnoreCase))
+                        .Mod;
+
+                if (existingMod != null)
+                {
+                    ShowLimelightDialog(
+                        "MOD ALREADY INSTALLED",
+                        $"{existingMod.DisplayName} already contains the same mod files. Renaming a library entry does not create a separate copy.",
+                        LimelightDialogTone.Information,
+                        primaryAction: "VIEW MY MODS",
+                        eyebrow: "IMPORT SKIPPED");
+
+                    return;
+                }
+
                 // Large archives are processed in the background so
                 // the interface remains responsive during the import.
                 InstalledMod installedMod =
                     await Task.Run(() =>
                         _modLibraryService.Import(
-                            archivePath));
+                            archivePath,
+                            contentFingerprint: incomingFingerprint));
 
                 _settings.InstalledMods.Add(
                     installedMod);
@@ -5527,9 +5774,48 @@ namespace Limelight
             }
             finally
             {
+                _isModImportInProgress = false;
                 ImportModButton.IsEnabled = true;
                 ImportModButton.Content = "IMPORT MOD";
             }
+        }
+
+        private List<(InstalledMod Mod, string Fingerprint)>
+            CalculateLibraryFingerprints()
+        {
+            List<(InstalledMod Mod, string Fingerprint)> fingerprints =
+                new List<(InstalledMod Mod, string Fingerprint)>();
+
+            foreach (InstalledMod mod in _settings.InstalledMods)
+            {
+                if (!Directory.Exists(
+                        mod.InstallDirectory))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    string fingerprint =
+                        _modLibraryService
+                            .CalculateInstalledModFingerprint(mod);
+
+                    fingerprints.Add(
+                        (mod, fingerprint));
+                }
+                catch (IOException)
+                {
+                    // A damaged legacy entry should not block imports for the
+                    // rest of the library. Its normal validation still reports it.
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Security software can briefly hold an old package file.
+                    // I skip only that entry and leave the rest of the scan intact.
+                }
+            }
+
+            return fingerprints;
         }
 
         private void RefreshLibrarySummary()
@@ -5606,7 +5892,7 @@ namespace Limelight
             if (installedCount == 0)
             {
                 LibrarySummaryText.Text =
-                    "Your mod library is empty. Import a ZIP archive or browse Nexus Mods to get started.";
+                    "Your mod library is empty. Import or drag in a ZIP archive to get started.";
 
                 LibraryStatusText.Text =
                     "NO MODS YET";

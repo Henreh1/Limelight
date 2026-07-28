@@ -29,7 +29,7 @@
                            FontSize="27"
                            FontWeight="Bold"/>
 
-                <TextBlock Text="Watch Nexus transfers, installation progress, and recent download results."
+                <TextBlock Text="Review transfer history and completed installs. New Nexus downloads are paused during approval."
                            Margin="0,8,0,0"
                            FontSize="13"
                            Foreground="{StaticResource MutedTextBrush}"/>
@@ -63,7 +63,7 @@
                            FontSize="12"
                            FontWeight="Bold"/>
 
-                <TextBlock Text="Nexus downloads are checked and installed into My Mods automatically."
+                <TextBlock Text="Existing download history remains here. Manual ZIP imports continue through the Dashboard."
                            Margin="0,5,0,0"
                            FontSize="12"
                            Foreground="{StaticResource MutedTextBrush}"/>
@@ -98,7 +98,7 @@
                                FontSize="16"
                                FontWeight="Bold"/>
 
-                    <TextBlock Text="Choose a mod in Browse Nexus and its progress will appear here."
+                    <TextBlock Text="Manual ZIP imports and completed download history will appear here."
                                Margin="0,8,0,0"
                                HorizontalAlignment="Center"
                                FontSize="12"

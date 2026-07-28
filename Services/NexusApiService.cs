@@ -17,6 +17,14 @@ namespace Limelight.Services
 {
     public sealed class NexusApiService
     {
+        // I keep the finished Nexus integration behind one gate while the
+        // application registration is being reviewed. This prevents the
+        // Preview build from making even a hidden validation request.
+        public static bool IntegrationEnabled => false;
+
+        public const string IntegrationUnavailableMessage =
+            "Nexus browsing and downloads are temporarily unavailable while Limelight's application registration is reviewed.";
+
         // I changed this once the review build was sent to Nexus Mods Support.
         public const bool RegistrationSubmitted = true;
 
@@ -293,6 +301,7 @@ namespace Limelight.Services
             IProgress<NexusDownloadProgress>? progress = null,
             CancellationToken cancellationToken = default)
         {
+            EnsureIntegrationEnabled();
             ArgumentNullException.ThrowIfNull(file);
             ValidateApiKey(apiKey);
 
@@ -971,6 +980,8 @@ namespace Limelight.Services
     HttpRequestMessage request,
     CancellationToken cancellationToken)
         {
+            EnsureIntegrationEnabled();
+
             if (UsageSnapshot.ShouldPauseRequests)
             {
                 throw new InvalidOperationException(
@@ -1174,6 +1185,15 @@ namespace Limelight.Services
                 throw new ArgumentException(
                     "A Nexus Mods API key is required.",
                     nameof(apiKey));
+            }
+        }
+
+        private static void EnsureIntegrationEnabled()
+        {
+            if (!IntegrationEnabled)
+            {
+                throw new InvalidOperationException(
+                    IntegrationUnavailableMessage);
             }
         }
 

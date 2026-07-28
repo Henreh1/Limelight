@@ -20,6 +20,9 @@ namespace Limelight.Models
         public List<string> PackageFiles { get; set; } =
             new List<string>();
 
+        public string ContentFingerprint { get; set; } =
+            string.Empty;
+
         public List<ModAssetPackage> AssetPackages { get; set; } =
             new List<ModAssetPackage>();
 

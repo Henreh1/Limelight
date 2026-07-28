@@ -29,8 +29,15 @@ namespace Limelight.Views
             NexusRequestIdentityText.Text =
                 $"LIMELIGHT {NexusApiService.ApplicationVersion.ToUpperInvariant()}";
 
-            ShowNexusRegistrationStatus(
-                NexusApiService.RegistrationSubmitted);
+            if (NexusApiService.IntegrationEnabled)
+            {
+                ShowNexusRegistrationStatus(
+                    NexusApiService.RegistrationSubmitted);
+            }
+            else
+            {
+                ShowNexusUnavailable();
+            }
         }
 
         public void ShowNexusRegistrationStatus(
@@ -236,6 +243,12 @@ namespace Limelight.Views
     string? accountName,
     bool isBusy = false)
         {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                ShowNexusUnavailable();
+                return;
+            }
+
             bool healthy =
                 isConnected ||
                 isBusy;
@@ -302,10 +315,58 @@ namespace Limelight.Views
             }
         }
 
+        public void ShowNexusUnavailable()
+        {
+            NexusRegistrationStatusText.Text =
+                "AWAITING APPROVAL";
+
+            NexusRegistrationStatusText.Foreground =
+                StatusBrush(isHealthy: false);
+
+            NexusConnectionStatusText.Text =
+                "UNDER CONSTRUCTION";
+
+            NexusConnectionStatusText.Foreground =
+                StatusBrush(isHealthy: false);
+
+            NexusAccountDetailText.Text =
+                "Nexus authentication, browsing, and downloads are paused in this Preview build. Any saved credential remains protected on this Windows account.";
+
+            NexusApiKeyBox.Password =
+                string.Empty;
+
+            NexusApiKeyBox.IsEnabled = false;
+            NexusConnectButton.IsEnabled = false;
+            NexusDisconnectButton.IsEnabled = false;
+            NexusConnectButton.Opacity = 0.45;
+            NexusDisconnectButton.Opacity = 0.45;
+
+            NexusAccessBadgeText.Text =
+                "PREVIEW";
+
+            NexusAccessBadgeText.Foreground =
+                StatusBrush(isHealthy: false);
+
+            NexusTestingStatusText.Text =
+                "NO API REQUESTS";
+
+            NexusSessionRequestCountText.Text = "0";
+            NexusHourlyRemainingText.Text = "PAUSED";
+            NexusDailyRemainingText.Text = "PAUSED";
+            NexusLastRequestText.Text =
+                "NEXUS APPROVAL PENDING";
+        }
+
         public void ShowNexusUsage(
     NexusApiUsageSnapshot snapshot)
         {
             ArgumentNullException.ThrowIfNull(snapshot);
+
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                ShowNexusUnavailable();
+                return;
+            }
 
             NexusSessionRequestCountText.Text =
                 snapshot.RequestsThisSession.ToString("N0");
