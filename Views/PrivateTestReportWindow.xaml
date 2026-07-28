@@ -1,6 +1,7 @@
 <Window x:Class="Limelight.Views.PrivateTestReportWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:motion="clr-namespace:Limelight.Animations"
         Width="900"
         Height="820"
         MinWidth="760"
@@ -12,7 +13,8 @@
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
         Foreground="{StaticResource TextBrush}"
-        FontFamily="Bahnschrift, Segoe UI">
+        FontFamily="Bahnschrift, Segoe UI"
+        motion:WindowMotion.AnimateClose="True">
 
     <Window.Resources>
         <Style x:Key="ReportFieldLabelStyle"

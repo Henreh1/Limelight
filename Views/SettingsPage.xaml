@@ -258,7 +258,8 @@
             <!-- General keeps the everyday choices together. -->
             <TabItem Header="GENERAL"
                      Style="{StaticResource SettingsTabItemStyle}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource PageTransitionStyle}">
                     <ScrollViewer.Resources>
                         <Style TargetType="ScrollBar"
                                BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
@@ -407,7 +408,8 @@
 
             <TabItem Header="LIVE LOADER"
                      Style="{StaticResource SettingsTabItemStyle}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource PageTransitionStyle}">
                     <ScrollViewer.Resources>
                         <Style TargetType="ScrollBar"
                                BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
@@ -471,7 +473,8 @@
 
             <TabItem Header="NEXUS MODS"
                      Style="{StaticResource SettingsTabItemStyle}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource PageTransitionStyle}">
                     <ScrollViewer.Resources>
                         <Style TargetType="ScrollBar"
                                BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
@@ -847,7 +850,8 @@
 
             <TabItem Header="SUPPORT"
                      Style="{StaticResource SettingsTabItemStyle}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource PageTransitionStyle}">
                     <ScrollViewer.Resources>
                         <Style TargetType="ScrollBar"
                                BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>

@@ -632,11 +632,13 @@
         <views:NexusModDetailsView x:Name="NexusModDetailsViewControl"
                                    Grid.RowSpan="2"
                                    Panel.ZIndex="10"
+                                   Style="{StaticResource PageTransitionStyle}"
                                    Visibility="Collapsed"/>
 
         <views:NexusModFilesView x:Name="NexusModFilesViewControl"
                                  Grid.RowSpan="2"
                                  Panel.ZIndex="11"
+                                 Style="{StaticResource PageTransitionStyle}"
                                  Visibility="Collapsed"/>
     </Grid>
 </UserControl>

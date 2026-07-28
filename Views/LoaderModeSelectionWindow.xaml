@@ -1,6 +1,7 @@
 <Window x:Class="Limelight.Views.LoaderModeSelectionWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:motion="clr-namespace:Limelight.Animations"
         Width="1060"
         Height="510"
         WindowStyle="None"
@@ -9,7 +10,8 @@
         Background="Transparent"
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
-        FontFamily="Bahnschrift, Segoe UI">
+        FontFamily="Bahnschrift, Segoe UI"
+        motion:WindowMotion.AnimateClose="True">
 
     <Window.Resources>
         <Style x:Key="SelectorTitleBarButtonStyle"

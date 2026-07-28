@@ -1,6 +1,7 @@
 ﻿<Application x:Class="Limelight.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:motion="clr-namespace:Limelight.Animations">
 
     <Application.Resources>
 
@@ -45,13 +46,13 @@
                                 <DoubleAnimation Storyboard.TargetProperty="Opacity"
                                                  From="0"
                                                  To="1"
-                                                 Duration="0:0:0.20"
+                                                 Duration="{motion:MotionDuration Milliseconds=200}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
 
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
                                                  From="10"
                                                  To="0"
-                                                 Duration="0:0:0.22"
+                                                 Duration="{motion:MotionDuration Milliseconds=220}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
                             </Storyboard>
                         </BeginStoryboard>
@@ -79,7 +80,7 @@
                             <Storyboard>
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
                                                  To="-2"
-                                                 Duration="0:0:0.12"
+                                                 Duration="{motion:MotionDuration Milliseconds=120}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
                             </Storyboard>
                         </BeginStoryboard>
@@ -90,7 +91,7 @@
                             <Storyboard>
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
                                                  To="0"
-                                                 Duration="0:0:0.15"
+                                                 Duration="{motion:MotionDuration Milliseconds=150}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
                             </Storyboard>
                         </BeginStoryboard>
@@ -116,7 +117,7 @@
                             <Storyboard>
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
                                                  To="3"
-                                                 Duration="0:0:0.10"
+                                                 Duration="{motion:MotionDuration Milliseconds=100}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
                             </Storyboard>
                         </BeginStoryboard>
@@ -127,7 +128,7 @@
                             <Storyboard>
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
                                                  To="0"
-                                                 Duration="0:0:0.13"
+                                                 Duration="{motion:MotionDuration Milliseconds=130}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
                             </Storyboard>
                         </BeginStoryboard>
@@ -156,19 +157,19 @@
                                 <DoubleAnimation Storyboard.TargetProperty="Opacity"
                                                  From="0"
                                                  To="1"
-                                                 Duration="0:0:0.16"
+                                                 Duration="{motion:MotionDuration Milliseconds=160}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
 
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
                                                  From="0.96"
                                                  To="1"
-                                                 Duration="0:0:0.18"
+                                                 Duration="{motion:MotionDuration Milliseconds=180}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
 
                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
                                                  From="0.96"
                                                  To="1"
-                                                 Duration="0:0:0.18"
+                                                 Duration="{motion:MotionDuration Milliseconds=180}"
                                                  EasingFunction="{StaticResource LimelightEaseOut}"/>
                             </Storyboard>
                         </BeginStoryboard>
@@ -316,13 +317,13 @@
                                             <DoubleAnimation Storyboard.TargetName="ButtonBorder"
                                                              Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
                                                              To="1.025"
-                                                             Duration="0:0:0.11"
+                                                             Duration="{motion:MotionDuration Milliseconds=110}"
                                                              EasingFunction="{StaticResource LimelightEaseOut}"/>
 
                                             <DoubleAnimation Storyboard.TargetName="ButtonBorder"
                                                              Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
                                                              To="1.025"
-                                                             Duration="0:0:0.11"
+                                                             Duration="{motion:MotionDuration Milliseconds=110}"
                                                              EasingFunction="{StaticResource LimelightEaseOut}"/>
                                         </Storyboard>
                                     </BeginStoryboard>
@@ -334,13 +335,13 @@
                                             <DoubleAnimation Storyboard.TargetName="ButtonBorder"
                                                              Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
                                                              To="1"
-                                                             Duration="0:0:0.13"
+                                                             Duration="{motion:MotionDuration Milliseconds=130}"
                                                              EasingFunction="{StaticResource LimelightEaseOut}"/>
 
                                             <DoubleAnimation Storyboard.TargetName="ButtonBorder"
                                                              Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
                                                              To="1"
-                                                             Duration="0:0:0.13"
+                                                             Duration="{motion:MotionDuration Milliseconds=130}"
                                                              EasingFunction="{StaticResource LimelightEaseOut}"/>
                                         </Storyboard>
                                     </BeginStoryboard>

@@ -804,6 +804,22 @@ namespace Limelight
             double scale,
             int milliseconds)
         {
+            if (!SystemParameters.ClientAreaAnimation)
+            {
+                // Windows can ask applications to avoid decorative motion.
+                // I still apply the final state so every window command works.
+                WindowVisualRoot.Opacity =
+                    opacity;
+
+                WindowVisualScale.ScaleX =
+                    scale;
+
+                WindowVisualScale.ScaleY =
+                    scale;
+
+                return Task.CompletedTask;
+            }
+
             TaskCompletionSource<bool> completion =
                 new();
 
