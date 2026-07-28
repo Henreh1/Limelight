@@ -1,0 +1,111 @@
+name: Bug report
+description: Tell us when Limelight missed its cue or behaved unexpectedly.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Limelight. Please describe one problem per report and include a test report when possible.
+
+  - type: input
+    id: summary
+    attributes:
+      label: What went wrong?
+      description: Give the problem a short, clear summary.
+      placeholder: X19 stops rotating after changing levels
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where did the problem happen?
+      options:
+        - Launching or setup
+        - Mod import or library
+        - Normal Live Loader
+        - X19 LLoader
+        - Profiles
+        - Nexus Mods
+        - Downloads
+        - Settings or diagnostics
+        - Installer or update
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact actions that make the problem happen.
+      placeholder: |
+        1. Launch Dead as Disco using X19 LLoader
+        2. Enter a level
+        3. Press the configured rotation button
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      placeholder: The next selected character should appear.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened?
+      placeholder: Describe any message, visual problem, freeze, or crash you saw.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Limelight version
+      description: This is shown on the splash screen and in the compatibility section of Settings.
+      placeholder: 0.1.0-test.13
+    validations:
+      required: true
+
+  - type: dropdown
+    id: loader_mode
+    attributes:
+      label: Launch mode
+      options:
+        - Live Loader
+        - X19 LLoader
+        - No Live Loader
+        - Limelight was not used to launch the game
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_report
+    attributes:
+      label: Limelight test report
+      description: In Settings, open Support and choose Create Test Report. Drag the generated ZIP here. Review optional evidence before uploading it.
+      placeholder: Drag the generated test report ZIP into this box.
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Add screenshots, affected mod links, or other details that may help reproduce the problem.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked the documentation and existing issues for this problem.
+          required: true
+        - label: I removed personal information and did not include a Nexus Mods API key.
+          required: true
+        - label: I understand that a problem caused only by one mod may need to be reported to that mod's author.
+          required: true

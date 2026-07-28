@@ -1,0 +1,67 @@
+name: Compatibility report
+description: Report a Dead as Disco update, UE4SS change, or mod conflict that affects Limelight.
+title: "[Compatibility] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form when Limelight worked before a game or loader update, or when another runtime mod appears to conflict with it.
+
+  - type: dropdown
+    id: compatibility_type
+    attributes:
+      label: What changed?
+      options:
+        - Dead as Disco updated
+        - UE4SS or the native bridge changed
+        - Another runtime mod conflicts with Limelight
+        - A character mod behaves differently from other character mods
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: game_build
+    attributes:
+      label: Dead as Disco build
+      description: Copy the Steam build number shown in Limelight's compatibility section when available.
+      placeholder: Steam build 24086779
+
+  - type: input
+    id: limelight_version
+    attributes:
+      label: Limelight version
+      placeholder: 0.1.0-test.13
+    validations:
+      required: true
+
+  - type: textarea
+    id: change_details
+    attributes:
+      label: What stopped working?
+      description: Explain what worked before, what changed, and what happens now.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Other mods or tools in use
+      description: List UE4SS mods, camera tools, overlays, or anything else injected into the game.
+      placeholder: Photo mode mod, ReShade, controller mapper, or none
+
+  - type: textarea
+    id: test_report
+    attributes:
+      label: Limelight test report
+      description: In Settings, open Support and choose Create Test Report. Drag the generated ZIP here after reviewing its contents.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I tested again after fully closing Dead as Disco and Limelight.
+          required: true
+        - label: I removed personal information and did not include a Nexus Mods API key.
+          required: true

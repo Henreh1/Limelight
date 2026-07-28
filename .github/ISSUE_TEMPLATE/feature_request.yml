@@ -1,0 +1,67 @@
+name: Feature request
+description: Suggest a new cue, workflow improvement, or polish idea for Limelight.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Good ideas are easiest to evaluate when they explain the user problem first and the proposed design second.
+
+  - type: input
+    id: idea
+    attributes:
+      label: Feature summary
+      placeholder: Allow profiles to remember separate X19 hotkeys
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Explain what is awkward, slow, unclear, or currently impossible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: How should it work?
+      description: Walk through the experience from the user's point of view.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Dashboard
+        - Mod library
+        - Live Loader
+        - X19 LLoader
+        - Profiles
+        - Nexus Mods
+        - Downloads
+        - Settings or diagnostics
+        - Installer or updates
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or examples
+      description: Add screenshots, mock-ups, links, or other approaches you considered.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked existing issues for a similar suggestion.
+          required: true
+        - label: This request is about Limelight rather than a specific character mod.
+          required: true
