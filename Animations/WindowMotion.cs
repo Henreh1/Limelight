@@ -69,6 +69,11 @@ namespace Limelight.Animations
                 return;
             }
 
+            // A modal window can close by assigning DialogResult. I remember
+            // that value before delaying the close, otherwise WPF reports an
+            // accepted choice as cancelled after the animation finishes.
+            bool? requestedDialogResult = window.DialogResult;
+
             e.Cancel = true;
             window.IsHitTestVisible = false;
 
@@ -98,7 +103,16 @@ namespace Limelight.Animations
                         null);
 
                     window.Opacity = 0;
-                    window.Close();
+
+                    if (requestedDialogResult.HasValue)
+                    {
+                        window.DialogResult =
+                            requestedDialogResult.Value;
+                    }
+                    else
+                    {
+                        window.Close();
+                    }
                 };
 
             window.BeginAnimation(
