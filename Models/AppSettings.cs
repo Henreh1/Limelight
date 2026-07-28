@@ -16,6 +16,11 @@ namespace Limelight.Models
         public List<string> X19LoaderModIds { get; set; } =
             new List<string>();
 
+        // I remember selected profile groups separately so their characters
+        // do not also appear in the individual X19 selector.
+        public List<string> X19LoaderProfileIds { get; set; } =
+            new List<string>();
+
         // Sequential keeps the hand-picked order. Shuffle chooses a different
         // selected character each time without immediately repeating one.
         public bool X19ShuffleEnabled { get; set; }
@@ -48,6 +53,11 @@ namespace Limelight.Models
 
         public string NexusAccountName { get; set; } =
             string.Empty;
+
+        // Profiles are reusable casts. They stay separate from the current
+        // X19 rotation until the user chooses to add or apply one.
+        public List<ModProfile> ModProfiles { get; set; } =
+            new List<ModProfile>();
 
         public List<InstalledMod> InstalledMods { get; set; } =
             new List<InstalledMod>();

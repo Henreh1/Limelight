@@ -25,6 +25,24 @@ namespace Limelight.Views
         public SettingsPage()
         {
             InitializeComponent();
+
+            NexusRequestIdentityText.Text =
+                $"LIMELIGHT {NexusApiService.ApplicationVersion.ToUpperInvariant()}";
+
+            ShowNexusRegistrationStatus(
+                NexusApiService.RegistrationSubmitted);
+        }
+
+        public void ShowNexusRegistrationStatus(
+            bool submitted)
+        {
+            NexusRegistrationStatusText.Text =
+                submitted
+                    ? "SUBMITTED"
+                    : "READY TO SUBMIT";
+
+            NexusRegistrationStatusText.Foreground =
+                StatusBrush(submitted);
         }
 
         public void ShowDiscordPresence(

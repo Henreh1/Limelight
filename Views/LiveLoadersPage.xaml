@@ -383,6 +383,105 @@
                     </Grid>
                 </Border>
 
+                <!-- Saved profiles can join the current rotation without replacing it. -->
+                <Border Margin="0,18,0,0"
+                        Padding="20"
+                        Background="{StaticResource PanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="11">
+                    <StackPanel>
+                        <TextBlock Text="PROFILE GROUPS"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource CyanBrush}"/>
+                        <TextBlock Text="Select a saved cast for X19. Its characters will be hidden from the individual selector to prevent overlap."
+                                   Margin="0,5,0,14"
+                                   TextWrapping="Wrap"
+                                   FontSize="12"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+
+                        <TextBlock x:Name="ProfilesEmptyText"
+                                   Text="Create a profile from the Profiles page to add complete groups here."
+                                   Margin="0,4,0,0"
+                                   FontSize="12"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+
+                        <ItemsControl x:Name="X19ProfilesList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border MinWidth="270"
+                                            Margin="0,0,10,10"
+                                            Padding="15"
+                                            BorderThickness="1"
+                                            CornerRadius="9">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background"
+                                                        Value="#171A2D"/>
+                                                <Setter Property="BorderBrush"
+                                                        Value="{StaticResource BorderBrush}"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}"
+                                                                 Value="True">
+                                                        <Setter Property="Background"
+                                                                Value="#29203E"/>
+                                                        <Setter Property="BorderBrush"
+                                                                Value="{StaticResource PinkBrush}"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Margin="0,0,18,0">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="13"
+                                                           FontWeight="Bold"/>
+                                                <TextBlock Text="{Binding CountText}"
+                                                           Margin="0,4,0,0"
+                                                           FontSize="10"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource PinkBrush}"/>
+                                            </StackPanel>
+
+                                            <Button Grid.Column="1"
+                                                    Tag="{Binding Id}"
+                                                    Click="AddProfileToRotation_Click">
+                                                <Button.Style>
+                                                    <Style TargetType="Button"
+                                                           BasedOn="{StaticResource SecondaryButton}">
+                                                        <Setter Property="Content"
+                                                                Value="SELECT GROUP"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsSelected}"
+                                                                         Value="True">
+                                                                <Setter Property="Content"
+                                                                        Value="REMOVE GROUP"/>
+                                                                <Setter Property="Background"
+                                                                        Value="{StaticResource PinkBrush}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
                 <Grid Margin="0,25,0,12">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>

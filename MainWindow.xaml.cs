@@ -22,6 +22,7 @@ namespace Limelight
         {
             Dashboard,
             MyMods,
+            Profiles,
             LiveLoaders,
             BrowseNexus,
             Downloads,
@@ -206,6 +207,12 @@ namespace Limelight
             _settings =
                 _settingsService.Load();
 
+            _settings.ModProfiles ??=
+                new List<ModProfile>();
+
+            _settings.X19LoaderProfileIds ??=
+                new List<string>();
+
             _discordPresenceService =
                 new DiscordPresenceService();
 
@@ -223,8 +230,17 @@ namespace Limelight
             MyModsPageControl.RenameModRequested +=
                 RenameModRequested;
 
+            ProfilesPageControl.ProfilesChanged +=
+                ProfilesChanged;
+
+            ProfilesPageControl.UseProfileInX19Requested +=
+                UseProfileInX19Requested;
+
             LiveLoadersPageControl.X19GroupChanged +=
                 X19GroupChanged;
+
+            LiveLoadersPageControl.X19ProfileGroupsChanged +=
+                X19ProfileGroupsChanged;
 
             LiveLoadersPageControl.X19ShuffleChanged +=
                 X19ShuffleChanged;
@@ -495,6 +511,10 @@ namespace Limelight
 
                 case NavigationPage.LiveLoaders:
                     ShowLiveLoadersPage();
+                    break;
+
+                case NavigationPage.Profiles:
+                    ShowProfilesPage();
                     break;
 
                 case NavigationPage.BrowseNexus:
@@ -3034,10 +3054,52 @@ namespace Limelight
             LiveLoadersPageControl.Visibility =
                 Visibility.Collapsed;
 
+            ProfilesPageControl.Visibility =
+                Visibility.Collapsed;
+
             MyModsPageControl.Visibility =
                 Visibility.Visible;
 
             SetSelectedNavigation(showMyMods: true);
+        }
+
+        private void ShowProfiles_Click(
+            object sender,
+            MouseButtonEventArgs e)
+        {
+            ShowProfilesPage();
+        }
+
+        private void ShowProfilesPage()
+        {
+            RefreshLibrarySummary();
+
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DownloadsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            ProfilesPageControl.Visibility =
+                Visibility.Visible;
+
+            _selectedNavigationPage =
+                NavigationPage.Profiles;
+
+            ApplyNavigationAppearance();
+            RefreshDiscordPresence();
         }
 
         private void ShowLiveLoaders_Click(
@@ -3068,6 +3130,9 @@ namespace Limelight
             SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
+            ProfilesPageControl.Visibility =
+                Visibility.Collapsed;
+
             LiveLoadersPageControl.Visibility =
                 Visibility.Visible;
 
@@ -3078,6 +3143,123 @@ namespace Limelight
             RefreshDiscordPresence();
         }
 
+        private void ProfilesChanged(
+            IReadOnlyList<ModProfile> profiles)
+        {
+            HashSet<string> oldGroupedModIds =
+                _settings.ModProfiles
+                    .Where(profile =>
+                        _settings.X19LoaderProfileIds.Contains(
+                            profile.Id,
+                            StringComparer.OrdinalIgnoreCase))
+                    .SelectMany(profile => profile.ModIds)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            List<string> standaloneModIds =
+                _settings.X19LoaderModIds
+                    .Where(modId => !oldGroupedModIds.Contains(modId))
+                    .ToList();
+
+            // I replace the saved snapshot in one step so a half-edited
+            // profile can never leak into the X19 rotation.
+            _settings.ModProfiles =
+                profiles
+                    .Select(profile =>
+                        new ModProfile
+                        {
+                            Id = profile.Id,
+                            Name = profile.Name,
+                            ModIds = profile.ModIds
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList(),
+                            CreatedAt = profile.CreatedAt,
+                            UpdatedAt = profile.UpdatedAt
+                        })
+                    .ToList();
+
+            HashSet<string> availableProfileIds =
+                _settings.ModProfiles
+                    .Select(profile => profile.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            _settings.X19LoaderProfileIds =
+                _settings.X19LoaderProfileIds
+                    .Where(availableProfileIds.Contains)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+            IEnumerable<string> refreshedGroupedModIds =
+                _settings.ModProfiles
+                    .Where(profile =>
+                        _settings.X19LoaderProfileIds.Contains(
+                            profile.Id,
+                            StringComparer.OrdinalIgnoreCase))
+                    .SelectMany(profile => profile.ModIds);
+
+            _settings.X19LoaderModIds =
+                refreshedGroupedModIds
+                    .Concat(standaloneModIds)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+            _settingsService.Save(_settings);
+        }
+
+        private void UseProfileInX19Requested(
+            string profileId)
+        {
+            ModProfile? profile =
+                _settings.ModProfiles.FirstOrDefault(candidate =>
+                    string.Equals(
+                        candidate.Id,
+                        profileId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (profile is null)
+            {
+                return;
+            }
+
+            HashSet<string> availableIds =
+                _settings.InstalledMods
+                    .Where(mod => Directory.Exists(mod.InstallDirectory))
+                    .Select(mod => mod.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            List<string> rotationIds =
+                profile.ModIds
+                    .Where(availableIds.Contains)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+            if (rotationIds.Count == 0)
+            {
+                ShowNotification(
+                    "PROFILE NEEDS AVAILABLE MODS",
+                    $"None of the characters saved in {profile.Name} are currently available.",
+                    isError: true);
+
+                return;
+            }
+
+            _settings.X19LoaderModIds =
+                rotationIds;
+
+            _settings.X19LoaderProfileIds =
+                new List<string>
+                {
+                    profile.Id
+                };
+
+            _settingsService.Save(_settings);
+            ShowLiveLoadersPage();
+
+            ShowNotification(
+                "X19 PROFILE READY",
+                $"{profile.Name} replaced the current X19 rotation.",
+                isError: false);
+        }
+
         private void X19GroupChanged(
             IReadOnlyList<string> selectedModIds)
         {
@@ -3085,6 +3267,17 @@ namespace Limelight
             // through one predictable copy of each selected character.
             _settings.X19LoaderModIds =
                 selectedModIds
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+            _settingsService.Save(_settings);
+        }
+
+        private void X19ProfileGroupsChanged(
+            IReadOnlyList<string> selectedProfileIds)
+        {
+            _settings.X19LoaderProfileIds =
+                selectedProfileIds
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
@@ -3269,6 +3462,9 @@ namespace Limelight
             MyModsPageControl.Visibility =
                 Visibility.Collapsed;
 
+            ProfilesPageControl.Visibility =
+                Visibility.Collapsed;
+
             SettingsPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -3308,6 +3504,9 @@ namespace Limelight
             MyModsPageControl.Visibility =
                 Visibility.Collapsed;
 
+            ProfilesPageControl.Visibility =
+                Visibility.Collapsed;
+
             LiveLoadersPageControl.Visibility =
                 Visibility.Collapsed;
 
@@ -3333,6 +3532,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            ProfilesPageControl.Visibility =
                 Visibility.Collapsed;
 
             LiveLoadersPageControl.Visibility =
@@ -3401,6 +3603,12 @@ namespace Limelight
                 MyModsNavigationIcon,
                 MyModsNavigationText,
                 _selectedNavigationPage == NavigationPage.MyMods);
+
+            ApplyNavigationItemAppearance(
+                ProfilesNavigation,
+                ProfilesNavigationIcon,
+                ProfilesNavigationText,
+                _selectedNavigationPage == NavigationPage.Profiles);
 
             ApplyNavigationItemAppearance(
                 LiveLoadersNavigation,
@@ -3519,6 +3727,8 @@ namespace Limelight
                  _selectedNavigationPage == NavigationPage.Dashboard) ||
                 (navigation == MyModsNavigation &&
                  _selectedNavigationPage == NavigationPage.MyMods) ||
+                (navigation == ProfilesNavigation &&
+                 _selectedNavigationPage == NavigationPage.Profiles) ||
                 (navigation == LiveLoadersNavigation &&
                  _selectedNavigationPage == NavigationPage.LiveLoaders) ||
                 (navigation == DownloadsNavigation &&
@@ -3545,6 +3755,13 @@ namespace Limelight
             {
                 icon = MyModsNavigationIcon;
                 label = MyModsNavigationText;
+                return;
+            }
+
+            if (navigation == ProfilesNavigation)
+            {
+                icon = ProfilesNavigationIcon;
+                label = ProfilesNavigationText;
                 return;
             }
 
@@ -4072,6 +4289,8 @@ namespace Limelight
                         "Managing the Limelight dashboard",
                     NavigationPage.MyMods =>
                         "Browsing character mods",
+                    NavigationPage.Profiles =>
+                        "Building character profiles",
                     NavigationPage.LiveLoaders =>
                         "Configuring the Live Loader",
                     NavigationPage.BrowseNexus =>
@@ -4423,6 +4642,9 @@ namespace Limelight
                 Visibility.Collapsed;
 
             MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            ProfilesPageControl.Visibility =
                 Visibility.Collapsed;
 
             SettingsPageControl.Visibility =
@@ -5133,12 +5355,18 @@ namespace Limelight
                 availableMods,
                 _settings.ActiveModId);
 
+            ProfilesPageControl.ShowProfiles(
+                _settings.ModProfiles,
+                availableMods);
+
             LiveLoadersPageControl.ShowConfiguration(
                 availableMods,
                 _settings.X19LoaderModIds,
+                _settings.X19LoaderProfileIds,
                 _settings.ActiveModId,
                 _settings.X19HotkeyGesture,
-                _settings.X19ShuffleEnabled);
+                _settings.X19ShuffleEnabled,
+                _settings.ModProfiles);
 
             InstalledModCountText.Text =
                 installedCount.ToString();

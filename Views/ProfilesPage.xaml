@@ -1,0 +1,441 @@
+<UserControl x:Class="Limelight.Views.ProfilesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}"
+             Foreground="{StaticResource TextBrush}"
+             FontFamily="Bahnschrift, Segoe UI">
+
+    <Grid Margin="38,30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <TextBlock Text="PROFILES"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource CyanBrush}"/>
+                <TextBlock Text="BUILD YOUR CAST"
+                           Margin="0,5,0,0"
+                           FontSize="27"
+                           FontWeight="Bold"/>
+                <TextBlock Text="Save reusable groups for different themes, sessions, and X19 rotations."
+                           Margin="0,8,0,0"
+                           FontSize="13"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Padding="14,8"
+                    VerticalAlignment="Top"
+                    Background="{StaticResource RaisedPanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <TextBlock x:Name="ProfileCountText"
+                           Text="0 PROFILES"
+                           FontSize="12"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PinkBrush}"/>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="1"
+                Margin="0,24,0,0"
+                Padding="20"
+                Background="{StaticResource PanelBrush}"
+                BorderBrush="{StaticResource BorderBrush}"
+                BorderThickness="1"
+                CornerRadius="11">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="NEW PROFILE"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+
+                    <Border Margin="0,10,18,0"
+                            Padding="14,3"
+                            Background="#0D1020"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                        <TextBox x:Name="NewProfileNameBox"
+                                 MaxLength="60"
+                                 Padding="0,8"
+                                 Background="Transparent"
+                                 BorderThickness="0"
+                                 CaretBrush="{StaticResource CyanBrush}"
+                                 Foreground="{StaticResource PinkBrush}"
+                                 PreviewKeyDown="NewProfileNameBox_PreviewKeyDown"/>
+                    </Border>
+
+                    <TextBlock x:Name="ProfileStatusText"
+                               Text="Name a group, then open its card to choose the cast."
+                               Margin="0,8,18,0"
+                               FontSize="11"
+                               Foreground="{StaticResource MutedTextBrush}"/>
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="CREATE PROFILE"
+                        VerticalAlignment="Center"
+                        Click="CreateProfile_Click"
+                        Style="{StaticResource PrimaryButton}"/>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2"
+              Margin="0,18,0,0">
+
+            <!-- The browser keeps saved profiles compact until one is opened. -->
+            <Grid x:Name="ProfilesBrowserPanel">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Margin="0,0,0,13">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="SAVED PROFILES"
+                                   FontSize="13"
+                                   FontWeight="Bold"/>
+                        <TextBlock Text="Open a profile to edit its name, characters, or X19 assignment."
+                                   Margin="0,5,0,0"
+                                   FontSize="11"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+                    </StackPanel>
+                    <TextBlock Grid.Column="1"
+                               Text="DOUBLE-CLICK TO OPEN"
+                               VerticalAlignment="Bottom"
+                               FontSize="10"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <Border x:Name="EmptyProfilesPanel"
+                            Padding="28"
+                            VerticalAlignment="Top"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="11">
+                        <StackPanel HorizontalAlignment="Center">
+                            <TextBlock Text="◇"
+                                       HorizontalAlignment="Center"
+                                       FontSize="24"
+                                       Foreground="{StaticResource PinkBrush}"/>
+                            <TextBlock Text="NO PROFILES YET"
+                                       Margin="0,12,0,0"
+                                       HorizontalAlignment="Center"
+                                       FontSize="15"
+                                       FontWeight="Bold"/>
+                            <TextBlock Text="Create a named cast above. Your mod library remains unchanged."
+                                       Margin="0,6,0,0"
+                                       HorizontalAlignment="Center"
+                                       FontSize="12"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <ScrollViewer x:Name="ProfilesScrollViewer"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer.Resources>
+                            <Style TargetType="ScrollBar"
+                                   BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+                        </ScrollViewer.Resources>
+
+                        <ItemsControl x:Name="ProfilesList"
+                                      Margin="0,0,12,20">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="270"
+                                            Height="146"
+                                            Margin="0,0,14,14"
+                                            Padding="17"
+                                            Background="{StaticResource PanelBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="11"
+                                            Cursor="Hand"
+                                            MouseLeftButtonDown="ProfileCard_MouseLeftButtonDown">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="50"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border Width="42"
+                                                        Height="42"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Top"
+                                                        Background="#29203E"
+                                                        BorderBrush="{StaticResource PinkBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="9">
+                                                    <TextBlock Text="{Binding Monogram}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontSize="{Binding MonogramFontSize}"
+                                                               FontWeight="Bold"
+                                                               FontStyle="Italic"
+                                                               Foreground="{StaticResource PinkBrush}"/>
+                                                </Border>
+
+                                                <StackPanel Grid.Column="1"
+                                                            Margin="10,1,0,0">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="15"
+                                                               FontWeight="Bold"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Foreground="{StaticResource TextBrush}"/>
+                                                    <TextBlock Text="{Binding CountText}"
+                                                               Margin="0,6,0,0"
+                                                               FontSize="10"
+                                                               FontWeight="Bold"
+                                                               Foreground="{StaticResource CyanBrush}"/>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <Grid Grid.Row="1">
+                                                <TextBlock Text="PROFILE FILE"
+                                                           VerticalAlignment="Center"
+                                                           FontSize="9"
+                                                           FontWeight="Bold"
+                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                                <Button Content="OPEN"
+                                                        Tag="{Binding Id}"
+                                                        HorizontalAlignment="Right"
+                                                        Click="OpenProfile_Click"
+                                                        Style="{StaticResource SecondaryButton}"/>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <!-- Opening a profile replaces the browser with one focused editor. -->
+            <Grid x:Name="ProfileEditorPanel"
+                  Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Margin="0,0,0,13">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Content="BACK TO PROFILES"
+                            Margin="0,0,16,0"
+                            Click="BackToProfiles_Click"
+                            Style="{StaticResource SecondaryButton}"/>
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="PROFILE EDITOR"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource CyanBrush}"/>
+                        <TextBlock x:Name="EditorHeadingText"
+                                   Text="PROFILE"
+                                   Margin="0,3,0,0"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource TextBrush}"/>
+                    </StackPanel>
+                </Grid>
+
+                <Border Grid.Row="1"
+                        Padding="22"
+                        Background="{StaticResource PanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="11">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel>
+                                <TextBlock Text="PROFILE NAME"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource CyanBrush}"/>
+                                <Border Margin="0,8,18,0"
+                                        Padding="13,2"
+                                        Background="#0D1020"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8">
+                                    <TextBox x:Name="EditorNameBox"
+                                             MaxLength="60"
+                                             Padding="0,7"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             CaretBrush="{StaticResource CyanBrush}"
+                                             Foreground="{StaticResource PinkBrush}"/>
+                                </Border>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Bottom">
+                                <Button Content="SAVE CHANGES"
+                                        Margin="0,0,8,0"
+                                        Click="SaveEditorProfile_Click"
+                                        Style="{StaticResource PrimaryButton}"/>
+                                <Button Content="SET AS X19"
+                                        Margin="0,0,8,0"
+                                        Click="SetEditorAsX19_Click"
+                                        Style="{StaticResource SecondaryButton}"/>
+                                <Button Content="DELETE"
+                                        Click="DeleteEditorProfile_Click"
+                                        Style="{StaticResource SecondaryButton}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1"
+                              Margin="0,22,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="CHARACTERS"
+                                           FontSize="12"
+                                           FontWeight="Bold"/>
+                                <TextBlock Text="Choose every mod that belongs to this reusable cast."
+                                           Margin="0,5,0,0"
+                                           FontSize="11"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+                            <TextBlock x:Name="EditorCountText"
+                                       Grid.Column="1"
+                                       VerticalAlignment="Center"
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource PinkBrush}"/>
+                        </Grid>
+
+                        <ScrollViewer Grid.Row="2"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer.Resources>
+                                <Style TargetType="ScrollBar"
+                                       BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+                            </ScrollViewer.Resources>
+
+                            <Grid>
+                                <TextBlock x:Name="EditorEmptyModsText"
+                                           Text="Import a mod before adding characters to this profile."
+                                           Margin="0,8,0,0"
+                                           FontSize="12"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                <ItemsControl x:Name="EditorModsList">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                      Margin="0,0,10,10"
+                                                      Checked="EditorModSelection_Changed"
+                                                      Unchecked="EditorModSelection_Changed">
+                                                <CheckBox.Template>
+                                                    <ControlTemplate TargetType="CheckBox">
+                                                        <Border x:Name="ChoiceCard"
+                                                                Padding="14,10"
+                                                                Background="#171A2D"
+                                                                BorderBrush="{StaticResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="8">
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock x:Name="ChoiceIcon"
+                                                                           Text="◇"
+                                                                           Margin="0,0,9,0"
+                                                                           Foreground="{StaticResource MutedTextBrush}"/>
+                                                                <TextBlock Text="{Binding DisplayName}"
+                                                                           FontSize="12"
+                                                                           FontWeight="SemiBold"
+                                                                           Foreground="{StaticResource TextBrush}"/>
+                                                            </StackPanel>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="ChoiceCard" Property="BorderBrush" Value="{StaticResource CyanBrush}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsChecked" Value="True">
+                                                                <Setter TargetName="ChoiceCard" Property="Background" Value="#29203E"/>
+                                                                <Setter TargetName="ChoiceCard" Property="BorderBrush" Value="{StaticResource PinkBrush}"/>
+                                                                <Setter TargetName="ChoiceIcon" Property="Text" Value="◆"/>
+                                                                <Setter TargetName="ChoiceIcon" Property="Foreground" Value="{StaticResource PinkBrush}"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </CheckBox.Template>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </ScrollViewer>
+
+                        <TextBlock x:Name="EditorStatusText"
+                                   Grid.Row="3"
+                                   Text="Changes are saved only when you choose Save Changes."
+                                   Margin="0,14,0,0"
+                                   FontSize="11"
+                                   Foreground="{StaticResource MutedTextBrush}"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

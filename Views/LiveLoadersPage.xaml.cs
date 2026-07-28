@@ -24,10 +24,36 @@ namespace Limelight.Views
         public bool IsActive { get; init; }
     }
 
+    public sealed class X19ProfileChoice
+    {
+        public string Id { get; init; } =
+            string.Empty;
+
+        public string Name { get; init; } =
+            "Unnamed profile";
+
+        public List<string> ModIds { get; init; } =
+            new();
+
+        public string CountText { get; init; } =
+            "0 AVAILABLE";
+
+        public bool IsSelected { get; set; }
+    }
+
     public partial class LiveLoadersPage : UserControl
     {
         private readonly List<X19ModChoice> _modChoices =
             new();
+
+        private readonly List<X19ProfileChoice> _profileChoices =
+            new();
+
+        private List<InstalledMod> _availableMods =
+            new();
+
+        private string _activeModId =
+            string.Empty;
 
         private bool _isRefreshing;
         private bool _shuffleEnabled;
@@ -40,6 +66,7 @@ namespace Limelight.Views
         private X19ModChoice? _draggedChoice;
 
         public event Action<IReadOnlyList<string>>? X19GroupChanged;
+        public event Action<IReadOnlyList<string>>? X19ProfileGroupsChanged;
         public event Action<bool>? X19ShuffleChanged;
         public event Action<string>? X19HotkeyChanged;
 
@@ -69,16 +96,22 @@ namespace Limelight.Views
         public void ShowConfiguration(
             IEnumerable<InstalledMod> mods,
             IEnumerable<string>? selectedModIds,
+            IEnumerable<string>? selectedProfileIds,
             string activeModId,
             string hotkeyGesture,
-            bool shuffleEnabled)
+            bool shuffleEnabled,
+            IEnumerable<ModProfile>? profiles = null)
         {
             // I rebuild this small view whenever the library changes so removed
             // mods cannot remain inside the user's X19 rotation.
             HashSet<string> selectedIds =
-                new HashSet<string>(
-                    selectedModIds ??
-                    Enumerable.Empty<string>(),
+                new(
+                    selectedModIds ?? Enumerable.Empty<string>(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> selectedProfiles =
+                new(
+                    selectedProfileIds ?? Enumerable.Empty<string>(),
                     StringComparer.OrdinalIgnoreCase);
 
             Dictionary<string, int> selectedOrder =
@@ -93,10 +126,54 @@ namespace Limelight.Views
             _isRefreshing = true;
             _shuffleEnabled = shuffleEnabled;
 
+            _availableMods =
+                mods
+                    .OrderBy(mod => mod.DisplayName)
+                    .ToList();
+
+            _activeModId =
+                activeModId;
+
+            HashSet<string> availableModIds =
+                _availableMods
+                    .Select(mod => mod.Id)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            _profileChoices.Clear();
+
+            foreach (ModProfile profile in
+                     profiles ?? Enumerable.Empty<ModProfile>())
+            {
+                List<string> profileModIds =
+                    (profile.ModIds ?? new List<string>())
+                        .Where(availableModIds.Contains)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                _profileChoices.Add(
+                    new X19ProfileChoice
+                    {
+                        Id = profile.Id,
+                        Name = profile.Name,
+                        ModIds = profileModIds,
+                        IsSelected =
+                            selectedProfiles.Contains(profile.Id) &&
+                            profileModIds.Count > 0,
+                        CountText =
+                            profileModIds.Count == 1
+                                ? "1 AVAILABLE"
+                                : $"{profileModIds.Count} AVAILABLE"
+                    });
+            }
+
+            HashSet<string> groupedModIds =
+                GetSelectedProfileModIds();
+
             _modChoices.Clear();
 
             _modChoices.AddRange(
-                mods
+                _availableMods
+                    .Where(mod => !groupedModIds.Contains(mod.Id))
                     .OrderBy(mod =>
                         selectedIds.Contains(mod.Id)
                             ? 0
@@ -124,6 +201,19 @@ namespace Limelight.Views
             X19ModsList.ItemsSource = null;
             X19ModsList.ItemsSource = _modChoices;
 
+            X19ProfilesList.ItemsSource = null;
+            X19ProfilesList.ItemsSource = _profileChoices;
+
+            ProfilesEmptyText.Visibility =
+                _profileChoices.Count == 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            X19ProfilesList.Visibility =
+                _profileChoices.Count == 0
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+
             _savedHotkeyGesture =
                 string.IsNullOrWhiteSpace(hotkeyGesture)
                     ? "F8"
@@ -145,10 +235,77 @@ namespace Limelight.Views
                     ? Visibility.Collapsed
                     : Visibility.Visible;
 
+            InstalledModsEmptyText.Text =
+                _availableMods.Count == 0
+                    ? "Import a mod before building an X19 rotation."
+                    : "Every available mod is already supplied by a selected profile group.";
+
             _isRefreshing = false;
 
             RefreshRotationModeAppearance();
             RefreshGroupSummary();
+        }
+
+        private void AddProfileToRotation_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (sender is not Button button ||
+                button.Tag is not string profileId)
+            {
+                return;
+            }
+
+            X19ProfileChoice? profile =
+                _profileChoices.FirstOrDefault(choice =>
+                    string.Equals(
+                        choice.Id,
+                        profileId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (profile is null ||
+                profile.ModIds.Count == 0)
+            {
+                GroupStatusTitleText.Text =
+                    "PROFILE HAS NO AVAILABLE MODS";
+
+                GroupStatusDetailText.Text =
+                    "Import or restore one of this profile's mods, then try adding it again.";
+
+                GroupStatusTitleText.Foreground =
+                    (Brush)FindResource("PinkBrush");
+
+                return;
+            }
+
+            List<string> selectedIndividualIds =
+                _modChoices
+                    .Where(choice => choice.IsSelected)
+                    .Select(choice => choice.Id)
+                    .ToList();
+
+            profile.IsSelected =
+                !profile.IsSelected;
+
+            // A profile owns its cast while selected. I remove those same
+            // entries from the individual picker so the rotation has one
+            // clear source for every character.
+            RebuildIndividualChoices(selectedIndividualIds);
+            X19ProfilesList.Items.Refresh();
+            SaveGroupSelection();
+
+            GroupStatusTitleText.Text =
+                profile.IsSelected
+                    ? "PROFILE GROUP SELECTED"
+                    : "PROFILE GROUP REMOVED";
+
+            GroupStatusDetailText.Text =
+                profile.IsSelected
+                    ? $"{profile.Name} now supplies its cast to X19. Those characters were removed from the individual selector."
+                    : $"{profile.Name} was removed from X19. Its characters are available in the individual selector again.";
+
+            GroupStatusTitleText.Foreground =
+                (Brush)FindResource("CyanBrush");
         }
 
         private void ModSelection_Changed(
@@ -188,11 +345,19 @@ namespace Limelight.Views
             object sender,
             RoutedEventArgs e)
         {
+            foreach (X19ProfileChoice profile in _profileChoices)
+            {
+                profile.IsSelected = false;
+            }
+
+            RebuildIndividualChoices();
+
             foreach (X19ModChoice choice in _modChoices)
             {
                 choice.IsSelected = false;
             }
 
+            X19ProfilesList.Items.Refresh();
             NormaliseModChoiceOrder();
             SaveGroupSelection();
         }
@@ -535,12 +700,98 @@ namespace Limelight.Views
             RefreshGroupSummary();
 
             IReadOnlyList<string> selectedIds =
-                _modChoices
-                    .Where(choice => choice.IsSelected)
-                    .Select(choice => choice.Id)
+                BuildSelectedRotationIds();
+
+            IReadOnlyList<string> selectedProfileIds =
+                _profileChoices
+                    .Where(profile => profile.IsSelected)
+                    .Select(profile => profile.Id)
                     .ToList();
 
             X19GroupChanged?.Invoke(selectedIds);
+            X19ProfileGroupsChanged?.Invoke(selectedProfileIds);
+        }
+
+        private IReadOnlyList<string> BuildSelectedRotationIds()
+        {
+            return _profileChoices
+                .Where(profile => profile.IsSelected)
+                .SelectMany(profile => profile.ModIds)
+                .Concat(
+                    _modChoices
+                        .Where(choice => choice.IsSelected)
+                        .Select(choice => choice.Id))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private HashSet<string> GetSelectedProfileModIds()
+        {
+            return _profileChoices
+                .Where(profile => profile.IsSelected)
+                .SelectMany(profile => profile.ModIds)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        }
+
+        private void RebuildIndividualChoices(
+            IEnumerable<string>? selectedIndividualIds = null)
+        {
+            HashSet<string> selectedIds =
+                new(
+                    selectedIndividualIds ??
+                    _modChoices
+                        .Where(choice => choice.IsSelected)
+                        .Select(choice => choice.Id),
+                    StringComparer.OrdinalIgnoreCase);
+
+            Dictionary<string, int> selectedOrder =
+                _modChoices
+                    .Where(choice => choice.IsSelected)
+                    .Select((choice, index) => new { choice.Id, index })
+                    .ToDictionary(
+                        item => item.Id,
+                        item => item.index,
+                        StringComparer.OrdinalIgnoreCase);
+
+            HashSet<string> groupedModIds =
+                GetSelectedProfileModIds();
+
+            _modChoices.Clear();
+            _modChoices.AddRange(
+                _availableMods
+                    .Where(mod => !groupedModIds.Contains(mod.Id))
+                    .OrderBy(mod => selectedIds.Contains(mod.Id) ? 0 : 1)
+                    .ThenBy(mod =>
+                        selectedOrder.TryGetValue(mod.Id, out int order)
+                            ? order
+                            : int.MaxValue)
+                    .ThenBy(mod => mod.DisplayName)
+                    .Select(mod => new X19ModChoice
+                    {
+                        Id = mod.Id,
+                        DisplayName = mod.DisplayName,
+                        IsSelected = selectedIds.Contains(mod.Id),
+                        IsActive =
+                            string.Equals(
+                                mod.Id,
+                                _activeModId,
+                                StringComparison.OrdinalIgnoreCase)
+                    }));
+
+            X19ModsList.ItemsSource = null;
+            X19ModsList.ItemsSource = _modChoices;
+            InstalledModsEmptyText.Visibility =
+                _modChoices.Count == 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            X19ModsList.Visibility =
+                _modChoices.Count == 0
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+            InstalledModsEmptyText.Text =
+                _availableMods.Count == 0
+                    ? "Import a mod before building an X19 rotation."
+                    : "Every available mod is already supplied by a selected profile group.";
         }
 
         private void NormaliseModChoiceOrder()
@@ -591,7 +842,7 @@ namespace Limelight.Views
         private void RefreshGroupSummary()
         {
             int selectedCount =
-                _modChoices.Count(choice => choice.IsSelected);
+                BuildSelectedRotationIds().Count;
 
             SelectedCountText.Text =
                 selectedCount == 1
