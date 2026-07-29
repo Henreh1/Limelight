@@ -4,7 +4,7 @@
 #define MyAppUrl "https://henreh1.github.io/LimelightWiki/"
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0-preview.2"
+  #define MyAppVersion "0.1.0-preview.3"
 #endif
 
 #ifndef PublishDir
@@ -761,4 +761,3 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   UpdateThemedButtons;
 end;
-

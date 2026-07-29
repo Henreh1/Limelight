@@ -68,7 +68,7 @@ body:
     attributes:
       label: Limelight version
       description: This is shown on the splash screen and in the compatibility section of Settings.
-      placeholder: 0.1.0-preview.2
+      placeholder: 0.1.0-preview.3
     validations:
       required: true
 
