@@ -13,6 +13,7 @@ namespace Limelight.Views
         private bool _isUpdatingResourceOverlay;
 
         public event Action? RepairRequested;
+        public event Action? PurgeAllModsRequested;
         public event Action? CreatePrivateTestReportRequested;
         public event Action? ExportDiagnosticsRequested;
         public event Action? ChangeGameFolderRequested;
@@ -467,6 +468,13 @@ namespace Limelight.Views
             RoutedEventArgs e)
         {
             RepairRequested?.Invoke();
+        }
+
+        private void PurgeAllModsButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            PurgeAllModsRequested?.Invoke();
         }
 
         private void ExportButton_Click(

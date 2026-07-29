@@ -221,6 +221,28 @@ namespace Limelight.Services
             }
         }
 
+        public void PurgeAllMods(
+            string gameDirectory)
+        {
+            string modsDirectory =
+                GetGameModsDirectory(
+                    gameDirectory);
+
+            if (Directory.Exists(modsDirectory))
+            {
+                // I remove the whole folder so unmanaged files and stale
+                // deployment metadata cannot survive a full purge.
+                Directory.Delete(
+                    modsDirectory,
+                    recursive: true);
+            }
+
+            // Keeping an empty folder makes the finished state obvious and
+            // gives future deployments a known clean destination.
+            Directory.CreateDirectory(
+                modsDirectory);
+        }
+
         private static List<DeploymentFile> BuildDeploymentList(
             InstalledMod mod,
             string modsDirectory)

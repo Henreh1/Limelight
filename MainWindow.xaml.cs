@@ -255,6 +255,9 @@ namespace Limelight
             SettingsPageControl.RepairRequested +=
                 RepairLiveLoaderRequested;
 
+            SettingsPageControl.PurgeAllModsRequested +=
+                PurgeAllModsRequested;
+
             SettingsPageControl.ExportDiagnosticsRequested +=
                 ExportDiagnosticsRequested;
 
@@ -4851,6 +4854,90 @@ namespace Limelight
                     LimelightDialogTone.Error,
                     details: exception.Message,
                     eyebrow: "REPAIR FAILED");
+            }
+        }
+
+        private async void PurgeAllModsRequested()
+        {
+            if (string.IsNullOrWhiteSpace(_gameDirectory))
+            {
+                ShowLimelightDialog(
+                    "GAME NOT CONNECTED",
+                    "Connect Limelight to Dead as Disco before clearing its mod folder.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "PURGE BLOCKED");
+
+                return;
+            }
+
+            string gameDirectory =
+                _gameDirectory;
+
+            if (_gameProcessService.IsGameRunning(gameDirectory))
+            {
+                ShowLimelightDialog(
+                    "CLOSE THE GAME FIRST",
+                    "Dead as Disco must be closed before Limelight can purge its mod folder.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "PURGE BLOCKED");
+
+                return;
+            }
+
+            LimelightDialogChoice confirmation =
+                ShowLimelightDialog(
+                    "PURGE EVERY DEPLOYED MOD?",
+                    "This empties Dead as Disco's ~mods folder, including files that were added outside Limelight. Your imported library, profiles, and X19 groups will stay in Limelight.",
+                    LimelightDialogTone.Question,
+                    primaryAction: "PURGE ALL MODS",
+                    secondaryAction: "KEEP MY FILES",
+                    eyebrow: "DESTRUCTIVE RECOVERY",
+                    footerHint: "The game must remain closed until the purge finishes.");
+
+            if (confirmation != LimelightDialogChoice.Primary)
+            {
+                return;
+            }
+
+            try
+            {
+                await Task.Run(() =>
+                {
+                    // I close Limelight's session record first so no staged
+                    // generation remains associated with files being purged.
+                    _liveSessionService.RecoverClosedGame(
+                        gameDirectory);
+
+                    _modDeploymentService.PurgeAllMods(
+                        gameDirectory);
+                });
+
+                _settings.ActiveModId =
+                    string.Empty;
+
+                _settings.PendingDeploymentModId =
+                    string.Empty;
+
+                _settingsService.Save(_settings);
+
+                RefreshLibrarySummary();
+                RefreshSettingsPage();
+                UpdateGameRunningStatus();
+
+                ShowLimelightDialog(
+                    "MOD FOLDER PURGED",
+                    "Dead as Disco's ~mods folder is clean. Your imported mods and profiles remain ready inside Limelight.",
+                    LimelightDialogTone.Success,
+                    eyebrow: "PURGE COMPLETE");
+            }
+            catch (Exception exception)
+            {
+                ShowLimelightDialog(
+                    "MOD FOLDER COULD NOT BE PURGED",
+                    "Limelight stopped before changing your imported library.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "PURGE FAILED");
             }
         }
 
