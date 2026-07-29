@@ -7,10 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <ApplicationIcon>Assets\Limelight.ico</ApplicationIcon>
-    <Version>0.1.0-preview.1</Version>
+    <Version>0.1.0-preview.2</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <FileVersion>0.1.0.0</FileVersion>
-    <InformationalVersion>0.1.0-preview.1</InformationalVersion>
+    <InformationalVersion>0.1.0-preview.2</InformationalVersion>
     <!-- CUE4Parse keeps its native helper in the same NuGet folder as the
          managed assembly. MSBuild may inspect that helper as managed code;
          the resulting notice is harmless because it is loaded natively. -->
@@ -30,10 +30,11 @@
     <None Remove="Payloads\NativeBridge\LimelightNativeBridge-0.1.6.dll" />
     <None Remove="Payloads\NativeBridge\LimelightNativeBridge-0.1.7.dll" />
     <None Remove="Payloads\NativeBridge\LimelightNativeBridge-0.1.8.dll" />
+    <None Remove="Payloads\NativeBridge\LimelightNativeBridge-0.1.9.dll" />
     <None Remove="Payloads\NativeBridge\bridge-manifest.json" />
 
     <EmbeddedResource
-      Include="Payloads\NativeBridge\LimelightNativeBridge-0.1.8.dll"
+      Include="Payloads\NativeBridge\LimelightNativeBridge-0.1.9.dll"
       LogicalName="Limelight.Payloads.NativeBridge.LimelightNativeBridge.dll" />
 
     <EmbeddedResource

@@ -2220,21 +2220,127 @@ namespace Limelight
                     }
                 }
 
-                await EnsureLiveWorldStableAsync();
+                List<ModAssetPackage> renderedDependencies =
+                    dependencyPackages
+                        .Where(package =>
+                            package.Kind == ModAssetKind.Texture ||
+                            package.Kind == ModAssetKind.Material)
+                        .ToList();
+
+                int[] retryDelaysMilliseconds =
+                {
+                    150,
+                    250,
+                    400,
+                    650,
+                    900,
+                    1200
+                };
 
                 LiveLoaderCommandResult reapplyResult =
-                    await _liveLoaderCommandService.ReapplyCharlieAsync();
+                    new LiveLoaderCommandResult
+                    {
+                        Success = false,
+                        Message = "The replacement model was not verified."
+                    };
 
-                if (!reapplyResult.Success &&
-                    !allowDeferredCharlieRefresh)
+                LiveLoaderCommandResult dependencyVerificationResult =
+                    new LiveLoaderCommandResult
+                    {
+                        Success = true
+                    };
+
+                bool deferredCharlieRefresh = false;
+
+                for (int attempt = 0;
+                     attempt < retryDelaysMilliseconds.Length;
+                     attempt++)
                 {
-                    throw new InvalidOperationException(
-                        reapplyResult.Message);
+                    await EnsureLiveWorldStableAsync();
+
+                    dependencyVerificationResult =
+                        renderedDependencies.Count == 0
+                            ? new LiveLoaderCommandResult
+                            {
+                                Success = true
+                            }
+                            : await _liveLoaderCommandService.VerifyAssetsAsync(
+                                renderedDependencies.Select(package =>
+                                    package.ObjectPath));
+
+                    if (dependencyVerificationResult.Success)
+                    {
+                        reapplyResult =
+                            await _liveLoaderCommandService.ReapplyCharlieAsync();
+
+                        if (reapplyResult.Success)
+                        {
+                            break;
+                        }
+
+                        bool playerHasNotAppeared =
+                            reapplyResult.Message.Contains(
+                                "No active Charlie pawn",
+                                StringComparison.OrdinalIgnoreCase);
+
+                        if (allowDeferredCharlieRefresh &&
+                            playerHasNotAppeared)
+                        {
+                            deferredCharlieRefresh = true;
+                            break;
+                        }
+                    }
+
+                    if (attempt ==
+                        retryDelaysMilliseconds.Length - 1)
+                    {
+                        string failureMessage =
+                            dependencyVerificationResult.Success
+                                ? reapplyResult.Message
+                                : dependencyVerificationResult.Message;
+
+                        throw new InvalidOperationException(
+                            failureMessage);
+                    }
+
+                    // Cooked dependencies can finish registering just after
+                    // SK_Charlie opens. I retry with a small backoff instead of
+                    // accepting Unreal's black fallback material as success.
+                    await Task.Delay(
+                        retryDelaysMilliseconds[attempt]);
+                }
+
+                if (reapplyResult.Success)
+                {
+                    LiveLoaderCommandResult retirementResult =
+                        await _liveLoaderCommandService
+                            .ConfirmPackageRetirementAsync();
+
+                    if (!retirementResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            retirementResult.Message);
+                    }
+                }
+
+                if (dependencyPackages.Count > 0)
+                {
+                    // The automatic world refresh needs every non-mesh asset,
+                    // not only the strict material verification subset.
+                    LiveLoaderCommandResult rememberedAssetsResult =
+                        await _liveLoaderCommandService.ReloadAssetsAsync(
+                            dependencyPackages.Select(package =>
+                                package.ObjectPath));
+
+                    if (!rememberedAssetsResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            rememberedAssetsResult.Message);
+                    }
                 }
 
                 reportProgress?.Invoke(
-                    allowDeferredCharlieRefresh &&
-                    !reapplyResult.Success
+                    deferredCharlieRefresh
                         ? "READY: CHARLIE WILL REFRESH WHEN SHE APPEARS"
                         : "LIVE LOADER READY",
                     100);

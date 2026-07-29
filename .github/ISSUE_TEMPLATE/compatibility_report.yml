@@ -31,7 +31,7 @@ body:
     id: limelight_version
     attributes:
       label: Limelight version
-      placeholder: 0.1.0-test.13
+      placeholder: 0.1.0-preview.2
     validations:
       required: true
 

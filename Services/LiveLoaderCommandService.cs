@@ -57,6 +57,29 @@ namespace Limelight.Services
             IEnumerable<string> objectPaths,
             CancellationToken cancellationToken = default)
         {
+            return ReloadAssetsAsync(
+                objectPaths,
+                requireEveryAsset: false,
+                cancellationToken);
+        }
+
+        public Task<LiveLoaderCommandResult> VerifyAssetsAsync(
+            IEnumerable<string> objectPaths,
+            CancellationToken cancellationToken = default)
+        {
+            // The early preload is allowed to miss dependencies that only
+            // become visible after SK_Charlie opens. This final pass is not.
+            return ReloadAssetsAsync(
+                objectPaths,
+                requireEveryAsset: true,
+                cancellationToken);
+        }
+
+        private Task<LiveLoaderCommandResult> ReloadAssetsAsync(
+            IEnumerable<string> objectPaths,
+            bool requireEveryAsset,
+            CancellationToken cancellationToken)
+        {
             string joinedPaths =
                 string.Join(
                     "|",
@@ -69,9 +92,27 @@ namespace Limelight.Services
                 "response.txt",
                 new Dictionary<string, string>
                 {
-                    ["objectPaths"] = joinedPaths
+                    ["objectPaths"] = joinedPaths,
+                    ["requireEveryAsset"] =
+                        requireEveryAsset
+                            ? "true"
+                            : "false"
                 },
                 TimeSpan.FromSeconds(45),
+                cancellationToken);
+        }
+
+        public Task<LiveLoaderCommandResult> ConfirmPackageRetirementAsync(
+            CancellationToken cancellationToken = default)
+        {
+            // The native bridge may only retire the old render resources once
+            // Lua has proved that the new player mesh and materials are live.
+            return SendAsync(
+                "confirm_package_retirement",
+                "native-command.txt",
+                "native-response.txt",
+                arguments: null,
+                timeout: TimeSpan.FromSeconds(10),
                 cancellationToken);
         }
 

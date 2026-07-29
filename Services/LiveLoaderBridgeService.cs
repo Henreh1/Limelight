@@ -257,7 +257,9 @@ namespace Limelight.Services
         return refreshedCount
     end
 
-    local function reloadAssets(objectPathsText)
+    local function reloadAssets(
+        objectPathsText,
+        requireEveryAsset)
         local objectPaths =
             splitPipeSeparated(objectPathsText)
 
@@ -316,6 +318,16 @@ namespace Limelight.Services
                     failures,
                     objectPath)
             end
+        end
+
+        if #failures > 0 and
+           requireEveryAsset then
+
+            return false,
+                "The mounted character is still missing " ..
+                tostring(#failures) ..
+                " required material or texture package(s): " ..
+                table.concat(failures, " | ")
         end
 
         if #failures > 0 then
@@ -436,6 +448,163 @@ namespace Limelight.Services
 
         return true, message
     end
+    local function findActiveCharlieMeshComponent()
+        local controllers =
+            FindAllOf("PlayerController")
+
+        if controllers == nil then
+            return nil,
+                "No active Charlie pawn is available yet."
+        end
+
+        for _, controller in pairs(controllers) do
+            if controller ~= nil and
+               controller:IsValid() then
+
+                local pawnReadSucceeded,
+                      pawn =
+                    pcall(function()
+                        return controller.Pawn
+                    end)
+
+                if pawnReadSucceeded and
+                   pawn ~= nil and
+                   pawn:IsValid() then
+
+                    local pawnName =
+                        string.lower(
+                            pawn:GetFullName())
+
+                    if string.find(
+                           pawnName,
+                           "bp_pagodaplayercharacter_charlie",
+                           1,
+                           true) ~= nil then
+
+                        local meshReadSucceeded,
+                              meshComponent =
+                            pcall(function()
+                                return pawn.Mesh
+                            end)
+
+                        if meshReadSucceeded and
+                           meshComponent ~= nil and
+                           meshComponent:IsValid() then
+
+                            return meshComponent,
+                                pawn:GetFullName()
+                        end
+                    end
+                end
+            end
+        end
+
+        return nil,
+            "No active Charlie pawn is available yet."
+    end
+
+    local function inspectCharlieMaterials(
+        meshComponent)
+
+        local inspectionSucceeded,
+              materialsReady,
+              materialSummary =
+            pcall(function()
+                local materialCount =
+                    meshComponent:GetNumMaterials()
+
+                if materialCount == nil or
+                   materialCount <= 0 then
+
+                    return false,
+                        "the replacement mesh has no material slots"
+                end
+
+                local validMaterialCount = 0
+                local fallbackSlots = {}
+                local activeMaterials = {}
+
+                for materialIndex = 0,
+                    materialCount - 1 do
+
+                    local material =
+                        meshComponent:GetMaterial(
+                            materialIndex)
+
+                    if material ~= nil and
+                       material:IsValid() then
+
+                        local fullName =
+                            material:GetFullName()
+
+                        local lowerName =
+                            string.lower(fullName)
+
+                        table.insert(
+                            activeMaterials,
+                            fullName)
+
+                        local isFallbackMaterial =
+                            string.find(
+                                lowerName,
+                                "worldgridmaterial",
+                                1,
+                                true) ~= nil or
+                            string.find(
+                                lowerName,
+                                "defaultmaterial",
+                                1,
+                                true) ~= nil or
+                            string.find(
+                                lowerName,
+                                "defaultsurfacematerial",
+                                1,
+                                true) ~= nil
+
+                        if isFallbackMaterial then
+                            table.insert(
+                                fallbackSlots,
+                                tostring(materialIndex))
+                        else
+                            validMaterialCount =
+                                validMaterialCount + 1
+                        end
+                    else
+                        table.insert(
+                            activeMaterials,
+                            "<empty slot " ..
+                            tostring(materialIndex) ..
+                            ">")
+                    end
+                end
+
+                if #fallbackSlots > 0 then
+                    return false,
+                        "Unreal assigned a fallback material to slot(s) " ..
+                        table.concat(fallbackSlots, ", ")
+                end
+
+                if validMaterialCount == 0 then
+                    return false,
+                        "the replacement mesh has no valid mod materials"
+                end
+
+                return true,
+                    table.concat(
+                        activeMaterials,
+                        " | ")
+            end)
+
+        if not inspectionSucceeded then
+            return false,
+                "material inspection failed: " ..
+                tostring(materialsReady)
+        end
+
+        return materialsReady,
+            materialSummary
+    end
+
     local function reapplyCharlie()
         local loadCallSucceeded,
               meshAsset,
@@ -470,178 +639,81 @@ namespace Limelight.Services
                 "The freshly loaded asset was not SK_Charlie."
         end
 
-        local meshComponents =
-            FindAllOf("SkeletalMeshComponent")
+        local meshComponent,
+              pawnName =
+            findActiveCharlieMeshComponent()
 
-        if meshComponents == nil then
+        if meshComponent == nil then
             return false,
-                "No skeletal mesh components were found."
+                pawnName
         end
 
-        local updatedComponentCount = 0
-        local firstUpdateError = nil
+        local previousMesh = nil
 
-        for _, meshComponent in
-            pairs(meshComponents) do
+        pcall(function()
+            previousMesh =
+                meshComponent.SkeletalMesh
+        end)
 
-            if meshComponent ~= nil and
-               meshComponent:IsValid() then
+        local clearedOverrideCount = 0
 
-                local componentName =
-                    string.lower(
-                        meshComponent:GetFullName())
+        local setSucceeded,
+              setError =
+            pcall(function()
+                local overrideMaterials =
+                    meshComponent.OverrideMaterials
 
-                local isCharliePawnMesh =
-                    string.find(
-                        componentName,
-                        "bp_pagodaplayercharacter_charlie",
-                        1,
-                        true) ~= nil and
-                    string.find(
-                        componentName,
-                        "charactermesh0",
-                        1,
-                        true) ~= nil
+                if overrideMaterials ~= nil then
+                    clearedOverrideCount =
+                        overrideMaterials:GetArrayNum()
 
-                local usesCharlieMesh = false
-
-                local meshReadSucceeded,
-                      currentMesh =
-                    pcall(function()
-                        return meshComponent.SkeletalMesh
-                    end)
-
-                if meshReadSucceeded and
-                   currentMesh ~= nil and
-                   currentMesh:IsValid() then
-
-                    local currentMeshName =
-                        string.lower(
-                            currentMesh:GetFName():ToString())
-
-                    usesCharlieMesh =
-                        currentMeshName == "sk_charlie"
+                    -- CharacterMesh0 can keep dynamic overrides from the old
+                    -- model. I clear them only on the live player component.
+                    overrideMaterials:Empty()
                 end
 
-                -- The level-select preview is not owned by the gameplay pawn,
-                -- but it still displays SK_Charlie. Updating both kinds keeps
-                -- every visible Charlie in step with the active Limelight mod.
-                local isCharlieComponent =
-                    isCharliePawnMesh or
-                    usesCharlieMesh
+                meshComponent:SetSkeletalMeshAsset(
+                    meshAsset)
+            end)
 
-                if isCharlieComponent then
-                    local clearedOverrideCount = 0
+        if not setSucceeded then
+            return false,
+                "The active Charlie pawn could not accept the replacement mesh: " ..
+                tostring(setError)
+        end
 
-                    local clearSucceeded,
-                          clearError =
-                        pcall(function()
-                            local overrideMaterials =
-                                meshComponent.OverrideMaterials
+        local materialsReady,
+              materialSummary =
+            inspectCharlieMaterials(
+                meshComponent)
 
-                            if overrideMaterials ~= nil then
-                                clearedOverrideCount =
-                                    overrideMaterials:GetArrayNum()
+        if not materialsReady then
+            -- A black model is never a successful switch. I restore the old
+            -- mesh and let Limelight retry after dependencies finish loading.
+            if previousMesh ~= nil and
+               previousMesh:IsValid() then
 
-                                -- CharacterMesh0 can keep dynamic overrides from
-                                -- the previous model. Empty them before swapping
-                                -- the mesh so its own material slots win again.
-                                overrideMaterials:Empty()
-                            end
-                        end)
-
-                    local setSucceeded = false
-                    local setError = nil
-
-                    if clearSucceeded then
-                        setSucceeded,
-                        setError =
-                            pcall(function()
-                                meshComponent:SetSkeletalMeshAsset(
-                                    meshAsset)
-                            end)
-                    else
-                        setError = clearError
-                    end
-
-                    if not setSucceeded then
-                        firstUpdateError =
-                            firstUpdateError or
-                            tostring(setError)
-                    else
-                        updatedComponentCount =
-                            updatedComponentCount + 1
-
-                    local activeMaterials = {}
-
-                    local materialReadSucceeded,
-                          materialReadError =
-                        pcall(function()
-                            local materialCount =
-                                meshComponent:GetNumMaterials()
-
-                            for materialIndex = 0,
-                                materialCount - 1 do
-
-                                local material =
-                                    meshComponent:GetMaterial(
-                                        materialIndex)
-
-                                if material ~= nil and
-                                   material:IsValid() then
-
-                                    table.insert(
-                                        activeMaterials,
-                                        material:GetFullName())
-                                else
-                                    table.insert(
-                                        activeMaterials,
-                                        "<empty slot " ..
-                                        tostring(materialIndex) ..
-                                        ">")
-                                end
-                            end
-                        end)
-
-                    local materialSummary =
-                        table.concat(
-                            activeMaterials,
-                            " | ")
-
-                    if not materialReadSucceeded then
-                        materialSummary =
-                            "material inspection failed: " ..
-                            tostring(materialReadError)
-                    end
-
-                        print(
-                            "[LimelightBridge] Cleared " ..
-                            tostring(clearedOverrideCount) ..
-                            " material overrides on " ..
-                            meshComponent:GetFullName() ..
-                            ". Active materials: " ..
-                            materialSummary ..
-                            "\n")
-                    end
-                end
+                pcall(function()
+                    meshComponent:SetSkeletalMeshAsset(
+                        previousMesh)
+                end)
             end
-        end
 
-        if updatedComponentCount > 0 then
-            return true,
-                "A fresh SK_Charlie asset and its material slots were applied to " ..
-                tostring(updatedComponentCount) ..
-                " visible Charlie component(s)."
-        end
-
-        if firstUpdateError ~= nil then
             return false,
-                "Charlie components were found, but could not be refreshed: " ..
-                firstUpdateError
+                "The replacement materials are not ready: " ..
+                materialSummary
         end
 
-        return false,
-            "No visible SK_Charlie component was found. Enter gameplay and try again."
+        print(
+            "[LimelightBridge] Cleared " ..
+            tostring(clearedOverrideCount) ..
+            " material overrides on the active Charlie pawn. Active materials: " ..
+            materialSummary ..
+            "\n")
+
+        return true,
+            "A fresh SK_Charlie asset and verified materials were applied to " ..
+            pawnName .. "."
     end
 
     local function scanMountFunctions()
@@ -873,7 +945,8 @@ namespace Limelight.Services
                       reloadMessage =
                     pcall(function()
                         return reloadAssets(
-                            command.objectPaths)
+                            command.objectPaths,
+                            command.requireEveryAsset == "true")
                     end)
 
                 if not callSucceeded then
@@ -943,7 +1016,8 @@ namespace Limelight.Services
                     assetReloadMessage =
                         pcall(function()
                             return reloadAssets(
-                                activeObjectPathsText)
+                                activeObjectPathsText,
+                                false)
                         end)
                 end
 

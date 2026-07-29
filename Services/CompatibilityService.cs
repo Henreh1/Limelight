@@ -14,6 +14,9 @@ namespace Limelight.Services
         public const string SupportedGameVersion =
             "++brainjar+release-CL-29846";
 
+        public const string SupportedNativeBridgeVersion =
+            "0.1.9";
+
         private const string SteamAppId =
             "3404260";
 
@@ -100,6 +103,10 @@ namespace Limelight.Services
                     steamBuildCompatible &&
                     gameVersionCompatible,
                 EmbeddedPayloadCompatible =
+                    string.Equals(
+                        manifest?.BridgeVersion,
+                        SupportedNativeBridgeVersion,
+                        StringComparison.OrdinalIgnoreCase) &&
                     SafeCheck(() =>
                         _nativeBridgeInstallerService.IsEmbeddedPayloadCompatible()),
                 Ue4ssInstalled = loader.IsInstalled,
