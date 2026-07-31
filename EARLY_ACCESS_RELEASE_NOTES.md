@@ -28,10 +28,13 @@ Dead as Disco themed Windows application.
 
 ## Included downloads
 
-- `LimelightSetup-0.1.0-early-access.exe` for the guided installer.
-- `Limelight-0.1.0-early-access-win-x64.zip` for portable Early Access testing.
-- `LimelightNativeBridge-0.1.9.dll` for the matching native bridge release.
-- SHA-256 checksum files for every release download.
+- `Limelight-0.1.0-early-access-win-x64.zip` contains the standalone portable
+  application. Extract the ZIP, then open `Limelight.exe`.
+- `Limelight-0.1.0-early-access-win-x64.zip.sha256` can be used to verify the
+  download.
+
+Limelight carries and manages its matching Live Loader components itself, so
+the native bridge and runtime do not need to be downloaded separately.
 
 Read the documentation at
 [henreh1.github.io/LimelightWiki](https://henreh1.github.io/LimelightWiki/).

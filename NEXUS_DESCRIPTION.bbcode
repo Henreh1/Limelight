@@ -1,0 +1,173 @@
+[center]
+[img]https://raw.githubusercontent.com/Henreh1/Limelight/main/Assets/README/limelight-logo.png[/img]
+
+[size=6][b][i]LIMELIGHT[/i][/b][/size]
+
+[size=4][b]YOUR MODS. YOUR STAGE.[/b][/size]
+A standalone mod manager and live character loader for [i]Dead as Disco[/i].
+
+[url=https://henreh1.github.io/LimelightWiki/][b]DOCUMENTATION[/b][/url]  [color=#FF2FA4]◆[/color]  [url=https://github.com/Henreh1/Limelight/releases][b]RELEASES[/b][/url]  [color=#FF2FA4]◆[/color]  [url=https://github.com/Henreh1/Limelight/issues][b]REPORT AN ISSUE[/b][/url]
+[/center]
+
+[quote]
+[color=#FF2FA4][b]EARLY ACCESS NOTICE[/b][/color]
+
+Limelight is currently in Early Access. Nexus Mods browsing and direct downloads are temporarily marked as under construction while application registration is reviewed.
+[/quote]
+
+[color=#2EDBF0][size=5][b]ABOUT LIMELIGHT[/b][/size][/color]
+
+Limelight keeps character model mods organised and lets supported assets switch while [i]Dead as Disco[/i] is still running. Point it at the game once, import a mod archive, and manage the rest from one themed desktop application.
+
+The Live Loader installs and configures its managed runtime components automatically. Users do not need to manually copy UE4SS, bridge, or staging files into the game.
+
+[center][color=#FF2FA4]◆[/color][/center]
+
+[color=#2EDBF0][size=5][b]HIGHLIGHTS[/b][/size][/color]
+
+[list]
+[*][b]Character library[/b]
+Import ZIP archives, drag and drop mods, rename entries, reject duplicates, and remove mods from one library.
+
+[*][b]Normal Live Loader[/b]
+Activate a supported character replacement without restarting the game.
+
+[*][b]X19 LLoader[/b]
+Rotate through a chosen cast by keyboard or controller, in order or shuffled.
+
+[*][b]Profiles[/b]
+Save reusable groups of characters and assign an entire profile to X19 rotation.
+
+[*][b]Asset-aware switching[/b]
+Scan each imported Unreal container and refresh the model, materials, textures, portraits, and supported localisation assets it replaces.
+
+[*][b]Safe switching[/b]
+Detect game transitions, block unsafe requests, reuse mounted containers, and show a subtle Limelight pulse while X19 changes character.
+
+[*][b]Compatibility checks[/b]
+Verify the game build, UE4SS runtime, Lua bridge, and native bridge before enabling live switching.
+
+[*][b]Recovery and reports[/b]
+Repair managed loader files and create privacy-conscious diagnostic or private test reports.
+
+[*][b]Windows integration[/b]
+Themed dialogs, a themed file explorer, Discord Rich Presence, optional resource monitoring, and a guided first-run tour.
+[/list]
+
+[center][color=#FF2FA4]◆[/color][/center]
+
+[color=#2EDBF0][size=5][b]SCREENSHOTS[/b][/size][/color]
+
+[center]
+[size=4][b]DASHBOARD[/b][/size]
+[img]https://raw.githubusercontent.com/Henreh1/Limelight/main/Assets/README/screenshots/dashboard.png[/img]
+
+[size=4][b]CHARACTER LIBRARY[/b][/size]
+[img]https://raw.githubusercontent.com/Henreh1/Limelight/main/Assets/README/screenshots/my-mods.png[/img]
+
+[size=4][b]PROFILES[/b][/size]
+[img]https://raw.githubusercontent.com/Henreh1/Limelight/main/Assets/README/screenshots/profiles.png[/img]
+
+[size=4][b]LIVE LOADERS[/b][/size]
+[img]https://raw.githubusercontent.com/Henreh1/Limelight/main/Assets/README/screenshots/live-loaders.png[/img]
+
+[size=4][b]SUBTLE X19 FEEDBACK[/b][/size]
+X19 keeps the game view clean. During a character switch, this translucent Limelight mark briefly pulses in the corner instead of covering gameplay with a full status panel.
+
+[img]https://raw.githubusercontent.com/Henreh1/Limelight/main/Assets/README/x19-pulse.png[/img]
+[/center]
+
+[center][color=#FF2FA4]◆[/color][/center]
+
+[color=#2EDBF0][size=5][b]REQUIREMENTS[/b][/size][/color]
+
+[list]
+[*]Windows 10 or Windows 11, 64-bit
+[*]A Steam installation of [i]Dead as Disco[/i]
+[*]Enough free space for Limelight, managed loader files, imported mods, and temporary staging
+[*]The game must be closed while Limelight installs or repairs the Live Loader
+[/list]
+
+The Early Access portable package includes the .NET runtime required by Limelight.
+
+[color=#2EDBF0][size=5][b]GETTING STARTED[/b][/size][/color]
+
+[list=1]
+[*]Download the latest Early Access ZIP from [url=https://github.com/Henreh1/Limelight/releases]Releases[/url].
+[*]Extract the ZIP to a normal folder, then open [b]Limelight.exe[/b].
+[*]Choose the folder containing [b]Dead as Disco[/b] when prompted.
+[*]Import a supported mod ZIP, or drag it onto the Limelight window.
+[*]Open [b]My Mods[/b] and activate the character you want to use.
+[*]Select [b]Launch Game[/b], then choose Normal Live Loader, X19 LLoader, or launch without live switching.
+[/list]
+
+Limelight keeps its mod library, profiles, settings, reports, and temporary runtime data inside the current Windows account. Uninstalling the application does not silently delete the user's library.
+
+[center][color=#FF2FA4]◆[/color][/center]
+
+[color=#2EDBF0][size=5][b]LIVE LOADER MODES[/b][/size][/color]
+
+[color=#FF2FA4][size=4][b]NORMAL LIVE LOADER[/b][/size][/color]
+
+Use the character library to choose each active mod manually. This is the simplest mode for players who want one character at a time with full switching feedback.
+
+[color=#FF2FA4][size=4][b]X19 LLOADER[/b][/size][/color]
+
+Build a rotation from individual characters or a saved profile, then advance through it with a configurable keyboard or controller button. X19 supports sequential and shuffled rotation, prevents overlapping requests, and limits input handling to [i]Dead as Disco[/i].
+
+[color=#FF2FA4][size=4][b]NO LIVE LOADER[/b][/size][/color]
+
+Launch the game without starting live switching. This reduces startup time and resource use when Limelight's runtime features are not needed.
+
+[center][color=#FF2FA4]◆[/color][/center]
+
+[color=#2EDBF0][size=5][b]MOD COMPATIBILITY[/b][/size][/color]
+
+Limelight is primarily designed for Unreal Engine IoStore character replacements containing matching [b].pak[/b], [b].ucas[/b], and [b].utoc[/b] files. Imported archives are validated before entering the library.
+
+Live switching depends on the contents and structure of each mod. A mod that works after restarting the game may still contain assets that Unreal cannot safely replace at runtime. See the [url=https://henreh1.github.io/LimelightWiki/mod-compatibility.html]compatibility guide[/url] for current details.
+
+[color=#2EDBF0][size=5][b]NEXUS MODS STATUS[/b][/size][/color]
+
+The Nexus catalogue interface, mod detail pages, image carousel, download history, and credential protection have been implemented and privately tested. Public access is paused until Nexus Mods completes Limelight's application registration review.
+
+Limelight does not expose a personal API key in diagnostic reports. Public builds will follow the registered authentication flow required by Nexus Mods.
+
+[center][color=#FF2FA4]◆[/color][/center]
+
+[color=#2EDBF0][size=5][b]DOCUMENTATION AND SUPPORT[/b][/size][/color]
+
+[list]
+[*]Read the [url=https://henreh1.github.io/LimelightWiki/]Limelight documentation[/url]
+[*]Review [url=https://henreh1.github.io/LimelightWiki/troubleshooting.html]troubleshooting and recovery[/url]
+[*]Create a themed diagnostic or private test report from [b]Settings > Support[/b]
+[*]Report reproducible problems through [url=https://github.com/Henreh1/Limelight/issues]GitHub Issues[/url]
+[/list]
+
+[quote]
+[color=#FF2FA4][b]PRIVACY REMINDER[/b][/color]
+
+Please do not include personal API credentials, private files, or unrelated crash data in a public report.
+[/quote]
+
+[color=#2EDBF0][size=5][b]CREDITS[/b][/size][/color]
+
+Created by [b]Henreh[/b].
+
+A massive thank you to the people at [b]Brain Jar Games[/b] for making [i]Dead as Disco[/i] exist.
+
+[b]Special thanks to the Limelight testers:[/b]
+
+[list]
+[*][b]X19[/b]
+[*][b]Taxes I Hate Em[/b]
+[*][b]Bananas[/b]
+[/list]
+
+Limelight also builds on the work of the [url=https://github.com/UE4SS-RE/RE-UE4SS]RE-UE4SS[/url] and [url=https://github.com/FabianFG/CUE4Parse]CUE4Parse[/url] projects.
+
+[center]
+[color=#FF2FA4]◆[/color]
+
+[size=4][b]Henreh <3[/b][/size]
+[/center]

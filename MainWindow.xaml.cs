@@ -82,6 +82,7 @@ namespace Limelight
         private readonly DownloadHistoryService _downloadHistoryService;
         private readonly NexusCredentialService _nexusCredentialService;
         private readonly DiscordPresenceService _discordPresenceService;
+        private readonly GitHubReleaseUpdateService _updateService;
         private ResourceUsageOverlayWindow? _resourceUsageOverlayWindow;
 
         private NexusAccount? _nexusAccount;
@@ -126,12 +127,17 @@ namespace Limelight
         private bool _windowTransitionInProgress;
         private bool _animateWindowAfterRestore;
         private bool _isModImportInProgress;
+        private string _availableUpdateUrl =
+            string.Empty;
 
         private string? _gameDirectory;
 
         public MainWindow()
         {
             InitializeComponent();
+
+            GameStatusDescription.Text =
+                GetSidebarVersionText();
 
             _settingsService =
                 new SettingsService();
@@ -208,6 +214,9 @@ namespace Limelight
 
             _nexusCredentialService =
                 new NexusCredentialService();
+
+            _updateService =
+                new GitHubReleaseUpdateService();
 
             _settings =
                 _settingsService.Load();
@@ -399,6 +408,11 @@ namespace Limelight
             {
                 QueueWhatsNewWindow();
             }
+
+            // I keep update checks out of the startup path so a slow network
+            // never delays Limelight or stops the rest of the app loading.
+            _ =
+                CheckForUpdatesAsync();
         }
 
         private void QueueWhatsNewWindow()
@@ -472,6 +486,109 @@ namespace Limelight
 
             return assembly.GetName().Version?.ToString() ??
                 "EARLY ACCESS";
+        }
+
+        private static string GetSidebarVersionText()
+        {
+            string friendlyVersion =
+                GetCurrentVersion()
+                    .Replace(
+                        '-',
+                        ' ')
+                    .ToUpperInvariant();
+
+            return
+                $"LIMELIGHT {friendlyVersion}\nMADE BY HENREH <3";
+        }
+
+        private async Task CheckForUpdatesAsync()
+        {
+            GitHubReleaseUpdate? update =
+                await _updateService.CheckForUpdateAsync(
+                    GetCurrentVersion());
+
+            if (update == null ||
+                !IsLoaded)
+            {
+                return;
+            }
+
+            ShowAvailableUpdate(update);
+        }
+
+        private void ShowAvailableUpdate(
+            GitHubReleaseUpdate update)
+        {
+            _availableUpdateUrl =
+                update.Url;
+
+            UpdateAvailableText.Text =
+                $"{update.Name} is available. You are using {GetCurrentVersion()}.";
+
+            UpdateAvailableBanner.Visibility =
+                Visibility.Visible;
+
+            UpdateAvailableBanner.BeginAnimation(
+                OpacityProperty,
+                new DoubleAnimation(
+                    0,
+                    1,
+                    TimeSpan.FromMilliseconds(220)));
+        }
+
+        private void ViewUpdate_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (Uri.TryCreate(
+                    _availableUpdateUrl,
+                    UriKind.Absolute,
+                    out Uri? updateUri) &&
+                string.Equals(
+                    updateUri.Host,
+                    "github.com",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                Process.Start(
+                    new ProcessStartInfo(
+                        updateUri.AbsoluteUri)
+                    {
+                        UseShellExecute =
+                            true
+                    });
+            }
+
+            HideAvailableUpdate();
+        }
+
+        private void DismissUpdate_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            HideAvailableUpdate();
+        }
+
+        private void HideAvailableUpdate()
+        {
+            DoubleAnimation fade =
+                new DoubleAnimation(
+                    1,
+                    0,
+                    TimeSpan.FromMilliseconds(160));
+
+            fade.Completed +=
+                (_, _) =>
+                {
+                    UpdateAvailableBanner.Visibility =
+                        Visibility.Collapsed;
+
+                    _availableUpdateUrl =
+                        string.Empty;
+                };
+
+            UpdateAvailableBanner.BeginAnimation(
+                OpacityProperty,
+                fade);
         }
 
         private void ShowFirstRunTutorialIfNeeded()
@@ -6736,7 +6853,7 @@ namespace Limelight
                 "GAME CONNECTED";
 
             GameStatusDescription.Text =
-                selectedDirectory;
+                GetSidebarVersionText();
 
             RefreshSettingsPage();
             RefreshLibrarySummary();
@@ -6767,7 +6884,7 @@ namespace Limelight
             _settingsService.Save(_settings);
 
             GameStatusDescription.Text =
-                "The previously selected game folder could not be found.";
+                GetSidebarVersionText();
         }
     }
 }
