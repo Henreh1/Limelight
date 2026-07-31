@@ -4,7 +4,7 @@
 #define MyAppUrl "https://henreh1.github.io/LimelightWiki/"
 
 #ifndef MyAppVersion
-  #define MyAppVersion "0.1.0-preview.3"
+  #define MyAppVersion "0.1.0-early-access"
 #endif
 
 #ifndef PublishDir
@@ -74,7 +74,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
 WelcomeLabel1=YOUR MODS. YOUR STAGE.
-WelcomeLabel2=Install the Limelight Preview.%n%nLimelight manages Dead as Disco mods, profiles, and optional live switching from one place.
+WelcomeLabel2=Install Limelight Early Access.%n%nLimelight manages Dead as Disco mods, profiles, and optional live switching from one place.
 WizardSelectDir=CHOOSE THE INSTALL LOCATION
 SelectDirDesc=Choose where Limelight should take the spotlight.
 SelectDirLabel3=Limelight installs for this Windows account. Your mod library, profiles, settings, and reports are stored separately and are preserved during upgrades or uninstall.
@@ -309,7 +309,7 @@ begin
     ScaleY(28),
     HeroPanel.Width - ScaleX(205),
     ScaleY(20),
-    'LIMELIGHT PREVIEW',
+    'LIMELIGHT EARLY ACCESS',
     9,
     LimelightCyan,
     True);
@@ -361,7 +361,7 @@ begin
     ScaleY(10),
     StatusPanel.Width - ScaleX(36),
     ScaleY(28),
-    'PREVIEW BUILD   |   MANAGED LIVE LOADER   |   PROFILES PRESERVED',
+    'EARLY ACCESS   |   MANAGED LIVE LOADER   |   PROFILES PRESERVED',
     8,
     LimelightCyan,
     True);
@@ -668,7 +668,7 @@ end;
 procedure InitializeWizard;
 begin
   // I keep the native installer controls, but dress every visible page in Limelight's palette.
-  WizardForm.Caption := 'Limelight  |  Preview Installer';
+  WizardForm.Caption := 'Limelight  |  Early Access Installer';
   WizardForm.Color := LimelightBackground;
   WizardForm.MainPanel.Color := LimelightBackground;
   WizardForm.InnerPage.Color := LimelightBackground;

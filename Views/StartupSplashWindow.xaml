@@ -76,7 +76,7 @@
                  competing with the logo or startup status. -->
             <TextBlock Grid.Row="0"
                        Panel.ZIndex="10"
-                       Text="PRIVATE TEST BUILD"
+                       Text="EARLY ACCESS"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        Foreground="{StaticResource PinkBrush}"

@@ -19,7 +19,7 @@ namespace Limelight.Services
     {
         // I keep the finished Nexus integration behind one gate while the
         // application registration is being reviewed. This prevents the
-        // Preview build from making even a hidden validation request.
+        // Early Access build from making even a hidden validation request.
         public static bool IntegrationEnabled => false;
 
         public const string IntegrationUnavailableMessage =

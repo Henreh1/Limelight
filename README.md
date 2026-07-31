@@ -18,7 +18,7 @@
 </p>
 
 > [!IMPORTANT]
-> Limelight is currently a preview build. Nexus Mods browsing and direct downloads are temporarily marked as under construction while application registration is reviewed.
+> Limelight is currently in Early Access. Nexus Mods browsing and direct downloads are temporarily marked as under construction while application registration is reviewed.
 
 ## About Limelight
 

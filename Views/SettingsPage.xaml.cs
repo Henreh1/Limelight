@@ -331,7 +331,7 @@ namespace Limelight.Views
                 StatusBrush(isHealthy: false);
 
             NexusAccountDetailText.Text =
-                "Nexus authentication, browsing, and downloads are paused in this Preview build. Any saved credential remains protected on this Windows account.";
+                "Nexus authentication, browsing, and downloads are paused during Early Access. Any saved credential remains protected on this Windows account.";
 
             NexusApiKeyBox.Password =
                 string.Empty;
@@ -343,7 +343,7 @@ namespace Limelight.Views
             NexusDisconnectButton.Opacity = 0.45;
 
             NexusAccessBadgeText.Text =
-                "PREVIEW";
+                "EARLY ACCESS";
 
             NexusAccessBadgeText.Foreground =
                 StatusBrush(isHealthy: false);

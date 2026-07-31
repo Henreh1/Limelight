@@ -505,7 +505,7 @@
                                                FontWeight="Bold"/>
 
                                     <TextBlock Margin="0,10,20,0"
-                                               Text="Authentication, catalogue browsing, and direct downloads are temporarily paused in this Preview build while Limelight's application registration is reviewed."
+                                               Text="Authentication, catalogue browsing, and direct downloads are temporarily paused during Early Access while Limelight's application registration is reviewed."
                                                TextWrapping="Wrap"
                                                FontSize="13"
                                                LineHeight="19"
@@ -610,7 +610,7 @@
                                                FontWeight="Bold"
                                                Foreground="{StaticResource PinkBrush}"/>
 
-                                    <TextBlock Text="PRIVATE TESTING BUILD"
+                                    <TextBlock Text="EARLY ACCESS BUILD"
                                                Margin="0,9,0,0"
                                                FontSize="19"
                                                FontWeight="Bold"/>
@@ -850,7 +850,7 @@
                                         BorderBrush="{StaticResource PinkBrush}"
                                         BorderThickness="1"
                                         CornerRadius="8">
-                                    <TextBlock Text="TESTING ONLY"
+                                    <TextBlock Text="NEXUS REVIEW"
                                                FontSize="10"
                                                FontWeight="Bold"
                                                Foreground="{StaticResource PinkBrush}"/>

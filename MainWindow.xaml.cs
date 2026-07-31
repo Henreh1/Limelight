@@ -364,7 +364,7 @@ namespace Limelight
             else
             {
                 // I leave the saved credential untouched while Nexus reviews
-                // Limelight, but this Preview build never opens or validates it.
+                // Limelight, but this Early Access build never opens or validates it.
                 SettingsPageControl.ShowNexusUnavailable();
             }
 
@@ -471,7 +471,7 @@ namespace Limelight
             }
 
             return assembly.GetName().Version?.ToString() ??
-                "PREVIEW BUILD";
+                "EARLY ACCESS";
         }
 
         private void ShowFirstRunTutorialIfNeeded()
@@ -527,7 +527,7 @@ namespace Limelight
                     "BROWSE NEXUS",
                     "CATALOGUE ACCESS IS COMING",
                     "The Nexus catalogue is temporarily paused while Limelight's application registration is reviewed. This page will unlock after approval.",
-                    "For this Preview, import a mod archive from the Dashboard or drag its ZIP directly onto Limelight."),
+                    "During Early Access, import a mod archive from the Dashboard or drag its ZIP directly onto Limelight."),
                 new TutorialStep(
                     NavigationPage.Downloads,
                     DownloadsNavigation,

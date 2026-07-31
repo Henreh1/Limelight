@@ -19,14 +19,14 @@ namespace Limelight.Models
         public required IReadOnlyList<ReleaseNoteItem> Items { get; init; }
 
         // I keep the current release copy together so future updates only
-        // need one small file changed before a new Preview is packaged.
+        // need one small file changed before a new Early Access build is packaged.
         public static ReleaseNotesContent CreateCurrent(
             string version)
         {
             return new ReleaseNotesContent
             {
                 Version = version,
-                Eyebrow = "WHAT'S NEW IN PREVIEW 3",
+                Eyebrow = "WHAT'S NEW IN EARLY ACCESS",
                 Title = "THE NEXT ACT IS READY",
                 Summary = "Build reusable casts, bring mods into the spotlight faster, and keep your game directory under control.",
                 Items = new List<ReleaseNoteItem>
