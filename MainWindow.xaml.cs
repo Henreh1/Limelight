@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -388,7 +389,89 @@ namespace Limelight
                     waitForGameProcess: false);
             }
 
+            bool tutorialNeeded =
+                _settings.CompletedTutorialVersion <
+                CurrentTutorialVersion;
+
             ShowFirstRunTutorialIfNeeded();
+
+            if (!tutorialNeeded)
+            {
+                QueueWhatsNewWindow();
+            }
+        }
+
+        private void QueueWhatsNewWindow()
+        {
+            // I let the main window finish its first layout before opening the
+            // update card. This keeps the splash and release notes separate.
+            Dispatcher.BeginInvoke(
+                new Action(ShowWhatsNewWindowIfNeeded),
+                DispatcherPriority.ApplicationIdle);
+        }
+
+        private void ShowWhatsNewWindowIfNeeded()
+        {
+            if (_settings.CompletedTutorialVersion <
+                    CurrentTutorialVersion ||
+                TutorialOverlay.Visibility ==
+                    Visibility.Visible)
+            {
+                return;
+            }
+
+            string version =
+                GetCurrentVersion();
+
+            if (string.Equals(
+                    _settings.LastSeenReleaseNotesVersion,
+                    version,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            ReleaseNotesContent content =
+                ReleaseNotesContent.CreateCurrent(version);
+
+            WhatsNewWindow window =
+                new WhatsNewWindow(content)
+                {
+                    Owner = this
+                };
+
+            window.ShowDialog();
+
+            // Closing the card means the user has acknowledged this release.
+            // I save immediately so it stays dismissed after a restart.
+            _settings.LastSeenReleaseNotesVersion =
+                version;
+
+            _settingsService.Save(_settings);
+        }
+
+        private static string GetCurrentVersion()
+        {
+            Assembly assembly =
+                typeof(MainWindow).Assembly;
+
+            string? informationalVersion =
+                assembly
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                    ?.InformationalVersion;
+
+            if (!string.IsNullOrWhiteSpace(informationalVersion))
+            {
+                int metadataStart =
+                    informationalVersion.IndexOf('+');
+
+                return metadataStart >= 0
+                    ? informationalVersion[..metadataStart]
+                    : informationalVersion;
+            }
+
+            return assembly.GetName().Version?.ToString() ??
+                "PREVIEW BUILD";
         }
 
         private void ShowFirstRunTutorialIfNeeded()
@@ -659,6 +742,8 @@ namespace Limelight
                 Visibility.Collapsed;
 
             ShowDashboardPage();
+
+            QueueWhatsNewWindow();
         }
 
         private void MainWindow_SizeChanged(

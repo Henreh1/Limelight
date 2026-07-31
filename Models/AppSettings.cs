@@ -42,6 +42,11 @@ namespace Limelight.Models
         // tour without repeatedly showing the same guide on every launch.
         public int CompletedTutorialVersion { get; set; }
 
+        // I remember which update card the user has already seen so release
+        // notes appear once for each Limelight version, not on every launch.
+        public string LastSeenReleaseNotesVersion { get; set; } =
+            string.Empty;
+
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 
