@@ -53,6 +53,28 @@ namespace Limelight.Services
                 cancellationToken);
         }
 
+        public Task<LiveLoaderCommandResult> RememberActiveAssetsAsync(
+            IEnumerable<string> objectPaths,
+            CancellationToken cancellationToken = default)
+        {
+            string joinedPaths =
+                string.Join(
+                    "|",
+                    objectPaths.Distinct(
+                        StringComparer.OrdinalIgnoreCase));
+
+            return SendAsync(
+                "remember_active_assets",
+                "command.txt",
+                "response.txt",
+                new Dictionary<string, string>
+                {
+                    ["objectPaths"] = joinedPaths
+                },
+                TimeSpan.FromSeconds(10),
+                cancellationToken);
+        }
+
         public Task<LiveLoaderCommandResult> ReloadAssetsAsync(
             IEnumerable<string> objectPaths,
             CancellationToken cancellationToken = default)

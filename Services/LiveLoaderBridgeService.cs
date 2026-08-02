@@ -65,6 +65,8 @@ namespace Limelight.Services
     local activeObjectPathsText = nil
     local portraitRefreshPassesRemaining = 0
     local lastPortraitRefreshSecond = 0
+    local localizedTextRefreshPassesRemaining = 0
+    local lastLocalizedTextRefreshSecond = 0
 
     local function writeHeartbeat()
         local heartbeatFile =
@@ -150,6 +152,46 @@ namespace Limelight.Services
             responsePath)
     end
 
+    local function isCharliePortraitPath(lowerPath)
+        return
+            string.find(
+                lowerPath,
+                "/ui/art/dialog/portraits/dialog_charlie_01.",
+                1,
+                true) ~= nil or
+            (string.find(lowerPath, "charlie", 1, true) ~= nil and
+             (string.find(lowerPath, "portrait", 1, true) ~= nil or
+              string.find(lowerPath, "/ui/", 1, true) ~= nil))
+    end
+
+    local function isStringTablePath(lowerPath)
+        return
+            string.find(lowerPath, "/localization/", 1, true) ~= nil or
+            string.find(lowerPath, ".st_", 1, true) ~= nil
+    end
+
+    local function rememberActiveAssets(objectPathsText)
+        activeObjectPathsText = objectPathsText
+
+        for _, objectPath in
+            ipairs(splitPipeSeparated(objectPathsText)) do
+
+            local lowerObjectPath =
+                string.lower(objectPath)
+
+            if isCharliePortraitPath(lowerObjectPath) then
+                activeCharliePortraitPath = objectPath
+                portraitRefreshPassesRemaining = 20
+                lastPortraitRefreshSecond = 0
+            end
+
+            if isStringTablePath(lowerObjectPath) then
+                localizedTextRefreshPassesRemaining = 20
+                lastLocalizedTextRefreshSecond = 0
+            end
+        end
+    end
+
     local function refreshCharliePortraitWidgets()
         if activeCharliePortraitPath == nil or
            activeCharliePortraitPath == "" then
@@ -172,17 +214,6 @@ namespace Limelight.Services
            activeCharliePortrait == nil or
            not activeCharliePortrait:IsValid() then
 
-            return 0
-        end
-
-        local activeNameReadSucceeded,
-              activeFullName =
-            pcall(function()
-                return string.lower(
-                    activeCharliePortrait:GetFullName())
-            end)
-
-        if not activeNameReadSucceeded then
             return 0
         end
 
@@ -233,8 +264,7 @@ namespace Limelight.Services
                             1,
                             true) ~= nil
 
-                    if isCharliePortrait and
-                       resourceFullName ~= activeFullName then
+                    if isCharliePortrait then
 
                         local setSucceeded =
                             pcall(function()
@@ -246,6 +276,47 @@ namespace Limelight.Services
                             end)
 
                         if setSucceeded then
+                            refreshedCount =
+                                refreshedCount + 1
+                        end
+                    end
+                end
+            end
+        end
+
+        return refreshedCount
+    end
+
+    local function refreshLocalizedTextWidgets()
+        local refreshedCount = 0
+        local widgetClasses =
+        {
+            "TextBlock",
+            "RichTextBlock"
+        }
+
+        for _, widgetClass in ipairs(widgetClasses) do
+            local widgets = FindAllOf(widgetClass)
+
+            if widgets ~= nil then
+                for _, widget in pairs(widgets) do
+                    if widget ~= nil and widget:IsValid() then
+                        local synchronizeSucceeded =
+                            pcall(function()
+                                widget:SynchronizeProperties()
+                            end)
+
+                        local textResetSucceeded =
+                            pcall(function()
+                                local currentText = widget.Text
+
+                                if currentText ~= nil then
+                                    widget:SetText(currentText)
+                                end
+                            end)
+
+                        if synchronizeSucceeded or
+                           textResetSucceeded then
                             refreshedCount =
                                 refreshedCount + 1
                         end
@@ -291,11 +362,8 @@ namespace Limelight.Services
                 local lowerObjectPath =
                     string.lower(objectPath)
 
-                if string.find(
-                        lowerObjectPath,
-                        "/ui/art/dialog/portraits/dialog_charlie_01.",
-                        1,
-                        true) ~= nil then
+                if isCharliePortraitPath(
+                        lowerObjectPath) then
 
                     -- I save the path instead of keeping this UObject across
                     -- map loads. Unreal may retire the old package while the
@@ -303,7 +371,7 @@ namespace Limelight.Services
                     -- longer be trusted after a level change.
                     activeCharliePortraitPath = objectPath
                     portraitRefreshPassesRemaining = 20
-    lastPortraitRefreshSecond = 0
+                    lastPortraitRefreshSecond = 0
 
                     local refreshedCount =
                         refreshCharliePortraitWidgets()
@@ -312,6 +380,19 @@ namespace Limelight.Services
                         "[LimelightBridge] Charlie portrait loaded; refreshed " ..
                         tostring(refreshedCount) ..
                         " existing image widget(s).\n")
+                end
+
+                if isStringTablePath(lowerObjectPath) then
+                    localizedTextRefreshPassesRemaining = 20
+                    lastLocalizedTextRefreshSecond = 0
+
+                    local refreshedCount =
+                        refreshLocalizedTextWidgets()
+
+                    print(
+                        "[LimelightBridge] StringTables loaded; refreshed " ..
+                        tostring(refreshedCount) ..
+                        " text widget(s).\n")
                 end
             else
                 table.insert(
@@ -929,6 +1010,14 @@ namespace Limelight.Services
                         reapplyMessage)
                 end
             end)
+        elseif action == "remember_active_assets" then
+            rememberActiveAssets(
+                command.objectPaths)
+
+            writeResponse(
+                requestId,
+                true,
+                "Limelight remembered the complete active asset list.")
         elseif action == "reload_assets" then
             ExecuteInGameThread(function()
                 if worldTransitioning or worldSettling then
@@ -959,10 +1048,15 @@ namespace Limelight.Services
                     if reloadSucceeded then
                         automaticCharlieRefreshEnabled = true
 
-                        -- I keep the complete active asset list so a newly loaded world
-                        -- can request fresh portrait, interface, and localization objects.
-                        activeObjectPathsText =
-                            command.objectPaths
+                        -- The first reload is a useful fallback for older
+                        -- callers. Later dependency passes must not replace
+                        -- the complete active manifest with a smaller list.
+                        if activeObjectPathsText == nil or
+                           activeObjectPathsText == "" then
+
+                            rememberActiveAssets(
+                                command.objectPaths)
+                        end
                     end
 
                     writeResponse(
@@ -1065,12 +1159,16 @@ namespace Limelight.Services
         local completedGeneration =
             transitionGeneration
 
-        if activeCharliePortraitPath ~= nil and
-           activeCharliePortraitPath ~= "" then
+        if activeObjectPathsText ~= nil and
+           activeObjectPathsText ~= "" then
 
-            -- A new map creates fresh widgets, so I give the portrait another
-            -- chance to reach screens constructed after the transition. The
-            -- next refresh resolves a new UObject from the saved path.
+            -- A new map creates fresh widgets, so I re-arm every interface
+            -- and localization refresh from the complete active manifest.
+            rememberActiveAssets(
+                activeObjectPathsText)
+        elseif activeCharliePortraitPath ~= nil and
+               activeCharliePortraitPath ~= "" then
+
             portraitRefreshPassesRemaining = 20
             lastPortraitRefreshSecond = 0
         end
@@ -1151,29 +1249,46 @@ namespace Limelight.Services
                 currentSecond
         end
 
-            if portraitRefreshPassesRemaining > 0 and
-       currentSecond ~= lastPortraitRefreshSecond and
-       not worldTransitioning and
-       not worldSettling then
+        if portraitRefreshPassesRemaining > 0 and
+           currentSecond ~= lastPortraitRefreshSecond and
+           not worldTransitioning and
+           not worldSettling then
 
-        -- Portrait widgets are often created after the texture loads. I
-        -- retry briefly so newly opened screens receive the active image.
-        local refreshedCount =
-            refreshCharliePortraitWidgets()
+            -- Portrait widgets are often created after the texture loads. I
+            -- retry briefly so newly opened screens receive the active image.
+            local refreshedCount =
+                refreshCharliePortraitWidgets()
 
-        portraitRefreshPassesRemaining =
-            portraitRefreshPassesRemaining - 1
+            portraitRefreshPassesRemaining =
+                portraitRefreshPassesRemaining - 1
 
-        lastPortraitRefreshSecond =
-            currentSecond
+            lastPortraitRefreshSecond =
+                currentSecond
 
-        if refreshedCount > 0 then
-            print(
-                "[LimelightBridge] Refreshed " ..
-                tostring(refreshedCount) ..
-                " Charlie portrait widget(s).\n")
+            if refreshedCount > 0 then
+                print(
+                    "[LimelightBridge] Refreshed " ..
+                    tostring(refreshedCount) ..
+                    " Charlie portrait widget(s).\n")
+            end
         end
-    end
+
+        if localizedTextRefreshPassesRemaining > 0 and
+           currentSecond ~= lastLocalizedTextRefreshSecond and
+           not worldTransitioning and
+           not worldSettling then
+
+            -- StringTables can finish loading before a screen creates its
+            -- text widgets. I repeat the lightweight refresh for a short
+            -- window so newly created menus receive the replacement text.
+            lastLocalizedTextRefreshSecond =
+                currentSecond
+
+            localizedTextRefreshPassesRemaining =
+                localizedTextRefreshPassesRemaining - 1
+
+            refreshLocalizedTextWidgets()
+        end
 
         processCommand()
 

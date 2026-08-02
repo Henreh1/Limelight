@@ -143,7 +143,7 @@
                         </Grid>
                     </Border>
 
-                    <TextBlock Text="Please leave Limelight open while the loader mounts and verifies the active mod. Live switching will unlock automatically."
+                    <TextBlock Text="Please remain seated in the Dive Bar while Limelight works its magic. Enter a level after the Live Loader says ready."
                                Margin="2,18,2,0"
                                FontSize="12"
                                LineHeight="18"

@@ -2362,6 +2362,17 @@ namespace Limelight
 
                 await EnsureLiveWorldStableAsync();
 
+                LiveLoaderCommandResult rememberAssetsResult =
+                    await _liveLoaderCommandService.RememberActiveAssetsAsync(
+                        livePackages.Select(package =>
+                            package.ObjectPath));
+
+                if (!rememberAssetsResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        rememberAssetsResult.Message);
+                }
+
                 LiveLoaderCommandResult releaseResult =
                     await _liveLoaderCommandService.ReleasePackagesAsync(
                         livePackages.Select(package =>
