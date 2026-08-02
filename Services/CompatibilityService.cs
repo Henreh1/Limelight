@@ -15,7 +15,7 @@ namespace Limelight.Services
             "++brainjar+release-CL-29846";
 
         public const string SupportedNativeBridgeVersion =
-            "0.1.9";
+            "0.1.10";
 
         private const string SteamAppId =
             "3404260";

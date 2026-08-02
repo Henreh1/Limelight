@@ -9,11 +9,11 @@ namespace Limelight.Views
 {
     public partial class LiveLoaderInitializingWindow : Window
     {
-        private const uint SwpNoActivate = 0x0010;
         private const uint SwpNoOwnerZOrder = 0x0200;
         private const int SwRestore = 9;
 
         private readonly DispatcherTimer _etaTimer;
+        private IntPtr _gameWindowHandle;
         private DateTime _phaseStartedAt;
         private TimeSpan _phaseEstimate;
         private string _estimatedPhase =
@@ -57,6 +57,8 @@ namespace Limelight.Views
                     InitialisationProgressTransform.BeginAnimation(
                         System.Windows.Media.TranslateTransform.XProperty,
                         null);
+
+                    ReturnControlToGame();
                 };
 
             BeginPhaseEstimate(
@@ -80,15 +82,14 @@ namespace Limelight.Views
                 return;
             }
 
-            // I return focus to Dead as Disco before showing the card. This
-            // makes the setup feel like part of the game's loading screen
-            // instead of a dialog sitting on top of the manager.
+            _gameWindowHandle =
+                gameWindowHandle;
+
+            // I restore the game window without activating it. Unreal keeps
+            // loading underneath while this card temporarily owns input.
             ShowWindowAsync(
                 gameWindowHandle,
                 SwRestore);
-
-            SetForegroundWindow(
-                gameWindowHandle);
 
             // Making the game window the native owner keeps this card above
             // Dead as Disco without placing it above every other application.
@@ -139,8 +140,36 @@ namespace Limelight.Views
                 overlayTop,
                 overlayWidth,
                 overlayHeight,
-                SwpNoActivate |
                 SwpNoOwnerZOrder);
+
+            // The scan can take a while on its first run. Keeping focus here
+            // prevents an early movement or controller press from reaching
+            // the game before Limelight has completed its final safety check.
+            Activate();
+            Focus();
+        }
+
+        private void ReturnControlToGame()
+        {
+            if (_gameWindowHandle == IntPtr.Zero)
+            {
+                return;
+            }
+
+            IntPtr gameWindowHandle =
+                _gameWindowHandle;
+
+            _gameWindowHandle =
+                IntPtr.Zero;
+
+            // Closing the card is the handoff point. The game has remained
+            // running throughout the scan and can now receive player input.
+            ShowWindowAsync(
+                gameWindowHandle,
+                SwRestore);
+
+            SetForegroundWindow(
+                gameWindowHandle);
         }
 
         public void Report(

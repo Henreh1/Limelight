@@ -1452,13 +1452,30 @@ namespace Limelight
                                 progress),
                         allowDeferredCharlieRefresh: true);
                 }
-                else
+
+                initialisingWindow.Report(
+                    "HANDING OVER THE STAGE",
+                    98,
+                    "Limelight is completing one final bridge check before gameplay is returned.");
+
+                // I only dismiss the in-game panel after the bridge answers again.
+                // This keeps a successful scan from being mistaken for a ready session.
+                LiveLoaderCommandResult finalNativePing =
+                    await _liveLoaderCommandService
+                        .PingNativeAsync();
+
+                if (!finalNativePing.Success)
                 {
-                    initialisingWindow.Report(
-                        "LIVE LOADER READY",
-                        100,
-                        "The runtime is online. No active model mod needs to be mounted.");
+                    throw new InvalidOperationException(
+                        finalNativePing.Message);
                 }
+
+                initialisingWindow.Report(
+                    "LIVE LOADER READY",
+                    100,
+                    activeMod is null
+                        ? "The runtime is online. No active model mod needs to be mounted."
+                        : $"{activeMod.Name} is ready and the live loader is online.");
 
                 _hasInitialisedCurrentGameSession = true;
 
