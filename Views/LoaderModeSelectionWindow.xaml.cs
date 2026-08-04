@@ -63,15 +63,6 @@ namespace Limelight.Views
             object sender,
             RoutedEventArgs e)
         {
-            if (!_liveLoaderAvailable)
-            {
-                // I send the user straight to Limelight's repair tools instead
-                // of leaving a card on screen that appears to do nothing.
-                OpenSupportRequested = true;
-                DialogResult = false;
-                return;
-            }
-
             SelectedMode =
                 LoaderLaunchMode.Normal;
 
@@ -82,14 +73,6 @@ namespace Limelight.Views
             object sender,
             RoutedEventArgs e)
         {
-            if (!_liveLoaderAvailable)
-            {
-                // X19 needs the same verified bridge as the normal loader.
-                OpenSupportRequested = true;
-                DialogResult = false;
-                return;
-            }
-
             if (!_hasX19Group)
             {
                 EmptyGroupPrompt.Visibility =

@@ -6878,9 +6878,16 @@ namespace Limelight
             }
         }
 
+        private static bool IsGameVersionCompatibilityWarning(
+            LocalCompatibilityResult compatibility)
+        {
+            return compatibility.GameBuildDetected &&
+                   !compatibility.GameBuildCompatible;
+        }
+
         private async void LaunchGame_Click(
-    object sender,
-    RoutedEventArgs e)
+            object sender,
+            RoutedEventArgs e)
         {
             WriteLaunchTrace(
                 "Launch button selected.");
@@ -6979,8 +6986,27 @@ namespace Limelight
             _selectedLoaderMode =
                 modeWindow.SelectedMode.Value;
 
+            string? launcherCompatibilityWarning =
+                _selectedLoaderMode != LoaderLaunchMode.Disabled &&
+                !compatibility.IsLiveLoaderCompatible &&
+                IsGameVersionCompatibilityWarning(compatibility)
+                    ? compatibility.Detail
+                    : null;
+
             WriteLaunchTrace(
                 $"Launch mode accepted: {_selectedLoaderMode}.");
+
+            if (launcherCompatibilityWarning is not null)
+            {
+                // I keep compatibility failures visible while still allowing
+                // the game to launch immediately during live updates.
+                _selectedLoaderMode =
+                    LoaderLaunchMode.Disabled;
+
+                WriteLaunchTrace(
+                    "Live loader launch was downgraded for compatibility: " +
+                    launcherCompatibilityWarning);
+            }
 
             _globalHotkeyService.Unregister();
 
@@ -7004,13 +7030,30 @@ namespace Limelight
 
                     if (!compatibility.IsLiveLoaderCompatible)
                     {
-                        throw new InvalidOperationException(
-                            compatibility.Detail);
+                        if (IsGameVersionCompatibilityWarning(compatibility))
+                        {
+                            launcherCompatibilityWarning =
+                                compatibility.Detail;
+
+                            _selectedLoaderMode =
+                                LoaderLaunchMode.Disabled;
+
+                            _liveLoaderBridgeService.SetSessionBypass(
+                                isDisabled: true);
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException(
+                                compatibility.Detail);
+                        }
                     }
 
-                    Ue4ssDetectionResult loader =
-                        _ue4ssDetectionService.Detect(
-                            gameDirectory);
+                    if (_selectedLoaderMode !=
+                        LoaderLaunchMode.Disabled)
+                    {
+                        Ue4ssDetectionResult loader =
+                            _ue4ssDetectionService.Detect(
+                                gameDirectory);
 
                     if (!loader.IsInstalled ||
                         !_ue4ssConfigurationService.IsRuntimeCompatible(loader) ||
@@ -7022,12 +7065,29 @@ namespace Limelight
                             "The Live Loader needs to be repaired before this launch. " +
                             "Open Settings, choose Support, then select Repair Live Loader.");
                     }
+                    }
 
-                    // Installation and repair belong to the setup and Support
-                    // flows. The launch button only verifies those files so a
-                    // locked game folder cannot hold Steam's request hostage.
+                if (_selectedLoaderMode !=
+                    LoaderLaunchMode.Disabled)
+                {
+                    // Installation and repair belong to the setup and
+                        // Support flows. The launch button only verifies those
+                        // files so a locked game folder cannot hold Steam's
+                        // request hostage.
+                        WriteLaunchTrace(
+                            "Live Loader readiness check passed.");
+                    }
+                }
+
+                if (launcherCompatibilityWarning is not null)
+                {
+                    ShowNotification(
+                        "LIVE LOADER BLOCKED FOR THIS LAUNCH",
+                        $"A build update may be in progress. Limelight is launching without Live Loader for this run: {launcherCompatibilityWarning}",
+                        isError: true);
+
                     WriteLaunchTrace(
-                        "Live Loader readiness check passed.");
+                        $"Launch downgraded to no live loader: {launcherCompatibilityWarning}");
                 }
 
                 ProcessStartInfo startInfo =
