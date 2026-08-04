@@ -11,15 +11,20 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Limelight
 {
     public partial class MainWindow : Window
     {
+        private const int WmGetMinMaxInfo = 0x0024;
+        private const int MonitorDefaultToNearest = 0x00000002;
+
         private enum NavigationPage
         {
             Dashboard,
@@ -130,9 +135,7 @@ namespace Limelight
         private bool _windowTransitionInProgress;
         private bool _animateWindowAfterRestore;
         private bool _isModImportInProgress;
-        private string _availableUpdateUrl =
-            string.Empty;
-
+        private bool _isManualUpdateCheckRunning;
         private string? _gameDirectory;
 
         public MainWindow()
@@ -337,6 +340,7 @@ namespace Limelight
             Loaded += MainWindow_Loaded;
             Closed += MainWindow_Closed;
             SizeChanged += MainWindow_SizeChanged;
+            SourceInitialized += MainWindow_SourceInitialized;
         }
 
         private async void MainWindow_Loaded(
@@ -417,6 +421,149 @@ namespace Limelight
             _ =
                 CheckForUpdatesAsync();
         }
+
+        private void MainWindow_SourceInitialized(
+            object? sender,
+            EventArgs e)
+        {
+            if (PresentationSource.FromVisual(this) is not HwndSource source)
+            {
+                return;
+            }
+
+            // I keep maximise sizing in WPF native coordinates so the
+            // custom chrome continues to respect the monitor work area.
+            source.AddHook(WindowProc);
+        }
+
+        private IntPtr WindowProc(
+            IntPtr hwnd,
+            int message,
+            IntPtr wParam,
+            IntPtr lParam,
+            ref bool handled)
+        {
+            if (message != WmGetMinMaxInfo)
+            {
+                return IntPtr.Zero;
+            }
+
+            AdjustWindowMaximizedBounds(hwnd, lParam);
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        private void AdjustWindowMaximizedBounds(
+            IntPtr hwnd,
+            IntPtr lParam)
+        {
+            if (PresentationSource.FromVisual(this) is not HwndSource source)
+            {
+                return;
+            }
+
+            IntPtr monitorHandle =
+                MonitorFromWindow(
+                    hwnd,
+                    MonitorDefaultToNearest);
+
+            if (monitorHandle == IntPtr.Zero)
+            {
+                return;
+            }
+
+            MONITORINFO monitorInfo =
+                new MONITORINFO
+                {
+                    cbSize = Marshal.SizeOf<MONITORINFO>()
+                };
+
+            if (!GetMonitorInfo(monitorHandle, ref monitorInfo))
+            {
+                return;
+            }
+
+            MINMAXINFO maxInfo =
+                Marshal.PtrToStructure<MINMAXINFO>(lParam);
+
+            int workWidth =
+                monitorInfo.rcWork.right -
+                monitorInfo.rcWork.left;
+
+            int workHeight =
+                monitorInfo.rcWork.bottom -
+                monitorInfo.rcWork.top;
+
+            maxInfo.ptMaxPosition = new POINT(
+                monitorInfo.rcWork.left,
+                monitorInfo.rcWork.top);
+
+            maxInfo.ptMaxSize = new POINT(
+                workWidth,
+                workHeight);
+
+            maxInfo.ptMaxTrackSize = new POINT(
+                workWidth,
+                workHeight);
+
+            Marshal.StructureToPtr(
+                maxInfo,
+                lParam,
+                fDeleteOld: false);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int x;
+            public int y;
+
+            public POINT(
+                int x,
+                int y)
+            {
+                this.x = x;
+                this.y = y;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int left;
+            public int top;
+            public int right;
+            public int bottom;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern bool GetMonitorInfo(
+            IntPtr hMonitor,
+            ref MONITORINFO lpmi);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromWindow(
+            IntPtr hwnd,
+            int dwFlags);
 
         private void QueueWhatsNewWindow()
         {
@@ -511,88 +658,339 @@ namespace Limelight
                     GetCurrentVersion());
 
             if (update == null ||
-                !IsLoaded)
+                !IsLoaded ||
+                string.Equals(
+                    _settings.LastSeenUpdateVersion,
+                    update.Version,
+                    StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            ShowAvailableUpdate(update);
-        }
-
-        private void ShowAvailableUpdate(
-            GitHubReleaseUpdate update)
-        {
-            _availableUpdateUrl =
-                update.Url;
-
-            UpdateAvailableText.Text =
-                $"{update.Name} is available. You are using {GetCurrentVersion()}.";
-
-            UpdateAvailableBanner.Visibility =
-                Visibility.Visible;
-
-            UpdateAvailableBanner.BeginAnimation(
-                OpacityProperty,
-                new DoubleAnimation(
-                    0,
-                    1,
-                    TimeSpan.FromMilliseconds(220)));
-        }
-
-        private void ViewUpdate_Click(
-            object sender,
-            RoutedEventArgs e)
-        {
-            if (Uri.TryCreate(
-                    _availableUpdateUrl,
-                    UriKind.Absolute,
-                    out Uri? updateUri) &&
-                string.Equals(
-                    updateUri.Host,
-                    "github.com",
-                    StringComparison.OrdinalIgnoreCase))
+            if (!IsLoaded)
             {
-                Process.Start(
-                    new ProcessStartInfo(
-                        updateUri.AbsoluteUri)
-                    {
-                        UseShellExecute =
-                            true
-                    });
+                await Dispatcher.InvokeAsync(
+                    () =>
+                        ShowPendingUpdateDialog(update));
+
+                return;
             }
 
-            HideAvailableUpdate();
+            ShowPendingUpdateDialog(update);
         }
 
-        private void DismissUpdate_Click(
+        private void ShowPendingUpdateDialog(
+            GitHubReleaseUpdate update)
+        {
+            ShowUpdateAvailableDialog(update);
+
+            MarkUpdateVersionSeen(update.Version);
+        }
+
+        private void ShowUpdateAvailableDialog(
+            GitHubReleaseUpdate update)
+        {
+            string updateTitle =
+                string.IsNullOrWhiteSpace(update.Name)
+                    ? update.Version
+                    : update.Name;
+
+            string releaseNotesPreview =
+                BuildUpdateNotesPreview(update.Body);
+
+            string installerStateText =
+                string.IsNullOrWhiteSpace(update.InstallerUrl)
+                    ? "release page"
+                    : "installer package";
+
+            LimelightDialogChoice decision =
+                ShowLimelightDialog(
+                    "UPDATE AVAILABLE",
+                    $"{updateTitle} is available. You are using {GetCurrentVersion()}.",
+                    LimelightDialogTone.Information,
+                    primaryAction: "UPDATE NOW",
+                    secondaryAction: "LATER",
+                    details:
+                        $"LATEST: {updateTitle} · v{update.Version}\n\n" +
+                        "CHANGELOG HIGHLIGHT:\n" +
+                        releaseNotesPreview +
+                        $"\n\nClick UPDATE NOW to open the GitHub {installerStateText} and begin the install.",
+                    eyebrow: "UPGRADE AVAILABLE");
+
+            if (decision !=
+                LimelightDialogChoice.Primary)
+            {
+                return;
+            }
+
+            string updateTarget =
+                string.IsNullOrWhiteSpace(update.InstallerUrl)
+                    ? update.Url
+                    : update.InstallerUrl;
+
+            if (!TryOpenUpdateUrl(updateTarget, "installer"))
+            {
+                if (!string.Equals(
+                        updateTarget,
+                        update.Url,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = TryOpenUpdateUrl(
+                        update.Url,
+                        "release page");
+                }
+            }
+        }
+
+        private static string BuildUpdateNotesPreview(
+            string? releaseNotes)
+        {
+            if (string.IsNullOrWhiteSpace(releaseNotes))
+            {
+                return "No release notes were included for this build.";
+            }
+
+            IEnumerable<string> cleanedLines =
+                releaseNotes
+                    .Replace("\r\n", "\n")
+                    .Replace('\r', '\n')
+                    .Split('\n')
+                    .Select(line => NormalizeReleaseNoteLine(line))
+                    .Where(line =>
+                        !string.IsNullOrWhiteSpace(line));
+
+            string[] selectedLines =
+                cleanedLines
+                    .Take(8)
+                    .ToArray();
+
+            if (selectedLines.Length == 0)
+            {
+                return "No readable release notes lines were found.";
+            }
+
+            string preview =
+                string.Join(
+                    Environment.NewLine,
+                    selectedLines);
+
+            if (preview.Length > 760)
+            {
+                preview = preview[..740] + "…";
+            }
+
+            return preview;
+        }
+
+        private static string NormalizeReleaseNoteLine(
+            string line)
+        {
+            string normalized =
+                line.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return string.Empty;
+            }
+
+            if (normalized.StartsWith("###", StringComparison.Ordinal))
+            {
+                normalized = normalized[3..].Trim();
+            }
+
+            if (normalized.StartsWith("##", StringComparison.Ordinal))
+            {
+                normalized = normalized[2..].Trim();
+            }
+
+            if (normalized.StartsWith("#", StringComparison.Ordinal))
+            {
+                normalized = normalized[1..].Trim();
+            }
+
+            if (normalized.StartsWith("- ", StringComparison.Ordinal) ||
+                normalized.StartsWith("* ", StringComparison.Ordinal) ||
+                normalized.StartsWith("+ ", StringComparison.Ordinal) ||
+                normalized.StartsWith("• ", StringComparison.Ordinal))
+            {
+                normalized = normalized[2..].Trim();
+            }
+
+            return normalized;
+        }
+
+        private bool TryOpenUpdateUrl(
+            string targetUrl,
+            string targetLabel)
+        {
+            if (IsUpdateLinkSafe(
+                    targetUrl,
+                    out Uri? targetUri) &&
+                targetUri is not null)
+            {
+                try
+                {
+                    Process.Start(
+                        new ProcessStartInfo(
+                            targetUri.AbsoluteUri)
+                        {
+                            UseShellExecute =
+                                true
+                        });
+
+                    return true;
+                }
+                catch (Exception exception)
+                {
+                    ShowLimelightDialog(
+                        "UPDATE LINK BLOCKED",
+                        $"Limelight could not open the GitHub {targetLabel} from this device.",
+                        LimelightDialogTone.Warning,
+                        details: exception.Message,
+                        eyebrow: "UPDATE READY");
+
+                    return false;
+                }
+            }
+
+            ShowLimelightDialog(
+                "INVALID UPDATE LINK",
+                $"Limelight received a {targetLabel} link that it cannot open safely.",
+                LimelightDialogTone.Warning,
+                eyebrow: "UPDATE READY");
+
+            return false;
+        }
+
+        private async void CheckForUpdates_Click(
             object sender,
             RoutedEventArgs e)
         {
-            HideAvailableUpdate();
-        }
+            if (_isManualUpdateCheckRunning)
+            {
+                return;
+            }
 
-        private void HideAvailableUpdate()
-        {
-            DoubleAnimation fade =
-                new DoubleAnimation(
-                    1,
-                    0,
-                    TimeSpan.FromMilliseconds(160));
+            _isManualUpdateCheckRunning = true;
 
-            fade.Completed +=
-                (_, _) =>
+            Button? manualUpdateButton =
+                sender as Button;
+
+            double previousOpacity =
+                1;
+
+            if (manualUpdateButton is not null)
+            {
+                previousOpacity =
+                    manualUpdateButton.Opacity;
+
+                manualUpdateButton.IsEnabled =
+                    false;
+
+                manualUpdateButton.Opacity =
+                    0.7;
+            }
+
+            try
+            {
+                GitHubReleaseUpdate? update =
+                    await _updateService.CheckForUpdateAsync(
+                        GetCurrentVersion());
+
+                if (!IsLoaded)
                 {
-                    UpdateAvailableBanner.Visibility =
-                        Visibility.Collapsed;
+                    return;
+                }
 
-                    _availableUpdateUrl =
-                        string.Empty;
-                };
+                if (update == null)
+                {
+                    ShowNotification(
+                        "UPDATE CHECK COMPLETE",
+                        "You are already on the latest Limelight release.",
+                        isError: false);
 
-            UpdateAvailableBanner.BeginAnimation(
-                OpacityProperty,
-                fade);
+                    return;
+                }
+
+                ShowUpdateAvailableDialog(update);
+
+                MarkUpdateVersionSeen(update.Version);
+            }
+            finally
+            {
+                if (manualUpdateButton is not null)
+                {
+                    manualUpdateButton.IsEnabled =
+                        true;
+
+                    manualUpdateButton.Opacity =
+                        previousOpacity;
+                }
+
+                _isManualUpdateCheckRunning =
+                    false;
+            }
         }
+
+        private void MarkUpdateVersionSeen(
+            string updateVersion)
+        {
+            if (string.Equals(
+                    _settings.LastSeenUpdateVersion,
+                    updateVersion,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _settings.LastSeenUpdateVersion =
+                updateVersion;
+
+            _settingsService.Save(_settings);
+        }
+
+        private static bool IsUpdateLinkSafe(
+            string updateUrl,
+            out Uri? updateUri)
+        {
+            updateUri =
+                null;
+
+            if (!Uri.TryCreate(
+                    updateUrl,
+                    UriKind.Absolute,
+                    out Uri? candidate))
+            {
+                return false;
+            }
+
+            string host =
+                candidate.Host;
+
+            bool allowedHost =
+                string.Equals(
+                    host,
+                    "github.com",
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    host,
+                    "githubusercontent.com",
+                    StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith(
+                    ".githubusercontent.com",
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (!allowedHost)
+            {
+                return false;
+            }
+
+            updateUri =
+                candidate;
+
+            return true;
+        }
+        
 
         private void ShowFirstRunTutorialIfNeeded()
         {
@@ -645,9 +1043,9 @@ namespace Limelight
                     NavigationPage.BrowseNexus,
                     BrowseNexusNavigation,
                     "BROWSE NEXUS",
-                    "CATALOGUE ACCESS IS COMING",
-                    "The Nexus catalogue is temporarily paused while Limelight's application registration is reviewed. This page will unlock after approval.",
-                    "During Early Access, import a mod archive from the Dashboard or drag its ZIP directly onto Limelight."),
+                    "NEXUS MODS IS LIVE",
+                    "Connect a Nexus account from Browse Nexus or Settings, then search and open mod pages directly inside Limelight.",
+                    "Use Mod Manager Download when you see it to send Nexus files straight into Limelight."),
                 new TutorialStep(
                     NavigationPage.Downloads,
                     DownloadsNavigation,
@@ -3399,8 +3797,8 @@ namespace Limelight
                     ? "!"
                     : "◆";
 
-            NotificationPopup.IsOpen =
-                true;
+            NotificationPopup.Visibility =
+                Visibility.Visible;
 
             // Clear an older animation first so a new message appears at full
             // strength even when the previous toast was fading away.
@@ -3470,8 +3868,8 @@ namespace Limelight
             if (sequence == _notificationSequence &&
                 IsLoaded)
             {
-                NotificationPopup.IsOpen =
-                    false;
+                NotificationPopup.Visibility =
+                    Visibility.Collapsed;
 
                 NotificationToast.Visibility =
                     Visibility.Collapsed;

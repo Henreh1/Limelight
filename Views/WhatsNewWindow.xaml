@@ -231,7 +231,7 @@
                                        FontWeight="Bold"
                                        TextWrapping="Wrap"
                                        Foreground="{StaticResource MutedTextBrush}">
-                                THE NEXUS CATALOGUE WILL RETURN AFTER LIMELIGHT'S APPLICATION REVIEW IS COMPLETE.
+                                CONNECT YOUR NEXUS ACCOUNT IN SETTINGS OR FROM THE BROWSE NEXUS PANEL, THEN USE MOD MANAGER DOWNLOAD FOR ONE-CLICK INSTALLS.
                             </TextBlock>
                         </StackPanel>
                     </Border>
@@ -250,7 +250,7 @@
                                FontSize="10"
                                FontWeight="Bold"
                                Foreground="{StaticResource MutedTextBrush}"
-                               Text="THIS PAGE WILL RETURN WHEN LIMELIGHT IS UPDATED AGAIN."/>
+                               Text="EARLY ACCESS EVOLVES FAST; NEXUS FLOW MAY IMPROVE AS REVIEW AND TESTING COMPLETE."/>
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                         <Button x:Name="DocumentationButton"
                                 MinWidth="154"
@@ -259,7 +259,7 @@
                         <Button x:Name="ContinueButton"
                                 MinWidth="146"
                                 Margin="10,0,0,0"
-                                Content="TAKE THE STAGE"
+                                Content="GO TO LIMELIGHT"
                                 Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
                 </Grid>

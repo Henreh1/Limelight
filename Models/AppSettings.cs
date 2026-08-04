@@ -47,6 +47,11 @@ namespace Limelight.Models
         public string LastSeenReleaseNotesVersion { get; set; } =
             string.Empty;
 
+        // I remember which update notice has already been acknowledged
+        // so users are not prompted for the same update repeatedly.
+        public string LastSeenUpdateVersion { get; set; } =
+            string.Empty;
+
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 

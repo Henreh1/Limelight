@@ -10,7 +10,9 @@ namespace Limelight.Services
     public sealed record GitHubReleaseUpdate(
         string Version,
         string Name,
-        string Url);
+        string Url,
+        string? Body,
+        string? InstallerUrl);
 
     public sealed class GitHubReleaseUpdateService
     {
@@ -128,6 +130,17 @@ namespace Limelight.Services
                             ? name
                             : tagName;
 
+                    string? releaseNotes =
+                        TryReadString(
+                            release,
+                            "body",
+                            out string body)
+                            ? body
+                            : null;
+
+                    string? installerUrl =
+                        TryReadInstallerAssetUrl(release);
+
                     newestVersion =
                         releaseVersion;
 
@@ -135,7 +148,9 @@ namespace Limelight.Services
                         new GitHubReleaseUpdate(
                             tagName,
                             releaseName,
-                            releaseUri.AbsoluteUri);
+                            releaseUri.AbsoluteUri,
+                            releaseNotes,
+                            installerUrl);
                 }
 
                 if (newestRelease == null ||
@@ -161,6 +176,70 @@ namespace Limelight.Services
             {
                 return null;
             }
+        }
+
+        private static string? TryReadInstallerAssetUrl(
+            JsonElement release)
+        {
+            if (!release.TryGetProperty(
+                    "assets",
+                    out JsonElement assets) ||
+                assets.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            string? firstExecutableAssetUrl = null;
+
+            foreach (JsonElement asset in
+                assets.EnumerateArray())
+            {
+                if (!TryReadString(
+                        asset,
+                        "browser_download_url",
+                        out string downloadUrl) ||
+                    !TryReadString(
+                        asset,
+                        "name",
+                        out string assetName))
+                {
+                    continue;
+                }
+
+                if (!IsExecutableAsset(assetName))
+                {
+                    continue;
+                }
+
+                if (firstExecutableAssetUrl == null)
+                {
+                    firstExecutableAssetUrl =
+                        downloadUrl;
+                }
+
+                if (assetName.Contains(
+                        "limelight",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return downloadUrl;
+                }
+            }
+
+            return firstExecutableAssetUrl;
+        }
+
+        private static bool IsExecutableAsset(
+            string assetName)
+        {
+            return assetName.EndsWith(
+                       ".exe",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   assetName.EndsWith(
+                       ".msi",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   assetName.EndsWith(
+                       ".zip",
+                       StringComparison.OrdinalIgnoreCase);
         }
 
         private static HttpClient CreateClient()

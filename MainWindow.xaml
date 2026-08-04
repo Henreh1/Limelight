@@ -212,6 +212,20 @@
                             Orientation="Horizontal"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
 
+                    <Button x:Name="CheckForUpdatesButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Width="116"
+                            FontSize="9"
+                            FontWeight="SemiBold"
+                            ToolTip="Check for Limelight updates"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Click="CheckForUpdates_Click">
+                        <TextBlock Text="CHECK UPDATE"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   LineHeight="11"/>
+                    </Button>
+
                     <Button Style="{StaticResource TitleBarButtonStyle}"
                              ToolTip="Minimise"
                              shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -1012,100 +1026,19 @@
                 </Border>
             </Border>
 
-            <!-- Release notices stay in Limelight and never interrupt startup. -->
-            <Border x:Name="UpdateAvailableBanner"
-                Grid.Column="1"
-                Panel.ZIndex="125"
-                Width="690"
-                MaxWidth="690"
-                Margin="30,0,30,116"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                Background="#1A1E35"
-                BorderBrush="{StaticResource CyanBrush}"
-                BorderThickness="1"
-                CornerRadius="11"
-                Opacity="0"
-                Visibility="Collapsed">
-
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <Border Background="{StaticResource CyanBrush}"
-                            CornerRadius="10,0,0,10"/>
-
-                    <Border Grid.Column="1"
-                            Width="46"
-                            Height="46"
-                            Margin="16,15,13,15"
-                            Background="#252943"
-                            CornerRadius="8">
-
-                        <TextBlock Text="◆"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   FontSize="15"
-                                   Foreground="{StaticResource CyanBrush}"/>
-                    </Border>
-
-                    <StackPanel Grid.Column="2"
-                                Margin="0,14,18,14"
-                                VerticalAlignment="Center">
-
-                        <TextBlock Text="UPDATE READY"
-                                   FontSize="12"
-                                   FontWeight="Bold"
-                                   Foreground="{StaticResource CyanBrush}"/>
-
-                        <TextBlock x:Name="UpdateAvailableText"
-                                   Text="A newer Limelight release is ready."
-                                   Margin="0,5,0,0"
-                                   FontSize="12"
-                                   LineHeight="17"
-                                   TextWrapping="Wrap"
-                                   Foreground="{StaticResource TextBrush}"/>
-                    </StackPanel>
-
-                    <Button Grid.Column="3"
-                            Width="118"
-                            Height="40"
-                            Margin="0,0,10,0"
-                            VerticalAlignment="Center"
-                            Content="VIEW UPDATE"
-                            Style="{StaticResource PrimaryButton}"
-                            Click="ViewUpdate_Click"/>
-
-                    <Button Grid.Column="4"
-                            Width="82"
-                            Height="40"
-                            Margin="0,0,16,0"
-                            VerticalAlignment="Center"
-                            Content="LATER"
-                            Style="{StaticResource SecondaryButton}"
-                            Click="DismissUpdate_Click"/>
-                </Grid>
-            </Border>
-
-            <!-- Timed feedback stays inside Limelight as a quick, centred popup. -->
-            <Popup x:Name="NotificationPopup"
-                   Placement="Center"
-                   PlacementTarget="{Binding ElementName=MainWindowRoot}"
-                   StaysOpen="True"
-                   IsOpen="False"
-                   IsHitTestVisible="False"
-                   AllowsTransparency="True"
-                   PopupAnimation="Fade">
+            <!-- Timed feedback stays inside Limelight as a quick popup-like overlay. -->
+            <Grid x:Name="NotificationPopup"
+                  Grid.ColumnSpan="2"
+                  Margin="0,0,0,24"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Bottom"
+                  IsHitTestVisible="False"
+                  Visibility="Collapsed"
+                  Panel.ZIndex="800">
 
                 <Border x:Name="NotificationToast"
                         Grid.Column="0"
                         Grid.ColumnSpan="2"
-                        Panel.ZIndex="800"
                         Width="620"
                         MaxWidth="620"
                         Margin="0"
@@ -1117,7 +1050,7 @@
                         BorderThickness="1"
                         CornerRadius="10"
                         Opacity="0"
-                        Visibility="Collapsed"
+                        Visibility="Visible"
                         IsHitTestVisible="False">
 
                     <Border.RenderTransform>
@@ -1171,7 +1104,7 @@
                         </StackPanel>
                     </Grid>
                 </Border>
-            </Popup>
+            </Grid>
 
             <!-- The first-run tour stays inside the main window so each step
                  can open the real page and point at the feature being explained. -->

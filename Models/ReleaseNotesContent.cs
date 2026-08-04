@@ -26,9 +26,9 @@ namespace Limelight.Models
             return new ReleaseNotesContent
             {
                 Version = version,
-                Eyebrow = "WHAT'S NEW IN EARLY ACCESS",
-                Title = "THE NEXT ACT IS READY",
-                Summary = "Build reusable casts, bring mods into the spotlight faster, and keep your game directory under control.",
+                Eyebrow = "WELCOME TO EARLY ACCESS",
+                Title = "WELCOME TO THE LIMELIGHT STAGE",
+                Summary = "Thank you for testing with us. This update focuses on making Nexus browsing, direct downloads, and mod management feel seamless in one place.",
                 Items = new List<ReleaseNoteItem>
                 {
                     new ReleaseNoteItem
@@ -40,9 +40,9 @@ namespace Limelight.Models
                     },
                     new ReleaseNoteItem
                     {
-                        Eyebrow = "MOD LIBRARY",
-                        Title = "DROP INTO THE SPOTLIGHT",
-                        Description = "Drag mod archives onto Limelight. Invalid packages and duplicate content are stopped before they reach your library.",
+                        Eyebrow = "NEXUS INTEGRATION",
+                        Title = "DIRECTLY TO LIMELIGHT",
+                        Description = "Browse Nexus from Limelight, open pages in one flow, and use Mod Manager download to send files straight into the manager.",
                         Accent = "#FF3CAC"
                     },
                     new ReleaseNoteItem
@@ -54,9 +54,9 @@ namespace Limelight.Models
                     },
                     new ReleaseNoteItem
                     {
-                        Eyebrow = "POLISH",
-                        Title = "ONE CONSISTENT STAGE",
-                        Description = "Themed prompts, a Limelight file explorer, and clearer compatibility details keep every part of the manager in character.",
+                        Eyebrow = "HOW IT WORKS",
+                        Title = "HOW NEXUS DOWNLOADS FLOW",
+                        Description = "Sign in on the Nexus card, keep your session active, then choose Mod Manager download on supported pages. Limelight queues, installs, and activates the mod automatically.",
                         Accent = "#35E7FF"
                     }
                 }
