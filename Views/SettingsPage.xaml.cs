@@ -239,6 +239,11 @@ namespace Limelight.Views
             SettingsCategoryTabs.SelectedIndex = 3;
         }
 
+        public void ShowNexusCategory()
+        {
+            SettingsCategoryTabs.SelectedIndex = 2;
+        }
+
         public void ShowNexusStatus(
     bool isConnected,
     string? accountName,
@@ -310,7 +315,7 @@ namespace Limelight.Views
 
             if (isConnected)
             {
-                // Once the key has been accepted there is no reason to leave it visible.
+                // I keep the API key hidden after it is accepted.
                 NexusApiKeyBox.Password =
                     string.Empty;
             }

@@ -59,6 +59,9 @@ namespace Limelight
 
         private const int CurrentTutorialVersion = 1;
 
+        private const string NexusOAuthLoginUrl =
+            "https://www.nexusmods.com/";
+
         private readonly SettingsService _settingsService;
         private readonly ModLibraryService _modLibraryService;
         private readonly AppSettings _settings;
@@ -233,8 +236,8 @@ namespace Limelight
             _discordPresenceService.SetEnabled(
                 _settings.DiscordRichPresenceEnabled);
 
-            // The page reports its button clicks to the main window, where
-            // the settings and connected game directory are available.
+            // I keep page event handlers on the main window so settings and
+            // the active game directory are available when actions run.
             MyModsPageControl.ToggleModRequested +=
                 ToggleModRequested;
 
@@ -301,14 +304,14 @@ namespace Limelight
             BrowseNexusPageControl.RefreshRequested +=
                 NexusRefreshRequested;
 
-            BrowseNexusPageControl.ViewModRequested +=
-                NexusViewModRequested;
+            BrowseNexusPageControl.ModManagerDownloadRequested +=
+                NexusModManagerDownloadRequested;
 
-            BrowseNexusPageControl.ViewFilesRequested +=
-                NexusViewFilesRequested;
+            BrowseNexusPageControl.NexusOAuthLoginRequested +=
+                NexusOAuthLoginRequested;
 
-            BrowseNexusPageControl.DownloadRequested +=
-                NexusDownloadRequested;
+            BrowseNexusPageControl.NexusUseApiKeyRequested +=
+                NexusUseApiKeyRequested;
 
             DownloadsPageControl.ClearFinishedRequested +=
                 ClearFinishedDownloadsRequested;
@@ -3396,6 +3399,9 @@ namespace Limelight
                     ? "!"
                     : "◆";
 
+            NotificationPopup.IsOpen =
+                true;
+
             // Clear an older animation first so a new message appears at full
             // strength even when the previous toast was fading away.
             NotificationToast.BeginAnimation(
@@ -3407,7 +3413,7 @@ namespace Limelight
                 null);
 
             NotificationToast.Opacity = 0;
-            NotificationToastTransform.Y = 16;
+            NotificationToastTransform.Y = 10;
             NotificationToast.Visibility =
                 Visibility.Visible;
 
@@ -3422,22 +3428,22 @@ namespace Limelight
                 new DoubleAnimation(
                     0,
                     1,
-                    TimeSpan.FromMilliseconds(180)));
+                    TimeSpan.FromMilliseconds(130)));
 
             NotificationToastTransform.BeginAnimation(
                 TranslateTransform.YProperty,
                 new DoubleAnimation(
-                    16,
+                    10,
                     0,
-                    TimeSpan.FromMilliseconds(230))
+                    TimeSpan.FromMilliseconds(160))
                 {
                     EasingFunction = entranceEase
                 });
 
             await Task.Delay(
                 isError
-                    ? 6500
-                    : 4200);
+                    ? 3400
+                    : 2300);
 
             if (sequence != _notificationSequence ||
                 !IsLoaded)
@@ -3450,20 +3456,23 @@ namespace Limelight
                 new DoubleAnimation(
                     1,
                     0,
-                    TimeSpan.FromMilliseconds(220)));
+                    TimeSpan.FromMilliseconds(160)));
 
             NotificationToastTransform.BeginAnimation(
                 TranslateTransform.YProperty,
                 new DoubleAnimation(
                     0,
-                    10,
-                    TimeSpan.FromMilliseconds(220)));
+                    -8,
+                    TimeSpan.FromMilliseconds(160)));
 
             await Task.Delay(230);
 
             if (sequence == _notificationSequence &&
                 IsLoaded)
             {
+                NotificationPopup.IsOpen =
+                    false;
+
                 NotificationToast.Visibility =
                     Visibility.Collapsed;
             }
@@ -4404,6 +4413,48 @@ namespace Limelight
                 isRestoring: false);
         }
 
+        private void NexusOAuthLoginRequested()
+        {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                SettingsPageControl.ShowNexusUnavailable();
+                return;
+            }
+
+            if (_nexusAccount is not null &&
+                !string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                ShowSettingsPage();
+                SettingsPageControl.ShowNexusCategory();
+                return;
+            }
+
+            try
+            {
+                Process.Start(
+                    new ProcessStartInfo
+                    {
+                        FileName = NexusOAuthLoginUrl,
+                        UseShellExecute = true
+                    });
+            }
+            catch (Exception exception)
+            {
+                ShowLimelightDialog(
+                    "NEXUS LOGIN LINK FAILED",
+                    "Limelight could not open Nexus Mods in your browser.",
+                    LimelightDialogTone.Warning,
+                    details: exception.Message,
+                    eyebrow: "BROWSER ERROR");
+            }
+        }
+
+        private void NexusUseApiKeyRequested()
+        {
+            ShowSettingsPage();
+            SettingsPageControl.ShowNexusCategory();
+        }
+
         private void NexusDisconnectRequested()
         {
             if (!NexusApiService.IntegrationEnabled)
@@ -4576,76 +4627,7 @@ namespace Limelight
                 _settings);
         }
 
-        private async void NexusViewModRequested(
-            NexusModSummary mod)
-        {
-            if (!NexusApiService.IntegrationEnabled)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(_nexusApiKey))
-            {
-                BrowseNexusPageControl.ShowModDetailsError(
-                    "Connect your Nexus Mods account in Settings before opening a mod page.");
-
-                return;
-            }
-
-            try
-            {
-                // Catalogue cards are deliberately light. This request brings in
-                // the author's complete description only when somebody opens it.
-                NexusModSummary fullMod =
-                    await _nexusApiService.GetModAsync(
-                        _nexusApiKey,
-                        mod.ModId);
-
-                BrowseNexusPageControl.ShowModDetails(
-                    fullMod);
-            }
-            catch (Exception ex)
-            {
-                BrowseNexusPageControl.ShowModDetailsError(
-                    ex.Message);
-            }
-        }
-
-        private async void NexusViewFilesRequested(
-            NexusModSummary mod)
-        {
-            if (!NexusApiService.IntegrationEnabled)
-            {
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(_nexusApiKey))
-            {
-                BrowseNexusPageControl.ShowModFilesError(
-                    "Connect your Nexus Mods account in Settings before loading files.");
-
-                return;
-            }
-
-            try
-            {
-                IReadOnlyList<NexusModFile> files =
-                    await _nexusApiService.GetModFilesAsync(
-                        _nexusApiKey,
-                        mod.ModId);
-
-                BrowseNexusPageControl.ShowModFiles(
-                    mod,
-                    files);
-            }
-            catch (Exception ex)
-            {
-                BrowseNexusPageControl.ShowModFilesError(
-                    ex.Message);
-            }
-        }
-
-        private async void NexusDownloadRequested(
+        private async Task NexusDownloadRequestedAsync(
             NexusModFile file)
         {
             if (!NexusApiService.IntegrationEnabled)
@@ -4667,8 +4649,7 @@ namespace Limelight
                 return;
             }
 
-            if (_nexusAccount is null ||
-                string.IsNullOrWhiteSpace(_nexusApiKey))
+            if (string.IsNullOrWhiteSpace(_nexusApiKey))
             {
                 ShowNotification(
                     "NEXUS ACCOUNT REQUIRED",
@@ -4686,21 +4667,36 @@ namespace Limelight
                 selectedMod?.Name ??
                 file.FileName;
 
+            // I only block a repeat download when Limelight still sees the mod files on disk.
             bool isAlreadyInstalled =
                 _settings.InstalledMods.Any(mod =>
-                    (mod.NexusModId == file.ModId &&
-                     mod.NexusFileId == file.FileId) ||
-                    string.Equals(
-                        InstalledMod.CreateDisplayName(
-                            mod.Name),
-                        InstalledMod.CreateDisplayName(displayName),
-                        StringComparison.OrdinalIgnoreCase));
+                    mod.NexusModId == file.ModId &&
+                    mod.NexusFileId == file.FileId &&
+                    IsNexusInstallPathUsable(mod.InstallDirectory));
 
             if (isAlreadyInstalled)
             {
                 ShowNotification(
                     "MOD ALREADY INSTALLED",
                     $"{displayName} is already in your Limelight library.",
+                    isError: true);
+
+                return;
+            }
+
+            bool hasActiveDuplicateDownload =
+                _downloadHistoryService.Records.Any(record =>
+                    record.ModId == file.ModId &&
+                    record.FileId == file.FileId &&
+                    (record.Status is NexusDownloadStatus.Queued or
+                        NexusDownloadStatus.Downloading or
+                        NexusDownloadStatus.Installing));
+
+            if (hasActiveDuplicateDownload)
+            {
+                ShowNotification(
+                    "DOWNLOAD ALREADY STARTED",
+                    $"A Nexus download for {displayName} is already in progress.",
                     isError: true);
 
                 return;
@@ -4769,7 +4765,7 @@ namespace Limelight
                     });
 
                 downloadedArchive =
-                    await _nexusApiService.DownloadModFileAsync(
+                    await DownloadNexusArchiveWithRetryAsync(
                         _nexusApiKey,
                         file,
                         progress);
@@ -4786,12 +4782,11 @@ namespace Limelight
                     percentage: 100);
 
                 InstalledMod installedMod =
-                    await Task.Run(() =>
-                        _modLibraryService.Import(
-                            downloadedArchive,
-                            file.ModId,
-                            file.FileId,
-                            displayName));
+                    await ImportNexusArchiveWithRetryAsync(
+                        downloadedArchive,
+                        file.ModId,
+                        file.FileId,
+                        displayName);
 
                 _settings.InstalledMods.Add(
                     installedMod);
@@ -4846,6 +4841,342 @@ namespace Limelight
                     false;
             }
         }
+
+        private static bool IsNexusInstallPathUsable(
+            string installDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(installDirectory) ||
+                !Directory.Exists(installDirectory))
+            {
+                return false;
+            }
+
+            try
+            {
+                return Directory.EnumerateFileSystemEntries(
+                    installDirectory)
+                    .Any();
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private static bool IsRetryableNexusDownloadFailure(
+            Exception exception)
+        {
+            if (IsNexusArchiveBusy(exception))
+            {
+                return true;
+            }
+
+            if (!(exception is IOException) &&
+                !(exception is UnauthorizedAccessException))
+            {
+                return false;
+            }
+
+            return exception.Message.Contains(
+                "in use by another process",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<string> DownloadNexusArchiveWithRetryAsync(
+            string apiKey,
+            NexusModFile file,
+            IProgress<NexusDownloadProgress>? progress)
+        {
+            const int maximumAttempts = 5;
+            Exception? lastBusyException = null;
+
+            for (int attempt = 1;
+                 attempt <= maximumAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    return await _nexusApiService.DownloadModFileAsync(
+                        apiKey,
+                        file,
+                        progress);
+                }
+                catch (Exception exception)
+                    when (attempt < maximumAttempts &&
+                          IsRetryableNexusDownloadFailure(exception))
+                {
+                    lastBusyException =
+                        exception;
+
+                    // I keep trying on short lock windows because this
+                    // error can be a temporary file handle race.
+                    await Task.Delay(
+                        attempt *
+                        250);
+                }
+            }
+
+            if (lastBusyException is not null)
+            {
+                throw lastBusyException;
+            }
+
+            throw new IOException(
+                "The Nexus download file is in use by another process and could not be written after retries.");
+        }
+
+        private async Task<InstalledMod> ImportNexusArchiveWithRetryAsync(
+            string archivePath,
+            long modId,
+            int fileId,
+            string displayName)
+        {
+            const int maximumAttempts = 6;
+            Exception? lastBusyException = null;
+
+            for (int attempt = 1;
+                 attempt <= maximumAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    await EnsureNexusArchiveReadableAsync(
+                        archivePath);
+
+                    return await Task.Run(() =>
+                        _modLibraryService.Import(
+                            archivePath,
+                            modId,
+                            fileId,
+                            displayName));
+                }
+                catch (Exception exception)
+                    when (attempt < maximumAttempts &&
+                          IsNexusArchiveBusy(exception))
+                {
+                    lastBusyException =
+                        exception;
+
+                    // I wait for external scanners to release the file before
+                    // forcing the import to try again.
+                    await Task.Delay(
+                        attempt *
+                        250);
+                }
+            }
+
+            if (lastBusyException is not null)
+            {
+                throw lastBusyException;
+            }
+
+            throw new IOException(
+                "The Nexus download archive could not be installed because it was locked by another process.");
+        }
+
+        private static async Task EnsureNexusArchiveReadableAsync(
+            string archivePath)
+        {
+            const int maximumAttempts = 4;
+
+            for (int readAttempt = 1;
+                 readAttempt <= maximumAttempts;
+                 readAttempt++)
+            {
+                try
+                {
+                    await using FileStream testStream =
+                        new(
+                            archivePath,
+                            FileMode.Open,
+                            FileAccess.Read,
+                            FileShare.ReadWrite,
+                            4096,
+                            useAsync: true);
+
+                    if (testStream.Length > 0)
+                    {
+                        return;
+                    }
+                }
+                catch (Exception exception)
+                    when ((exception is IOException || exception is UnauthorizedAccessException) &&
+                          IsNexusArchiveBusy(exception) &&
+                          readAttempt < maximumAttempts)
+                {
+                    await Task.Delay(
+                        readAttempt *
+                        150);
+                }
+            }
+        }
+
+        private static bool IsNexusArchiveBusy(Exception exception)
+        {
+            const int fileBusyErrorHResult =
+                unchecked((int)0x80070020);
+
+            const int fileDeniedErrorHResult =
+                unchecked((int)0x80070005);
+
+            return (exception is IOException ||
+                    exception is UnauthorizedAccessException) &&
+                   (exception.HResult == fileBusyErrorHResult ||
+                    exception.HResult == fileDeniedErrorHResult);
+        }
+
+        private async void NexusModManagerDownloadRequested(
+            long modId,
+            int fileId)
+        {
+            if (!NexusApiService.IntegrationEnabled)
+            {
+                ShowNotification(
+                    "NEXUS APPROVAL PENDING",
+                    NexusApiService.IntegrationUnavailableMessage,
+                    isError: true);
+                return;
+            }
+
+            if (_isNexusDownloadRunning)
+            {
+                ShowNotification(
+                    "DOWNLOAD IN PROGRESS",
+                    "Let the current Nexus file finish before starting another.",
+                    isError: true);
+
+                return;
+            }
+
+            bool hasActiveDownloadForLink =
+                _downloadHistoryService.Records.Any(record =>
+                    record.ModId == modId &&
+                    record.FileId == fileId &&
+                    (record.Status is NexusDownloadStatus.Queued or
+                        NexusDownloadStatus.Downloading or
+                        NexusDownloadStatus.Installing));
+
+            if (hasActiveDownloadForLink)
+            {
+                ShowNotification(
+                    "DOWNLOAD ALREADY STARTED",
+                    "This Nexus file is already being downloaded.",
+                    isError: true);
+
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_nexusApiKey))
+            {
+                ShowNotification(
+                    "NEXUS ACCOUNT REQUIRED",
+                    "Connect Nexus Mods in Settings before using Mod Manager download.",
+                    isError: true);
+
+                return;
+            }
+
+            if (modId <= 0 || fileId <= 0)
+            {
+                ShowNotification(
+                    "INVALID MOD DOWNLOAD LINK",
+                    "The Mod Manager download link did not include a usable mod id or file id.",
+                    isError: true);
+                return;
+            }
+
+            ShowNotification(
+                "NEXUS DOWNLOAD STARTING",
+                $"Preparing Nexus download for file {fileId}.",
+                isError: false);
+
+            try
+            {
+                NexusModFile? file =
+                    await ResolveNexusFileForProtocolDownloadAsync(
+                        modId,
+                        fileId);
+
+                if (file is null)
+                {
+                    ShowNotification(
+                        "NEXUS MOD FILE NOT FOUND",
+                        $"Could not resolve file {fileId} for mod {modId}.",
+                        isError: true);
+                    return;
+                }
+
+                await NexusDownloadRequestedAsync(
+                    file);
+            }
+            catch (Exception exception)
+            {
+                ShowNotification(
+                    "NEXUS MOD MANAGER LINK FAILED",
+                    exception.Message,
+                    isError: true);
+            }
+        }
+
+        private async Task<NexusModFile?> ResolveNexusFileForProtocolDownloadAsync(
+            long modId,
+            int fileId)
+        {
+            if (modId <= 0 ||
+                fileId <= 0)
+            {
+                return null;
+            }
+
+            IReadOnlyList<NexusModFile> files =
+                await _nexusApiService.GetModFilesAsync(
+                    _nexusApiKey,
+                    modId);
+
+            NexusModFile? matchingFile =
+                files.FirstOrDefault(file =>
+                    file.FileId == fileId);
+
+            if (matchingFile is null)
+            {
+                return null;
+            }
+
+            bool modIsCached =
+                _nexusBrowseMods.Any(mod =>
+                    mod.ModId == modId);
+
+            if (!modIsCached)
+            {
+                try
+                {
+                    NexusModSummary mod =
+                        await _nexusApiService.GetModAsync(
+                            _nexusApiKey,
+                            modId);
+
+                    _nexusBrowseMods.RemoveAll(
+                        existing =>
+                            existing.ModId == mod.ModId);
+
+                    _nexusBrowseMods.Insert(
+                        0,
+                        mod);
+                }
+                catch
+                {
+                    // If metadata can’t be refreshed, the download can still
+                    // continue using file details from the file endpoint.
+                }
+            }
+
+            return matchingFile;
+        }
+
         private static string CreateNexusAccountLabel(
             NexusAccount account)
         {
@@ -5398,11 +5729,11 @@ namespace Limelight
 
             bool isConnected =
                 NexusApiService.IntegrationEnabled &&
-                _nexusAccount is not null &&
                 !string.IsNullOrWhiteSpace(_nexusApiKey);
 
             BrowseNexusPageControl.ShowConnection(
-                isConnected);
+                isConnected,
+                _nexusAccount?.Name);
 
             SetSelectedNavigation(
                 showMyMods: false,
@@ -5475,8 +5806,7 @@ namespace Limelight
                 return;
             }
 
-            if (_nexusAccount is null ||
-                string.IsNullOrWhiteSpace(_nexusApiKey))
+            if (string.IsNullOrWhiteSpace(_nexusApiKey))
             {
                 BrowseNexusPageControl.ShowConnection(
                     isConnected: false);
@@ -5837,7 +6167,6 @@ namespace Limelight
             long modId)
         {
             if (_isNexusBrowseLoading ||
-                _nexusAccount is null ||
                 string.IsNullOrWhiteSpace(_nexusApiKey))
             {
                 return;

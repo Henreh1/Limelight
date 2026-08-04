@@ -1,8 +1,8 @@
 <UserControl x:Class="Limelight.Views.BrowseNexusPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:views="clr-namespace:Limelight.Views"
              xmlns:converters="clr-namespace:Limelight.Converters"
+             xmlns:webview2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              Background="{StaticResource BackgroundBrush}"
              Foreground="{StaticResource TextBrush}"
              FontFamily="Bahnschrift, Segoe UI">
@@ -10,6 +10,92 @@
     <UserControl.Resources>
         <converters:NexusThumbnailConverter x:Key="NexusThumbnailConverter"
                                             DecodePixelWidth="420"/>
+
+        <SolidColorBrush x:Key="NexusBrandYellowBrush"
+                         Color="#9A2B76"/>
+
+        <SolidColorBrush x:Key="NexusBrandTextBrush"
+                         Color="#F7F7FF"/>
+
+        <SolidColorBrush x:Key="NexusDisconnectedButtonBrush"
+                         Color="#131629"/>
+
+        <SolidColorBrush x:Key="NexusAccountButtonDisconnectedBorderBrush"
+                         Color="#9A2B76"/>
+
+        <SolidColorBrush x:Key="NexusAccountButtonConnectedBorderBrush"
+                         Color="#3AC9E6"/>
+
+        <SolidColorBrush x:Key="NexusAccountButtonConnectedBrush"
+                         Color="#1A1E35"/>
+
+        <LinearGradientBrush x:Key="NexusBrandButtonBrush"
+                            StartPoint="0,0"
+                            EndPoint="0,1">
+            <GradientStop Offset="0" Color="#C04E8B"/>
+            <GradientStop Offset="1" Color="#9A2B76"/>
+        </LinearGradientBrush>
+
+        <Style x:Key="NexusTopBarConnectionButtonStyle"
+               TargetType="Button">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Background" Value="{StaticResource NexusDisconnectedButtonBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource NexusAccountButtonDisconnectedBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonSurface"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="8">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="ButtonSurface"
+                                        Property="Background"
+                                        Value="#B13D83"/>
+                            </Trigger>
+
+                            <Trigger Property="IsEnabled"
+                                     Value="False">
+                                <Setter Property="Opacity"
+                                        Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="NexusOAuthButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource PrimaryButton}">
+            <Setter Property="MinWidth" Value="252"/>
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="12,0"/>
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+
+        <Style x:Key="NexusMiniLinkStyle"
+               TargetType="TextBlock">
+            <Setter Property="FontSize" Value="10"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="TextDecorations" Value="Underline"/>
+        </Style>
 
         <Style x:Key="NexusScrollThumbStyle"
                TargetType="Thumb">
@@ -279,24 +365,218 @@
                            Foreground="{StaticResource MutedTextBrush}"/>
             </StackPanel>
 
-            <Border Grid.Column="1"
-                    Padding="13,8"
+            <Button x:Name="NexusAccountButton"
+                    Grid.Column="1"
+                    Padding="0"
                     VerticalAlignment="Top"
-                    Background="#1A1E35"
-                    BorderBrush="{StaticResource BorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
+                    Click="NexusAccountButton_Click"
+                    Style="{StaticResource NexusTopBarConnectionButtonStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="20"/>
+                    </Grid.ColumnDefinitions>
 
-                <TextBlock x:Name="NexusPageStatusBadgeText"
-                           Text="ACCOUNT REQUIRED"
-                           FontSize="10"
-                           FontWeight="Bold"
-                           Foreground="{StaticResource PinkBrush}"/>
-            </Border>
+                    <Border Width="34"
+                            Height="34"
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                                x:Name="NexusAccountLogoBorder"
+                                Background="{StaticResource NexusDisconnectedButtonBrush}"
+                                BorderBrush="{StaticResource NexusAccountButtonDisconnectedBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+
+                        <TextBlock x:Name="NexusAccountLogoText"
+                                   Text="N"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="15"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource NexusBrandTextBrush}"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                VerticalAlignment="Center">
+                        <TextBlock x:Name="NexusAccountButtonHeaderText"
+                                   FontSize="10"
+                                   FontWeight="Bold"
+                                   Text="NEXUS MODS"/>
+
+                        <TextBlock x:Name="NexusAccountButtonStatusText"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Text="ACCOUNT REQUIRED"/>
+                    </StackPanel>
+
+                    <Path x:Name="NexusConnectionChevron"
+                          Grid.Column="2"
+                          Width="8"
+                          Height="4"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Right"
+                          Data="M 0 0 L 4 4 L 8 0"
+                          Stroke="{StaticResource NexusBrandTextBrush}"
+                          StrokeThickness="1.5"/>
+                </Grid>
+            </Button>
+
+            <Popup x:Name="NexusAccountPopup"
+                   PlacementTarget="{Binding ElementName=NexusAccountButton}"
+                   Placement="Bottom"
+                   StaysOpen="False"
+                   AllowsTransparency="True"
+                   PopupAnimation="Fade">
+
+                <Border Width="330"
+                        Margin="0,4,0,0"
+                        Padding="14"
+                        Background="{StaticResource RaisedPanelBrush}"
+                        BorderBrush="{StaticResource PinkBrush}"
+                        BorderThickness="1"
+                        CornerRadius="9">
+
+                    <StackPanel>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Width="46"
+                                    Height="46"
+                                    Background="{StaticResource PanelBrush}"
+                                    BorderBrush="{StaticResource CyanBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="10">
+
+                                <TextBlock Text="NEXUS"
+                                           Margin="4,8,0,0"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"
+                                           FontSize="12"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource CyanBrush}"/>
+                            </Border>
+
+                            <StackPanel Grid.Column="1"
+                                        Margin="10,0,0,0"
+                                        VerticalAlignment="Center">
+                            <TextBlock x:Name="NexusDropdownTitleText"
+                                       FontSize="12"
+                                       Foreground="{StaticResource TextBrush}"
+                                       FontWeight="Bold"
+                                       Text="Connect to Nexus Mods"/>
+
+                            <TextBlock Text="NEXUS MODS"
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBlock x:Name="NexusDropdownSubtitleText"
+                                   Margin="0,11,0,0"
+                                   TextWrapping="Wrap"
+                                   FontSize="11"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   Text="Sign in with your Nexus Mods account using OAuth for a convenient login experience"/>
+
+                        <Button x:Name="NexusOAuthLoginButton"
+                                Margin="0,12,0,0"
+                                Click="NexusOAuthLoginButton_Click"
+                                Content="SIGN IN WITH NEXUS MODS"
+                                Style="{StaticResource NexusOAuthButtonStyle}"/>
+
+                        <TextBlock x:Name="NexusUseApiKeyLink"
+                                   Margin="0,10,0,0"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource NexusMiniLinkStyle}"
+                                   Text="use api key instead"
+                                   MouseLeftButtonUp="NexusUseApiKeyLink_Click"/>
+                    </StackPanel>
+                </Border>
+            </Popup>
         </Grid>
 
         <Grid Grid.Row="1">
+            <Border x:Name="NexusBrowserFrame"
+                    Margin="38,0,38,34"
+                    Background="{StaticResource PanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="11">
+
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Margin="12"
+                          VerticalAlignment="Top">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="NexusBrowserBackButton"
+                                MinWidth="96"
+                                Content="BACK"
+                                Margin="0,0,8,0"
+                                Click="NexusBrowserBackButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+
+                        <Button x:Name="NexusBrowserForwardButton"
+                                Grid.Column="1"
+                                MinWidth="96"
+                                Content="FORWARD"
+                                Margin="0,0,8,0"
+                                Click="NexusBrowserForwardButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+
+                        <Button x:Name="NexusBrowserRefreshButton"
+                                Grid.Column="2"
+                                MinWidth="96"
+                                Content="REFRESH"
+                                Margin="0,0,8,0"
+                                Click="NexusBrowserRefreshButton_Click"
+                                Style="{StaticResource SecondaryButton}"/>
+
+                        <Button x:Name="NexusBrowserHomeButton"
+                                Grid.Column="3"
+                                MinWidth="110"
+                                Content="HOME"
+                                Margin="0,0,8,0"
+                                Click="NexusBrowserHomeButton_Click"
+                                Style="{StaticResource PrimaryButton}"/>
+
+                        <TextBox x:Name="NexusBrowserAddressBar"
+                                 Grid.Column="4"
+                                 Height="32"
+                                 Padding="10,5"
+                                 VerticalContentAlignment="Center"
+                                 Background="#0D1020"
+                                 BorderBrush="{StaticResource BorderBrush}"
+                                 BorderThickness="1"
+                                 Foreground="{StaticResource TextBrush}"
+                                 FontSize="11"
+                                 KeyDown="NexusBrowserAddressBar_KeyDown"/>
+                    </Grid>
+
+                    <webview2:WebView2 x:Name="NexusBrowser"
+                                       Grid.Row="1"
+                                       NavigationStarting="NexusBrowser_NavigationStarting"
+                                       NavigationCompleted="NexusBrowser_NavigationCompleted"/>
+                </Grid>
+            </Border>
+
             <ScrollViewer x:Name="NexusResultsScrollViewer"
+                          Visibility="Collapsed"
                           HorizontalScrollBarVisibility="Disabled"
                           VerticalScrollBarVisibility="Auto">
 
@@ -628,20 +908,7 @@
             </Border>
         </Grid>
 
-        <!-- These pages sit over the catalogue, leaving search, filters and pagination exactly as they were. -->
-        <views:NexusModDetailsView x:Name="NexusModDetailsViewControl"
-                                   Grid.RowSpan="2"
-                                   Panel.ZIndex="10"
-                                   Style="{StaticResource PageTransitionStyle}"
-                                   Visibility="Collapsed"/>
-
-        <views:NexusModFilesView x:Name="NexusModFilesViewControl"
-                                 Grid.RowSpan="2"
-                                 Panel.ZIndex="11"
-                                 Style="{StaticResource PageTransitionStyle}"
-                                 Visibility="Collapsed"/>
-
-        <Border Grid.RowSpan="2"
+        <!-- Masking for under construction nexus intergration, will probably change to like a little chrome window like how HD2 Arsenal works. <Border Grid.RowSpan="2"
                 Margin="38,88,38,38"
                 Padding="34"
                 Panel.ZIndex="30"
@@ -736,10 +1003,10 @@
                         <TextBlock Text="AWAITING APPROVAL"
                                    FontSize="9"
                                    FontWeight="Bold"
-                                   Foreground="{StaticResource CyanBrush}"/>
+                                   Foreground="{StaticResource CyanBrush}"/> 
                     </Border>
                 </StackPanel>
-            </Grid>
-        </Border>
+            </Grid> 
+        </Border> -->
     </Grid>
 </UserControl>

@@ -1,27 +1,32 @@
 ﻿using Limelight.Models;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Web.WebView2.Core;
 
 namespace Limelight.Views
 {
-    public partial class BrowseNexusPage : UserControl
-    {
-        private const int ModsPerPage = 12;
+        public partial class BrowseNexusPage : UserControl
+        {
+            private const int ModsPerPage = 12;
+            private const string NexusHomeUrl = "https://www.nexusmods.com/deadasdisco/mods/";
 
         public event Action<string>? SearchRequested;
         public event Action<string>? SortChanged;
         public event Action<string>? CategoryChanged;
         public event Action? RefreshRequested;
-        public event Action<NexusModSummary>? ViewModRequested;
-        public event Action<NexusModSummary>? ViewFilesRequested;
-        public event Action<NexusModFile>? DownloadRequested;
+        public event Action<long, int>? ModManagerDownloadRequested;
+        public event Action? NexusOAuthLoginRequested;
+        public event Action? NexusUseApiKeyRequested;
 
         private bool _isUpdatingCategories;
+        private bool _isEmbeddedBrowserInitialized;
 
         private IReadOnlyList<NexusModSummary> _allMods =
             Array.Empty<NexusModSummary>();
@@ -32,59 +37,138 @@ namespace Limelight.Views
         {
             InitializeComponent();
 
-            NexusModDetailsViewControl.BackRequested +=
-                ShowCatalogue;
+            InitialiseNexusBrowserAsync();
+        }
 
-            NexusModDetailsViewControl.ViewFilesRequested +=
-                ShowFilesForMod;
+        private async void InitialiseNexusBrowserAsync()
+        {
+            try
+            {
+                CoreWebView2Environment webEnvironment =
+                    await CreateNexusBrowserEnvironmentAsync();
 
-            NexusModFilesViewControl.BackRequested +=
-                ReturnToModDetails;
+                await NexusBrowser.EnsureCoreWebView2Async(
+                    webEnvironment);
+                _isEmbeddedBrowserInitialized = true;
 
-            NexusModFilesViewControl.DownloadRequested +=
-                file => DownloadRequested?.Invoke(file);
+                if (NexusBrowser.CoreWebView2 is not null)
+                {
+                    NexusBrowser.CoreWebView2.NewWindowRequested +=
+                        NexusBrowser_NewWindowRequested;
+                }
+
+                NexusBrowser.Source =
+                    new Uri(NexusHomeUrl);
+
+                UpdateNexusBrowserAddress(NexusHomeUrl);
+                UpdateNexusBrowserNavigationState();
+            }
+            catch
+            {
+                // I keep the Nexus page in manual-browse fallback mode
+                // when WebView2 is unavailable so browsing never blocks.
+                ShowFallbackCatalogueMode();
+            }
+        }
+
+        private static async Task<CoreWebView2Environment> CreateNexusBrowserEnvironmentAsync()
+        {
+            string preferredDataFolder =
+                GetNexusBrowserDataFolder();
+
+            try
+            {
+                return await CoreWebView2Environment.CreateAsync(
+                    null,
+                    preferredDataFolder,
+                    null);
+            }
+            catch
+            {
+                return await CoreWebView2Environment.CreateAsync(
+                    null,
+                    GetFallbackNexusBrowserDataFolder(),
+                    null);
+            }
+        }
+
+        private static string GetNexusBrowserDataFolder()
+        {
+            string edgeUserDataFolder =
+                Path.Combine(
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.LocalApplicationData),
+                    "Microsoft",
+                    "Edge",
+                    "User Data");
+
+            return Directory.Exists(edgeUserDataFolder)
+                ? edgeUserDataFolder
+                : GetFallbackNexusBrowserDataFolder();
+        }
+
+        private static string GetFallbackNexusBrowserDataFolder()
+        {
+            string fallbackFolder =
+                Path.Combine(
+                    Environment.GetFolderPath(
+                        Environment.SpecialFolder.LocalApplicationData),
+                    "Limelight",
+                    "NexusBrowser");
+
+            Directory.CreateDirectory(fallbackFolder);
+
+            return fallbackFolder;
+        }
+
+        private void ShowFallbackCatalogueMode()
+        {
+            NexusBrowserFrame.Visibility =
+                Visibility.Collapsed;
+
+            NexusResultsScrollViewer.Visibility =
+                Visibility.Visible;
         }
 
         public void ShowModDetails(
             NexusModSummary mod)
         {
-            NexusModDetailsViewControl.ShowDetails(
-                mod);
-
-            NexusModFilesViewControl.Visibility =
-                Visibility.Collapsed;
-
-            NexusModDetailsViewControl.Visibility =
-                Visibility.Visible;
+            NavigateNexusBrowserWithMod(mod);
         }
 
         public void ShowModDetailsError(
             string message)
         {
-            NexusModDetailsViewControl.ShowError(
-                message);
+            // I keep the old details compatibility path for this old overlay state.
+            // I show the error in the embedded browser error area.
+            NexusEmptyTitleText.Text =
+                "THE MOD DETAIL PAGE DID NOT LOAD";
+
+            NexusEmptyMessageText.Text = message;
+
+            NexusEmptyState.Visibility =
+                Visibility.Visible;
         }
 
         public void ShowModFiles(
             NexusModSummary mod,
             IEnumerable<NexusModFile> files)
         {
-            NexusModFilesViewControl.ShowFiles(
-                mod,
-                files);
-
-            NexusModDetailsViewControl.Visibility =
-                Visibility.Collapsed;
-
-            NexusModFilesViewControl.Visibility =
-                Visibility.Visible;
+            // I replace modal file views with a direct browser launch to the
+            // selected mod page.
+            ShowModDetails(mod);
         }
 
         public void ShowModFilesError(
             string message)
         {
-            NexusModFilesViewControl.ShowError(
-                message);
+            ShowModDetailsError(message);
+        }
+
+        public void OpenNexusBrowserForConnectedSession()
+        {
+            _ = NavigateNexusBrowserAsync(
+                NexusHomeUrl);
         }
 
         public void ShowDownloadState(
@@ -93,11 +177,14 @@ namespace Limelight.Views
             bool isBusy,
             int? percentage = null)
         {
-            NexusModFilesViewControl.ShowDownloadState(
-                file,
-                message,
-                isBusy,
-                percentage);
+            // I moved download progress to the dedicated Downloads page.
+        }
+
+        private void NavigateNexusBrowserWithMod(
+            NexusModSummary mod)
+        {
+            _ = NavigateNexusBrowserAsync(
+                $"{NexusHomeUrl}{mod.ModId}");
         }
 
         public string SelectedSortKey =>
@@ -134,15 +221,80 @@ namespace Limelight.Views
         }
 
         public void ShowConnection(
-            bool isConnected)
+            bool isConnected,
+            string? accountName = null)
         {
-            NexusPageStatusBadgeText.Text =
+            string displayName =
+                string.IsNullOrWhiteSpace(accountName)
+                    ? "NEXUS ACCOUNT"
+                    : accountName;
+
+            NexusAccountButtonStatusText.Text =
                 isConnected
-                    ? "API READY"
+                    ? "CONNECTED"
                     : "ACCOUNT REQUIRED";
 
-            NexusPageStatusBadgeText.Foreground =
+            NexusAccountButtonStatusText.Foreground =
                 StatusBrush(isConnected);
+
+            NexusAccountButtonHeaderText.Foreground =
+                isConnected
+                    ? (Brush)FindResource("CyanBrush")
+                    : (Brush)FindResource("CyanBrush");
+
+            NexusAccountLogoText.Foreground =
+                NexusAccountButtonHeaderText.Foreground;
+
+            NexusConnectionChevron.Stroke =
+                isConnected
+                    ? (Brush)FindResource("CyanBrush")
+                    : (Brush)FindResource("CyanBrush");
+
+            NexusAccountButton.Background =
+                isConnected
+                    ? (Brush)FindResource("NexusAccountButtonConnectedBrush")
+                    : (Brush)FindResource("NexusDisconnectedButtonBrush");
+
+            NexusAccountLogoBorder.Background =
+                isConnected
+                    ? (Brush)FindResource("NexusBrandButtonBrush")
+                    : (Brush)FindResource("NexusDisconnectedButtonBrush");
+
+            NexusAccountButton.BorderBrush =
+                isConnected
+                    ? (Brush)FindResource("NexusAccountButtonConnectedBorderBrush")
+                    : (Brush)FindResource("NexusDisconnectedButtonBrush");
+
+            NexusAccountButtonHeaderText.Text =
+                "NEXUS MODS";
+
+            NexusDropdownTitleText.Text =
+                isConnected
+                    ? $"CONNECTED TO {displayName.ToUpperInvariant()}"
+                    : "Connect to Nexus Mods";
+
+            NexusDropdownSubtitleText.Text =
+                isConnected
+                    ? "Your Nexus account is connected. Continue browsing and direct downloads are available."
+                    : "Sign in with your Nexus Mods account using OAuth for a convenient login experience";
+
+            NexusOAuthLoginButton.Visibility =
+                Visibility.Visible;
+
+            NexusUseApiKeyLink.Visibility =
+                isConnected
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+
+            if (isConnected)
+            {
+                NexusOAuthLoginButton.Content =
+                    "OPEN SETTINGS";
+            }
+            else
+            {
+                NexusOAuthLoginButton.Content = "SIGN IN WITH NEXUS MODS";
+            }
 
             NexusSearchBox.IsEnabled =
                 isConnected;
@@ -276,8 +428,8 @@ namespace Limelight.Views
         {
             ShowLoading(isLoading: false);
 
-            // Limelight keeps every matching result available, then builds
-            // only the current page of cards so a large catalogue stays fast.
+            // I keep every matching result available, then render only the
+            // current card page so a large catalogue stays fast.
             _allMods =
                 mods.ToList();
 
@@ -493,10 +645,39 @@ namespace Limelight.Views
 
         private void ReturnToResultsTop()
         {
-            // Returning to the result heading keeps the next page from
-            // appearing halfway down the window after a long card grid.
+            // I return to the results heading so the next page does not open
+            // halfway down the window after a long card grid.
             NexusResultsScrollViewer.ScrollToVerticalOffset(
                 0);
+        }
+
+        private void NexusAccountButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            NexusAccountPopup.IsOpen =
+                !NexusAccountPopup.IsOpen;
+        }
+
+        private void NexusOAuthLoginButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            NexusAccountPopup.IsOpen =
+                false;
+
+            NexusOAuthLoginRequested?.Invoke();
+        }
+
+        private void NexusUseApiKeyLink_Click(
+            object sender,
+            System.Windows.Input.MouseButtonEventArgs e)
+        {
+            NexusAccountPopup.IsOpen =
+                false;
+
+            e.Handled = true;
+            NexusUseApiKeyRequested?.Invoke();
         }
 
         private void ViewFilesButton_Click(
@@ -506,52 +687,468 @@ namespace Limelight.Views
             if (sender is Button button &&
                 button.Tag is NexusModSummary mod)
             {
-                NexusModFilesViewControl.Visibility =
-                    Visibility.Collapsed;
-
-                NexusModDetailsViewControl.Visibility =
-                    Visibility.Visible;
-
-                NexusModDetailsViewControl.ShowLoading(
+                NavigateNexusBrowserWithMod(
                     mod);
 
-                ViewModRequested?.Invoke(mod);
+                e.Handled = true;
             }
         }
 
-        private void ShowFilesForMod(
-            NexusModSummary mod)
+        private void NexusBrowserBackButton_Click(
+            object sender,
+            RoutedEventArgs e)
         {
-            NexusModDetailsViewControl.Visibility =
-                Visibility.Collapsed;
+            if (!_isEmbeddedBrowserInitialized ||
+                NexusBrowser.CoreWebView2 is null)
+            {
+                return;
+            }
 
-            NexusModFilesViewControl.Visibility =
-                Visibility.Visible;
-
-            NexusModFilesViewControl.ShowLoading(
-                mod);
-
-            ViewFilesRequested?.Invoke(
-                mod);
+            if (NexusBrowser.CoreWebView2.CanGoBack)
+            {
+                NexusBrowser.CoreWebView2.GoBack();
+            }
         }
 
-        private void ReturnToModDetails()
+        private void NexusBrowserForwardButton_Click(
+            object sender,
+            RoutedEventArgs e)
         {
-            NexusModFilesViewControl.Visibility =
-                Visibility.Collapsed;
+            if (!_isEmbeddedBrowserInitialized ||
+                NexusBrowser.CoreWebView2 is null)
+            {
+                return;
+            }
 
-            NexusModDetailsViewControl.Visibility =
-                Visibility.Visible;
+            if (NexusBrowser.CoreWebView2.CanGoForward)
+            {
+                NexusBrowser.CoreWebView2.GoForward();
+            }
         }
 
-        private void ShowCatalogue()
+        private void NexusBrowserRefreshButton_Click(
+            object sender,
+            RoutedEventArgs e)
         {
-            // The catalogue was never rebuilt, so this returns to the same search and page instantly.
-            NexusModFilesViewControl.Visibility =
-                Visibility.Collapsed;
+            if (!_isEmbeddedBrowserInitialized ||
+                NexusBrowser.CoreWebView2 is null)
+            {
+                return;
+            }
 
-            NexusModDetailsViewControl.Visibility =
-                Visibility.Collapsed;
+            NexusBrowser.Reload();
+        }
+
+        private void NexusBrowserHomeButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            if (!_isEmbeddedBrowserInitialized ||
+                NexusBrowser.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            _ = NavigateNexusBrowserAsync(
+                NexusHomeUrl);
+        }
+
+        private void NexusBrowser_NavigationStarting(
+            object sender,
+            CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (!TryHandleNexusDownloadUri(
+                e.Uri))
+            {
+                return;
+            }
+
+            e.Cancel = true;
+        }
+
+        private bool TryHandleNexusDownloadUri(
+            string? rawUri)
+        {
+            if (!TryParseNexusDownloadUri(
+                rawUri,
+                out long modId,
+                out int fileId))
+            {
+                return false;
+            }
+
+            ModManagerDownloadRequested?.Invoke(
+                modId,
+                fileId);
+
+            return true;
+        }
+
+        private void NexusBrowser_NewWindowRequested(
+            object? sender,
+            CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            if (TryHandleNexusDownloadUri(
+                e.Uri))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (!Uri.TryCreate(
+                    e.Uri,
+                    UriKind.Absolute,
+                    out Uri? uri))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            e.Handled = true;
+            _ = NavigateNexusBrowserAsync(
+                uri.AbsoluteUri);
+        }
+
+        private void NexusBrowserAddressBar_KeyDown(
+            object sender,
+            KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            string address =
+                NexusBrowserAddressBar.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(address))
+            {
+                return;
+            }
+
+            if (TryHandleNexusDownloadUri(
+                address))
+            {
+                return;
+            }
+
+            string targetAddress =
+                address.StartsWith(
+                    "http://",
+                    StringComparison.OrdinalIgnoreCase) ||
+                address.StartsWith(
+                    "https://",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? address
+                    : $"https://{address}";
+
+            _ = NavigateNexusBrowserAsync(
+                targetAddress);
+        }
+
+        private void NexusBrowser_NavigationCompleted(
+            object sender,
+            CoreWebView2NavigationCompletedEventArgs e)
+        {
+            if (NexusBrowser.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            string address =
+                NexusBrowser.CoreWebView2.Source ??
+                string.Empty;
+
+            UpdateNexusBrowserAddress(address);
+            UpdateNexusBrowserNavigationState();
+        }
+
+        private void UpdateNexusBrowserAddress(
+            string address)
+        {
+            NexusBrowserAddressBar.Text =
+                address;
+        }
+
+        private void UpdateNexusBrowserNavigationState()
+        {
+            if (NexusBrowser.CoreWebView2 is null)
+            {
+                NexusBrowserBackButton.IsEnabled =
+                    false;
+                NexusBrowserForwardButton.IsEnabled =
+                    false;
+
+                return;
+            }
+
+            NexusBrowserBackButton.IsEnabled =
+                NexusBrowser.CoreWebView2.CanGoBack;
+
+            NexusBrowserForwardButton.IsEnabled =
+                NexusBrowser.CoreWebView2.CanGoForward;
+        }
+
+        private async Task NavigateNexusBrowserAsync(
+            string address)
+        {
+            if (!_isEmbeddedBrowserInitialized ||
+                NexusBrowser.CoreWebView2 is null ||
+                !Uri.TryCreate(
+                    address,
+                    UriKind.Absolute,
+                    out Uri? target))
+            {
+                return;
+            }
+
+            await NexusBrowser.EnsureCoreWebView2Async();
+            NexusBrowser.Source = target;
+        }
+
+        private static bool TryParseNexusDownloadUri(
+            string? rawUri,
+            out long modId,
+            out int fileId)
+        {
+            modId = 0;
+            fileId = 0;
+
+            if (string.IsNullOrWhiteSpace(rawUri) ||
+                !Uri.TryCreate(rawUri, UriKind.Absolute, out Uri? uri) ||
+                !uri.IsAbsoluteUri)
+            {
+                return false;
+            }
+
+            bool isNexusDownloadLink =
+                uri.Scheme.Equals(
+                    "nxm",
+                    StringComparison.OrdinalIgnoreCase) ||
+                IsNexusDownloadHost(uri.Host);
+
+            if (!isNexusDownloadLink)
+            {
+                return false;
+            }
+
+            string path = uri.AbsolutePath;
+            string[] segments =
+                path
+                    .Split(
+                        '/',
+                        StringSplitOptions.RemoveEmptyEntries)
+                    .Select(part =>
+                        Uri.UnescapeDataString(part))
+                    .ToArray();
+
+            long parsedModId = 0;
+            int parsedFileId = 0;
+
+            // I use the primary /mods/{modId}/files/{fileId} pattern first.
+            for (int index = 0; index < segments.Length; index++)
+            {
+                if (segments[index].Equals(
+                        "mods",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    index + 1 < segments.Length &&
+                    long.TryParse(
+                        segments[index + 1],
+                        out long candidateModId) &&
+                    candidateModId > 0)
+                {
+                    parsedModId = candidateModId;
+                }
+
+                if (index + 1 < segments.Length &&
+                    segments[index].Equals(
+                        "files",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(
+                        segments[index + 1],
+                        out int candidateFileId) &&
+                    candidateFileId > 0)
+                {
+                    parsedFileId = candidateFileId;
+                }
+            }
+
+            if (parsedFileId == 0)
+            {
+                parsedFileId = GetNexusQueryValue(
+                        uri.Query,
+                        "file_id") ??
+                    GetNexusQueryValue(
+                        uri.Query,
+                        "fileId") ??
+                    GetNexusQueryValue(
+                        uri.Query,
+                        "file") ??
+                    GetNexusQueryValue(
+                        uri.Query,
+                        "fid") ??
+                    GetNexusQueryValue(
+                        uri.Query,
+                        "download_id") ??
+                    0;
+            }
+
+            if (parsedModId == 0)
+            {
+                parsedModId = GetNexusLongQueryValue(
+                        uri.Query,
+                        "mod_id") ??
+                    GetNexusLongQueryValue(
+                        uri.Query,
+                        "modId") ??
+                    GetNexusLongQueryValue(
+                        uri.Query,
+                        "mod") ??
+                    GetNexusLongQueryValue(
+                        uri.Query,
+                        "modid") ??
+                    0;
+            }
+
+            if (parsedModId > 0 && parsedFileId > 0)
+            {
+                modId = parsedModId;
+                fileId = parsedFileId;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static int? GetNxmQueryValue(
+            string query,
+            string key)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return null;
+            }
+
+            string[] pairs =
+                query.TrimStart('?')
+                    .Split(
+                        '&',
+                        StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string pair in pairs)
+            {
+                string[] kvp =
+                    pair.Split(
+                        '=',
+                        2);
+
+                if (kvp.Length != 2)
+                {
+                    continue;
+                }
+
+                string keyText =
+                    Uri.UnescapeDataString(
+                        kvp[0])
+                        .Trim();
+
+                if (!keyText.Equals(
+                    key,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (int.TryParse(
+                    Uri.UnescapeDataString(kvp[1]),
+                    out int value))
+                {
+                    return value;
+                }
+
+                return null;
+            }
+
+            return null;
+        }
+
+        private static long? GetNxmLongQueryValue(
+            string query,
+            string key)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return null;
+            }
+
+            string[] pairs =
+                query.TrimStart('?')
+                    .Split(
+                        '&',
+                        StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (string pair in pairs)
+            {
+                string[] kvp =
+                    pair.Split(
+                        '=',
+                        2);
+
+                if (kvp.Length != 2)
+                {
+                    continue;
+                }
+
+                string keyText =
+                    Uri.UnescapeDataString(
+                        kvp[0])
+                        .Trim();
+
+                if (!keyText.Equals(
+                    key,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (long.TryParse(
+                    Uri.UnescapeDataString(kvp[1]),
+                    out long value))
+                {
+                    return value;
+                }
+
+                return null;
+            }
+
+            return null;
+        }
+
+        private static bool IsNexusDownloadHost(
+            string host)
+        {
+            return host.Equals(
+                "nexusmods.com",
+                StringComparison.OrdinalIgnoreCase) ||
+                host.EndsWith(
+                    ".nexusmods.com",
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static int? GetNexusQueryValue(
+            string query,
+            string key)
+        {
+            return GetNxmQueryValue(query, key);
+        }
+
+        private static long? GetNexusLongQueryValue(
+            string query,
+            string key)
+        {
+            return GetNxmLongQueryValue(query, key);
         }
 
         private Brush StatusBrush(

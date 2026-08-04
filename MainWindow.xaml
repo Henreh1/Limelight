@@ -1092,75 +1092,86 @@
                 </Grid>
             </Border>
 
-            <!-- Timed feedback stays inside Limelight instead of opening a Windows dialog. -->
-            <Border x:Name="NotificationToast"
-                Grid.Column="1"
-                Panel.ZIndex="100"
-                Width="620"
-                MaxWidth="620"
-                Margin="30,0,30,28"
-                Padding="0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                Background="#1A1E35"
-                BorderBrush="{StaticResource BorderBrush}"
-                BorderThickness="1"
-                CornerRadius="10"
-                Opacity="0"
-                Visibility="Collapsed"
-                IsHitTestVisible="False">
+            <!-- Timed feedback stays inside Limelight as a quick, centred popup. -->
+            <Popup x:Name="NotificationPopup"
+                   Placement="Center"
+                   PlacementTarget="{Binding ElementName=MainWindowRoot}"
+                   StaysOpen="True"
+                   IsOpen="False"
+                   IsHitTestVisible="False"
+                   AllowsTransparency="True"
+                   PopupAnimation="Fade">
 
-                <Border.RenderTransform>
-                    <TranslateTransform x:Name="NotificationToastTransform"
-                                    Y="16"/>
-                </Border.RenderTransform>
+                <Border x:Name="NotificationToast"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        Panel.ZIndex="800"
+                        Width="620"
+                        MaxWidth="620"
+                        Margin="0"
+                        Padding="0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#1A1E35"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Opacity="0"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False">
 
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="NotificationToastTransform"
+                                        Y="10"/>
+                    </Border.RenderTransform>
 
-                    <Border x:Name="NotificationToastAccent"
-                        Background="{StaticResource CyanBrush}"
-                        CornerRadius="9,0,0,9"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="1"
-                        Width="42"
-                        Height="42"
-                        Margin="16,15,13,15"
-                        Background="#252943"
-                        CornerRadius="8">
+                        <Border x:Name="NotificationToastAccent"
+                                Background="{StaticResource CyanBrush}"
+                                CornerRadius="9,0,0,9"/>
 
-                        <TextBlock x:Name="NotificationToastIcon"
-                               Text="◆"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontSize="15"
-                               Foreground="{StaticResource CyanBrush}"/>
-                    </Border>
+                        <Border Grid.Column="1"
+                                Width="42"
+                                Height="42"
+                                Margin="16,15,13,15"
+                                Background="#252943"
+                                CornerRadius="8">
 
-                    <StackPanel Grid.Column="2"
-                            Margin="0,15,20,15"
-                            VerticalAlignment="Center">
+                            <TextBlock x:Name="NotificationToastIcon"
+                                       Text="◆"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="15"
+                                       Foreground="{StaticResource CyanBrush}"/>
+                        </Border>
 
-                        <TextBlock x:Name="NotificationToastTitle"
-                               Text="MOD ACTIVE"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="{StaticResource CyanBrush}"/>
+                        <StackPanel Grid.Column="2"
+                                    Margin="0,15,20,15"
+                                    VerticalAlignment="Center">
 
-                        <TextBlock x:Name="NotificationToastMessage"
-                               Text="The selected mod is now active."
-                               Margin="0,5,0,0"
-                               FontSize="12"
-                               LineHeight="17"
-                               TextWrapping="Wrap"
-                               Foreground="{StaticResource TextBrush}"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
+                            <TextBlock x:Name="NotificationToastTitle"
+                                       Text="MOD ACTIVE"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+
+                            <TextBlock x:Name="NotificationToastMessage"
+                                       Text="The selected mod is now active."
+                                       Margin="0,5,0,0"
+                                       FontSize="12"
+                                       LineHeight="17"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource TextBrush}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Popup>
 
             <!-- The first-run tour stays inside the main window so each step
                  can open the real page and point at the feature being explained. -->

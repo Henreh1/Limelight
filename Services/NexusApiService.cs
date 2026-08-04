@@ -20,7 +20,7 @@ namespace Limelight.Services
         // I keep the finished Nexus integration behind one gate while the
         // application registration is being reviewed. This prevents the
         // Early Access build from making even a hidden validation request.
-        public static bool IntegrationEnabled => false;
+        public static bool IntegrationEnabled => true;
 
         public const string IntegrationUnavailableMessage =
             "Nexus browsing and downloads are temporarily unavailable while Limelight's application registration is reviewed.";
@@ -42,6 +42,14 @@ namespace Limelight.Services
 
         public static string ApplicationVersion { get; } =
             ReadApplicationVersion();
+
+        private const int FileOperationRetryAttempts = 6;
+        private const int FileOperationRetryDelayMilliseconds = 180;
+        private const int FileBusyErrorHResult =
+            unchecked((int)0x80070020);
+
+        private const int FileDeniedErrorHResult =
+            unchecked((int)0x80070005);
 
         private readonly HttpClient _httpClient;
         private readonly HttpClient _downloadClient;
@@ -338,10 +346,10 @@ namespace Limelight.Services
                     downloadDirectory,
                     archiveName);
 
-            string temporaryPath =
-                finalPath + ".download";
-
-            TryDeleteFile(temporaryPath);
+            // I keep a stable download directory, but I avoid touching an
+            // existing archive name that may still be open by another process.
+            finalPath =
+                ResolveAvailableArchivePath(finalPath);
 
             try
             {
@@ -375,7 +383,7 @@ namespace Limelight.Services
 
                 await using FileStream destination =
                     new(
-                        temporaryPath,
+                        finalPath,
                         FileMode.CreateNew,
                         FileAccess.Write,
                         FileShare.None,
@@ -416,16 +424,11 @@ namespace Limelight.Services
                         "Nexus Mods returned an empty download.");
                 }
 
-                File.Move(
-                    temporaryPath,
-                    finalPath,
-                    overwrite: true);
-
                 return finalPath;
             }
             catch
             {
-                TryDeleteFile(temporaryPath);
+                TryDeleteFile(finalPath);
                 throw;
             }
         }
@@ -520,20 +523,192 @@ namespace Limelight.Services
             return $"{file.ModId}-{file.FileId}-{safeName}";
         }
 
+        private static string CreateTemporaryDownloadPath(
+            string finalPath)
+        {
+            return $"{finalPath}.{Guid.NewGuid():N}.download";
+        }
+
+        private static string MoveDownloadedArchiveWithRetry(
+            string temporaryPath,
+            string finalPath)
+        {
+            if (TryMoveWithRetry(
+                    temporaryPath,
+                    finalPath))
+            {
+                return finalPath;
+            }
+
+            string fallbackPath =
+                CreateFallbackArchivePath(finalPath);
+
+            if (TryMoveWithRetry(
+                    temporaryPath,
+                    fallbackPath))
+            {
+                return fallbackPath;
+            }
+
+            throw new IOException(
+                "The Nexus download file is in use by another process. " +
+                "Close any file manager preview and try again.");
+        }
+
+        private static string CreateFallbackArchivePath(
+            string finalPath)
+        {
+            string? directory =
+                Path.GetDirectoryName(finalPath);
+
+            string baseName =
+                Path.GetFileNameWithoutExtension(
+                    finalPath);
+
+            string extension =
+                Path.GetExtension(finalPath);
+
+            string fallbackDirectory =
+                directory ??
+                string.Empty;
+
+            for (int attempt = 1;
+                 attempt <= FileOperationRetryAttempts;
+                 attempt++)
+            {
+                string candidate =
+                    Path.Combine(
+                        fallbackDirectory,
+                        $"{baseName}_{attempt}_{DateTime.UtcNow:HHmmssfff}{extension}");
+
+                if (!File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return Path.Combine(
+                fallbackDirectory,
+                $"{baseName}_{Guid.NewGuid():N}{extension}");
+        }
+
+        private static string ResolveAvailableArchivePath(
+            string finalPath)
+        {
+            if (!File.Exists(finalPath))
+            {
+                return finalPath;
+            }
+
+            return CreateFallbackArchivePath(finalPath);
+        }
+
+        private static bool TryMoveWithRetry(
+            string sourcePath,
+            string destinationPath)
+        {
+            for (int attempt = 1;
+                 attempt <= FileOperationRetryAttempts;
+                 attempt++)
+            {
+                try
+                {
+                    if (File.Exists(destinationPath))
+                    {
+                        TryDeleteFile(destinationPath);
+                    }
+
+                    File.Move(
+                        sourcePath,
+                        destinationPath,
+                        overwrite: true);
+
+                    return true;
+                }
+                catch (IOException exception)
+                    when (attempt < FileOperationRetryAttempts &&
+                          IsFileBusyError(exception))
+                {
+                    Thread.Sleep(
+                        attempt *
+                        FileOperationRetryDelayMilliseconds);
+                }
+                catch (UnauthorizedAccessException exception)
+                    when (attempt < FileOperationRetryAttempts &&
+                          IsFileBusyError(exception))
+                {
+                    Thread.Sleep(
+                        attempt *
+                        FileOperationRetryDelayMilliseconds);
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsFileBusyError(
+            Exception exception)
+        {
+            return exception.HResult is
+                FileBusyErrorHResult or
+                FileDeniedErrorHResult;
+        }
+
         private static void TryDeleteFile(
             string path)
         {
-            try
+            TryDeleteFileWithRetry(
+                path,
+                FileOperationRetryAttempts);
+        }
+
+        private static bool TryDeleteFileWithRetry(
+            string path,
+            int maximumAttempts)
+        {
+            if (string.IsNullOrWhiteSpace(path))
             {
-                if (File.Exists(path))
+                return true;
+            }
+
+            for (int attempt = 1;
+                 attempt <= maximumAttempts;
+                 attempt++)
+            {
+                try
                 {
-                    File.Delete(path);
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
+
+                    return true;
+                }
+                catch (IOException exception)
+                    when (attempt < maximumAttempts &&
+                          IsFileBusyError(exception))
+                {
+                    Thread.Sleep(
+                        attempt *
+                        FileOperationRetryDelayMilliseconds);
+                }
+                catch (UnauthorizedAccessException exception)
+                    when (attempt < maximumAttempts &&
+                          IsFileBusyError(exception))
+                {
+                    Thread.Sleep(
+                        attempt *
+                        FileOperationRetryDelayMilliseconds);
+                }
+                catch
+                {
+                    // I keep deletion best-effort because this helper runs after
+                    // download completion and should not hide the original error.
+                    return false;
                 }
             }
-            catch
-            {
-                // A partial download can be removed by the next attempt.
-            }
+
+            return false;
         }
 
         private async Task RefreshCatalogueAsync(
