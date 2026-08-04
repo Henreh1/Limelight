@@ -9,13 +9,13 @@ namespace Limelight.Services
     public sealed class CompatibilityService
     {
         public const string SupportedSteamBuildId =
-            "24086779";
+            "24448256";
 
         public const string SupportedGameVersion =
-            "++brainjar+release-CL-29846";
+            "++brainjar+release-CL-30909";
 
         public const string SupportedNativeBridgeVersion =
-            "0.1.10";
+            "0.1.12";
 
         private const string SteamAppId =
             "3404260";

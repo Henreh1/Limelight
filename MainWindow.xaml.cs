@@ -1406,7 +1406,7 @@ namespace Limelight
                 initialisingWindow.Report(
                     "PREPARING THE MOUNT BRIDGE",
                     29,
-                    "Limelight is locating Unreal's live-mount functions. The first scan can take a little while, but the game will remain responsive.");
+                    "Limelight is locating Unreal's live-mount functions. Please remain seated in the Dive Bar until the Live Loader says ready.");
 
                 LiveLoaderCommandResult mountResolver =
                     await _liveLoaderCommandService
@@ -5021,6 +5021,21 @@ namespace Limelight
 
             try
             {
+                // I clear the verified resolver cache during a repair so the
+                // next launch performs one completely fresh native scan.
+                string resolverCachePath =
+                    Path.Combine(
+                        Environment.GetFolderPath(
+                            Environment.SpecialFolder.LocalApplicationData),
+                        "Limelight",
+                        "Cache",
+                        "native-resolver-v2.cache");
+
+                if (File.Exists(resolverCachePath))
+                {
+                    File.Delete(resolverCachePath);
+                }
+
                 LiveSessionCleanupResult cleanup =
                     await Task.Run(() =>
                         _liveSessionService.RepairClosedSession(

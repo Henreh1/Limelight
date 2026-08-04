@@ -63,6 +63,12 @@ namespace Limelight.Services
     local automaticCharlieRefreshEnabled = false
     local activeCharliePortraitPath = nil
     local activeObjectPathsText = nil
+    local activeStringTablePaths = {}
+    local knownCharliePortraitResources =
+    {
+        ["dialog_charlie_01"] = true
+    }
+    local knownCharliePortraitWidgets = {}
     local portraitRefreshPassesRemaining = 0
     local lastPortraitRefreshSecond = 0
     local localizedTextRefreshPassesRemaining = 0
@@ -167,11 +173,56 @@ namespace Limelight.Services
     local function isStringTablePath(lowerPath)
         return
             string.find(lowerPath, "/localization/", 1, true) ~= nil or
-            string.find(lowerPath, ".st_", 1, true) ~= nil
+            string.find(lowerPath, ".st_", 1, true) ~= nil or
+            string.find(lowerPath, "stringtable", 1, true) ~= nil or
+            string.find(lowerPath, "_st_", 1, true) ~= nil
+    end
+
+    local function getObjectResourceName(objectPath)
+        if objectPath == nil then
+            return nil
+        end
+
+        local objectName =
+            string.match(objectPath, "%.([^%.%/]+)$")
+
+        if objectName == nil then
+            objectName =
+                string.match(objectPath, "/([^/]+)$")
+        end
+
+        if objectName == nil or objectName == "" then
+            return nil
+        end
+
+        return string.lower(objectName)
+    end
+
+    local function matchesKnownPortraitResource(resourceFullName)
+        if resourceFullName == nil then
+            return false
+        end
+
+        for fragment, _ in
+            pairs(knownCharliePortraitResources) do
+
+            if string.find(
+                resourceFullName,
+                fragment,
+                1,
+                true) ~= nil then
+                return true
+            end
+        end
+
+        return false
     end
 
     local function rememberActiveAssets(objectPathsText)
         activeObjectPathsText = objectPathsText
+        activeCharliePortraitPath = nil
+        activeStringTablePaths = {}
+        local seenStringTables = {}
 
         for _, objectPath in
             ipairs(splitPipeSeparated(objectPathsText)) do
@@ -183,12 +234,36 @@ namespace Limelight.Services
                 activeCharliePortraitPath = objectPath
                 portraitRefreshPassesRemaining = 20
                 lastPortraitRefreshSecond = 0
+
+                local portraitResourceName =
+                    getObjectResourceName(objectPath)
+
+                if portraitResourceName ~= nil then
+                    knownCharliePortraitResources[
+                        portraitResourceName] = true
+                end
             end
 
-            if isStringTablePath(lowerObjectPath) then
-                localizedTextRefreshPassesRemaining = 20
-                lastLocalizedTextRefreshSecond = 0
+            if isStringTablePath(lowerObjectPath) and
+               not seenStringTables[lowerObjectPath] then
+
+                table.insert(
+                    activeStringTablePaths,
+                    objectPath)
+                seenStringTables[lowerObjectPath] = true
             end
+        end
+
+        -- A portrait or string table can be created after the switch response.
+        -- These extra passes catch widgets as the Dive Bar finishes building.
+        if activeCharliePortraitPath ~= nil then
+            portraitRefreshPassesRemaining = 30
+            lastPortraitRefreshSecond = 0
+        end
+
+        if #activeStringTablePaths > 0 then
+            localizedTextRefreshPassesRemaining = 30
+            lastLocalizedTextRefreshSecond = 0
         end
     end
 
@@ -232,6 +307,18 @@ namespace Limelight.Services
             if imageWidget ~= nil and
                imageWidget:IsValid() then
 
+                local widgetNameSucceeded,
+                      widgetFullName =
+                    pcall(function()
+                        return string.lower(
+                            imageWidget:GetFullName())
+                    end)
+
+                local isCharliePortrait =
+                    widgetNameSucceeded and
+                    knownCharliePortraitWidgets[
+                        widgetFullName] == true
+
                 local resourceReadSucceeded,
                       resourceObject =
                     pcall(function()
@@ -245,7 +332,8 @@ namespace Limelight.Services
                         return brush.ResourceObject
                     end)
 
-                if resourceReadSucceeded and
+                if not isCharliePortrait and
+                   resourceReadSucceeded and
                    resourceObject ~= nil and
                    resourceObject:IsValid() then
 
@@ -256,29 +344,54 @@ namespace Limelight.Services
                                 resourceObject:GetFullName())
                         end)
 
-                    local isCharliePortrait =
+                    isCharliePortrait =
                         nameReadSucceeded and
+                        matchesKnownPortraitResource(
+                            resourceFullName)
+                end
+
+                if not isCharliePortrait and
+                   widgetNameSucceeded then
+
+                    -- Some portrait widgets are built before their brush is
+                    -- assigned. Their own name is the only stable clue during
+                    -- that short window, so I remember it for later passes.
+                    isCharliePortrait =
                         string.find(
-                            resourceFullName,
-                            "dialog_charlie_01",
+                            widgetFullName,
+                            "charlie",
                             1,
-                            true) ~= nil
+                            true) ~= nil and
+                        (string.find(
+                            widgetFullName,
+                            "portrait",
+                            1,
+                            true) ~= nil or
+                         string.find(
+                            widgetFullName,
+                            "dialog",
+                            1,
+                            true) ~= nil)
+                end
 
-                    if isCharliePortrait then
+                if isCharliePortrait then
+                    if widgetNameSucceeded then
+                        knownCharliePortraitWidgets[
+                            widgetFullName] = true
+                    end
 
-                        local setSucceeded =
-                            pcall(function()
-                                -- Keep the widget's existing layout size while
-                                -- replacing only the texture behind its brush.
-                                imageWidget:SetBrushFromTexture(
-                                    activeCharliePortrait,
-                                    false)
-                            end)
+                    local setSucceeded =
+                        pcall(function()
+                            -- Keep the widget's existing layout size while
+                            -- replacing only the texture behind its brush.
+                            imageWidget:SetBrushFromTexture(
+                                activeCharliePortrait,
+                                false)
+                        end)
 
-                        if setSucceeded then
-                            refreshedCount =
-                                refreshedCount + 1
-                        end
+                    if setSucceeded then
+                        refreshedCount =
+                            refreshedCount + 1
                     end
                 end
             end
@@ -289,6 +402,25 @@ namespace Limelight.Services
 
     local function refreshLocalizedTextWidgets()
         local refreshedCount = 0
+
+        local textLibrarySucceeded,
+              textLibrary =
+            pcall(function()
+                -- A fresh default object avoids keeping localized text from
+                -- the previous character switch in UEHelpers' cache.
+                return UEHelpers.GetKismetTextLibrary(true)
+            end)
+
+        for _, stringTablePath in
+            ipairs(activeStringTablePaths) do
+
+            pcall(function()
+                -- I reload the active tables before refreshing widgets so a
+                -- newly created menu sees the replacement localization data.
+                LoadAsset(stringTablePath)
+            end)
+        end
+
         local widgetClasses =
         {
             "TextBlock",
@@ -301,18 +433,51 @@ namespace Limelight.Services
             if widgets ~= nil then
                 for _, widget in pairs(widgets) do
                     if widget ~= nil and widget:IsValid() then
-                        local synchronizeSucceeded =
-                            pcall(function()
-                                widget:SynchronizeProperties()
-                            end)
-
                         local textResetSucceeded =
                             pcall(function()
                                 local currentText = widget.Text
 
-                                if currentText ~= nil then
-                                    widget:SetText(currentText)
+                                if currentText == nil then
+                                    return
                                 end
+
+                                if textLibrarySucceeded and
+                                   textLibrary ~= nil and
+                                   textLibrary:IsValid() then
+
+                                    local metadataSucceeded,
+                                          usesStringTable,
+                                          tableId,
+                                          stringKey =
+                                        pcall(function()
+                                            return textLibrary:
+                                                StringTableIdAndKeyFromText(
+                                                    currentText)
+                                        end)
+
+                                    if metadataSucceeded and
+                                       usesStringTable and
+                                       tableId ~= nil and
+                                       stringKey ~= nil then
+
+                                        local rebuiltText =
+                                            textLibrary:TextFromStringTable(
+                                                tableId,
+                                                stringKey)
+
+                                        if rebuiltText ~= nil then
+                                            widget:SetText(rebuiltText)
+                                            return
+                                        end
+                                    end
+                                end
+
+                                widget:SetText(currentText)
+                            end)
+
+                        local synchronizeSucceeded =
+                            pcall(function()
+                                widget:SynchronizeProperties()
                             end)
 
                         if synchronizeSucceeded or
@@ -1249,18 +1414,27 @@ namespace Limelight.Services
                 currentSecond
         end
 
-        if portraitRefreshPassesRemaining > 0 and
-           currentSecond ~= lastPortraitRefreshSecond and
-           not worldTransitioning and
-           not worldSettling then
+        local shouldRefreshPortrait =
+            activeCharliePortraitPath ~= nil and
+            activeCharliePortraitPath ~= "" and
+            not worldTransitioning and
+            not worldSettling and
+            ((portraitRefreshPassesRemaining > 0 and
+              currentSecond ~= lastPortraitRefreshSecond) or
+             (portraitRefreshPassesRemaining <= 0 and
+              currentSecond - lastPortraitRefreshSecond >= 3))
 
-            -- Portrait widgets are often created after the texture loads. I
-            -- retry briefly so newly opened screens receive the active image.
+        if shouldRefreshPortrait then
+
+            -- Portrait widgets can appear long after the texture loads. I
+            -- keep this lightweight pass alive for newly opened screens.
             local refreshedCount =
                 refreshCharliePortraitWidgets()
 
-            portraitRefreshPassesRemaining =
-                portraitRefreshPassesRemaining - 1
+            if portraitRefreshPassesRemaining > 0 then
+                portraitRefreshPassesRemaining =
+                    portraitRefreshPassesRemaining - 1
+            end
 
             lastPortraitRefreshSecond =
                 currentSecond
@@ -1273,19 +1447,27 @@ namespace Limelight.Services
             end
         end
 
-        if localizedTextRefreshPassesRemaining > 0 and
-           currentSecond ~= lastLocalizedTextRefreshSecond and
-           not worldTransitioning and
-           not worldSettling then
+        local shouldRefreshLocalizedText =
+            #activeStringTablePaths > 0 and
+            not worldTransitioning and
+            not worldSettling and
+            ((localizedTextRefreshPassesRemaining > 0 and
+              currentSecond ~= lastLocalizedTextRefreshSecond) or
+             (localizedTextRefreshPassesRemaining <= 0 and
+              currentSecond - lastLocalizedTextRefreshSecond >= 3))
+
+        if shouldRefreshLocalizedText then
 
             -- StringTables can finish loading before a screen creates its
-            -- text widgets. I repeat the lightweight refresh for a short
-            -- window so newly created menus receive the replacement text.
+            -- text widgets. I keep this lightweight refresh available so a
+            -- later menu still receives the replacement text.
             lastLocalizedTextRefreshSecond =
                 currentSecond
 
-            localizedTextRefreshPassesRemaining =
-                localizedTextRefreshPassesRemaining - 1
+            if localizedTextRefreshPassesRemaining > 0 then
+                localizedTextRefreshPassesRemaining =
+                    localizedTextRefreshPassesRemaining - 1
+            end
 
             refreshLocalizedTextWidgets()
         end
