@@ -595,6 +595,22 @@ namespace Limelight
                 return;
             }
 
+            ShowWhatsNewWindowInternal(version, forceShow: false);
+        }
+
+        private void ShowWhatsNewWindowInternal(
+            string version,
+            bool forceShow)
+        {
+            if (!forceShow &&
+                string.Equals(
+                    _settings.LastSeenReleaseNotesVersion,
+                    version,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             ReleaseNotesContent content =
                 ReleaseNotesContent.CreateCurrent(version);
 
@@ -612,6 +628,15 @@ namespace Limelight
                 version;
 
             _settingsService.Save(_settings);
+        }
+
+        private void ShowWhatsNewButton_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            ShowWhatsNewWindowInternal(
+                GetCurrentVersion(),
+                forceShow: true);
         }
 
         private static string GetCurrentVersion()

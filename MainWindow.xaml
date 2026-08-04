@@ -221,6 +221,22 @@
                             shell:WindowChrome.IsHitTestVisibleInChrome="True"
                             Click="CheckForUpdates_Click">
                         <TextBlock Text="CHECK UPDATE"
+                                   Foreground="{StaticResource CyanBrush}"
+                                   TextWrapping="Wrap"
+                                   TextAlignment="Center"
+                                   LineHeight="11"/>
+                    </Button>
+
+                    <Button x:Name="WhatsNewButton"
+                            Style="{StaticResource TitleBarButtonStyle}"
+                            Width="98"
+                            FontSize="9"
+                            FontWeight="SemiBold"
+                            ToolTip="Open the latest Limelight release notes"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Click="ShowWhatsNewButton_Click">
+                        <TextBlock Text="WHAT'S NEW?"
+                                   Foreground="{StaticResource CyanBrush}"
                                    TextWrapping="Wrap"
                                    TextAlignment="Center"
                                    LineHeight="11"/>
