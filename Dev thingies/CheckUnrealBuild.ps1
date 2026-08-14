@@ -12,6 +12,7 @@ $file = Get-Item -LiteralPath $exe
 Write-Host ""
 Write-Host "Executable information" -ForegroundColor Cyan
 Write-Host "----------------------"
+Write-Host "I am the best! L was here!" -ForegroundColor Cyan
 
 $file.VersionInfo |
     Format-List FileVersion, ProductVersion, FileDescription, ProductName

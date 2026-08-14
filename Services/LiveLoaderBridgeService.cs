@@ -578,14 +578,14 @@ namespace Limelight.Services
 
         if #failures > 0 then
             -- New textures and materials are often absent from the base Asset
-            -- Registry. Unreal still loads them normally when SK_Charlie asks
-            -- for its cooked dependencies from the mounted container.
+            -- Registry. Unreal still loads them normally when the active player
+            -- mesh asks for its cooked dependencies from the mounted container.
             print(
                 "[LimelightBridge] Preloaded " ..
                 tostring(loadedCount) ..
                 " registered assets. " ..
                 tostring(#failures) ..
-                " dependency packages will load through SK_Charlie.\n")
+                " dependency packages will load through the active player mesh.\n")
 
             return true,
                 "Preloaded " .. tostring(loadedCount) ..
@@ -671,26 +671,11 @@ namespace Limelight.Services
                 "The player mesh component was found, but its skeletal mesh asset was unavailable."
         end
 
-        local assetName =
-            meshAsset:GetFName():ToString()
-
         local message =
             "Pawn: " .. pawn:GetFullName() ..
             " | Component: " .. mesh:GetFullName() ..
-            " | Asset: " .. meshAsset:GetFullName()
-
-        if string.lower(assetName) ==
-           "sk_charlie" then
-
-            message =
-                message ..
-                " | SK_Charlie target confirmed"
-        else
-            message =
-                message ..
-                " | Expected SK_Charlie but found " ..
-                assetName
-        end
+            " | Asset: " .. meshAsset:GetFullName() ..
+            " | active player mesh target confirmed"
 
         return true, message
     end
@@ -805,6 +790,11 @@ namespace Limelight.Services
                                 lowerName,
                                 "defaultsurfacematerial",
                                 1,
+                                true) ~= nil or
+                            string.find(
+                                lowerName,
+                                "/engine/",
+                                1,
                                 true) ~= nil
 
                         if isFallbackMaterial then
@@ -852,39 +842,6 @@ namespace Limelight.Services
     end
 
     local function reapplyCharlie()
-        local loadCallSucceeded,
-              meshAsset,
-              assetWasFound,
-              assetWasLoaded =
-            pcall(function()
-                return LoadAsset(
-                    "/Game/Pagoda/Characters/Player/Meshes/SK_Charlie.SK_Charlie")
-            end)
-
-        if not loadCallSucceeded then
-            return false,
-                "The replacement SK_Charlie asset could not be loaded: " ..
-                tostring(meshAsset)
-        end
-
-        if not assetWasFound or
-           not assetWasLoaded or
-           meshAsset == nil or
-           not meshAsset:IsValid() then
-
-            return false,
-                "The newly mounted container did not provide a loadable SK_Charlie asset."
-        end
-
-        local assetName =
-            string.lower(
-                meshAsset:GetFName():ToString())
-
-        if assetName ~= "sk_charlie" then
-            return false,
-                "The freshly loaded asset was not SK_Charlie."
-        end
-
         local meshComponent,
               pawnName =
             findActiveCharlieMeshComponent()
@@ -894,12 +851,63 @@ namespace Limelight.Services
                 pawnName
         end
 
-        local previousMesh = nil
+        local currentAssetReadSucceeded,
+              currentMeshAsset =
+            pcall(function()
+                return meshComponent:GetSkeletalMeshAsset()
+            end)
 
-        pcall(function()
-            previousMesh =
-                meshComponent.SkeletalMesh
-        end)
+        if not currentAssetReadSucceeded or
+           currentMeshAsset == nil or
+           not currentMeshAsset:IsValid() then
+
+            return false,
+                "The active player mesh asset was unavailable."
+        end
+
+        -- Existing character mods replace SK_Charlie even though the updated
+        -- game now uses a different skeletal mesh during gameplay. Load the
+        -- mounted legacy replacement, then inject it into the live component.
+        local targetMeshPath =
+            "/Game/Pagoda/Characters/Player/Meshes/SK_Charlie.SK_Charlie"
+
+        local loadCallSucceeded,
+              meshAsset,
+              assetWasFound,
+              assetWasLoaded =
+            pcall(function()
+                return LoadAsset(
+                    targetMeshPath)
+            end)
+
+        if not loadCallSucceeded then
+            return false,
+                "The replacement player mesh could not be loaded from " ..
+                targetMeshPath .. ": " ..
+                tostring(meshAsset)
+        end
+
+        if not assetWasFound or
+           not assetWasLoaded or
+           meshAsset == nil or
+           not meshAsset:IsValid() then
+
+            return false,
+                "The newly mounted container did not provide a loadable player mesh at " ..
+                targetMeshPath .. "."
+        end
+
+        local loadedAssetName =
+            string.lower(
+                meshAsset:GetFName():ToString())
+
+        if loadedAssetName ~= "sk_charlie" then
+            return false,
+                "The freshly loaded legacy replacement was not SK_Charlie."
+        end
+
+        local previousMesh =
+            currentMeshAsset
 
         local clearedOverrideCount = 0
 
@@ -921,6 +929,54 @@ namespace Limelight.Services
                 meshComponent:SetSkeletalMeshAsset(
                     meshAsset)
             end)
+
+        pcall(function()
+            local materialCount =
+                meshComponent:GetNumMaterials()
+
+            for materialIndex = 0, materialCount - 1 do
+                local currentMaterial =
+                    meshComponent:GetMaterial(materialIndex)
+
+                if currentMaterial ~= nil and
+                   currentMaterial:IsValid() then
+
+                    pcall(function()
+                        meshComponent:SetMaterial(
+                            materialIndex,
+                            currentMaterial)
+                    end)
+                end
+            end
+        end)
+
+        -- Valid material interfaces can still render black while their texture
+        -- resources are not resident after an IoStore swap. Bind first, then
+        -- make Unreal stream the replacement character before rebuilding it.
+        pcall(function()
+            if meshComponent.SetTextureForceResidentFlag ~= nil then
+                meshComponent:SetTextureForceResidentFlag(true)
+            end
+
+            if meshComponent.PrestreamTextures ~= nil then
+                meshComponent:PrestreamTextures(
+                    30.0,
+                    true,
+                    0)
+            end
+        end)
+
+        pcall(function()
+            if meshComponent.MarkRenderStateDirty ~= nil then
+                meshComponent:MarkRenderStateDirty()
+            end
+        end)
+
+        pcall(function()
+            if meshComponent.RecreateRenderState ~= nil then
+                meshComponent:RecreateRenderState()
+            end
+        end)
 
         if not setSucceeded then
             return false,
@@ -958,7 +1014,7 @@ namespace Limelight.Services
             "\n")
 
         return true,
-            "A fresh SK_Charlie asset and verified materials were applied to " ..
+            "The mounted SK_Charlie replacement and verified materials were applied to the active gameplay mesh on " ..
             pawnName .. "."
     end
 

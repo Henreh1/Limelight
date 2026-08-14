@@ -2211,15 +2211,6 @@ namespace Limelight
                 $"nativeBridge={compatibility.NativeBridgeCurrent}; " +
                 $"detail={compatibility.Detail}");
 
-            if (!compatibility.GameBuildDetected ||
-                !compatibility.GameBuildCompatible)
-            {
-                // I leave ordinary mod management alone on an unknown game
-                // build. Only the version-sensitive Live Loader is held back.
-                _hasHandledLiveLoaderPrompt = true;
-                return;
-            }
-
             Ue4ssDetectionResult currentInstallation =
                 _ue4ssDetectionService.Detect(
                     gameDirectory);
@@ -2971,6 +2962,43 @@ namespace Limelight
 
                 if (reapplyResult.Success)
                 {
+                    if (!deferredCharlieRefresh &&
+                        renderedDependencies.Count > 0)
+                    {
+                        int[] stabilizationDelaysMilliseconds =
+                        {
+                            120,
+                            220,
+                            400
+                        };
+
+                        for (int attempt = 0;
+                             attempt < stabilizationDelaysMilliseconds.Length;
+                             attempt++)
+                        {
+                            await Task.Delay(
+                                stabilizationDelaysMilliseconds[attempt]);
+
+                            LiveLoaderCommandResult stabilizationResult =
+                                await _liveLoaderCommandService.ReloadAssetsAsync(
+                                    renderedDependencies.Select(package =>
+                                        package.ObjectPath));
+
+                            if (!stabilizationResult.Success)
+                            {
+                                continue;
+                            }
+
+                            LiveLoaderCommandResult stabilizationReapplyResult =
+                                await _liveLoaderCommandService.ReapplyCharlieAsync();
+
+                            if (stabilizationReapplyResult.Success)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
                     LiveLoaderCommandResult retirementResult =
                         await _liveLoaderCommandService
                             .ConfirmPackageRetirementAsync();
@@ -5738,23 +5766,6 @@ namespace Limelight
                     "Dead as Disco must be closed before Limelight can repair the Live Loader.",
                     LimelightDialogTone.Warning,
                     eyebrow: "REPAIR BLOCKED");
-
-                return;
-            }
-
-            LocalCompatibilityResult compatibility =
-                _compatibilityService.Check(
-                    gameDirectory);
-
-            if (!compatibility.GameBuildDetected ||
-                !compatibility.GameBuildCompatible)
-            {
-                ShowLimelightDialog(
-                    "UNSUPPORTED GAME BUILD",
-                    "Limelight will not install version-sensitive Live Loader files into this game build.",
-                    LimelightDialogTone.Warning,
-                    details: compatibility.Detail,
-                    eyebrow: "COMPATIBILITY GATE");
 
                 return;
             }

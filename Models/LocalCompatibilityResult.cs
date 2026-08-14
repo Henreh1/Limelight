@@ -43,8 +43,6 @@ namespace Limelight.Models
 
         public bool IsLiveLoaderCompatible =>
             GameConnected &&
-            GameBuildDetected &&
-            GameBuildCompatible &&
             EmbeddedPayloadCompatible &&
             Ue4ssInstalled &&
             Ue4ssCompatible &&
@@ -111,12 +109,12 @@ namespace Limelight.Models
 
                 if (!GameBuildDetected)
                 {
-                    return "Limelight could not identify this Dead as Disco build. Live switching is disabled, but the game can still be launched without the Live Loader.";
+                    return "Limelight could not identify this Dead as Disco build. The build number is advisory; launch and Live Loader readiness use the installed runtime and bridge checks instead.";
                 }
 
                 if (!GameBuildCompatible)
                 {
-                    return $"This Dead as Disco build is not supported yet. Limelight expects Steam build {SupportedSteamBuildId} ({SupportedGameVersion}), but found {DetectedGameLabel}.";
+                    return $"Dead as Disco has updated. Limelight previously verified Steam build {SupportedSteamBuildId} ({SupportedGameVersion}) and found {DetectedGameLabel}; this warning will not block launch or Live Loader repair.";
                 }
 
                 if (!EmbeddedPayloadCompatible)
