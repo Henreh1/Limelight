@@ -11,6 +11,15 @@ namespace Limelight.Models
         public string SupportedGameVersion { get; init; } =
             string.Empty;
 
+        public string SupportedGameUpdateName { get; init; } =
+            string.Empty;
+
+        public string SupportedGameUpdateReleasedLabel { get; init; } =
+            string.Empty;
+
+        public string SupportedBuildPublishedLabel { get; init; } =
+            string.Empty;
+
         public string DetectedSteamBuildId { get; init; } =
             string.Empty;
 
@@ -93,7 +102,7 @@ namespace Limelight.Models
                 }
 
                 return IsLiveLoaderCompatible
-                    ? "COMPATIBLE"
+                    ? "READY TO USE"
                     : "REPAIR NEEDED";
             }
         }
@@ -109,12 +118,12 @@ namespace Limelight.Models
 
                 if (!GameBuildDetected)
                 {
-                    return "Limelight could not identify this Dead as Disco build. The build number is advisory; launch and Live Loader readiness use the installed runtime and bridge checks instead.";
+                    return "Limelight could not identify the installed Dead as Disco update. You can still launch the game, but Live Loader support has not been confirmed for this installation.";
                 }
 
                 if (!GameBuildCompatible)
                 {
-                    return $"Dead as Disco has updated. Limelight previously verified Steam build {SupportedSteamBuildId} ({SupportedGameVersion}) and found {DetectedGameLabel}; this warning will not block launch or Live Loader repair.";
+                    return "Dead as Disco has updated since Limelight's last verified build. Launch and repair remain available, but Live Loader behavior may need to be checked again.";
                 }
 
                 if (!EmbeddedPayloadCompatible)
@@ -147,7 +156,7 @@ namespace Limelight.Models
                     return "The installed native bridge is missing or does not match this Limelight build.";
                 }
 
-                return "The game build, Limelight, UE4SS, and both bridge components match the supported local profile.";
+                return "Limelight's Live Loader is ready for this Dead as Disco update.";
             }
         }
     }

@@ -217,10 +217,29 @@ namespace Limelight.Views
         public void ShowCompatibility(
             LocalCompatibilityResult compatibility)
         {
-            CompatibilityVersionText.Text =
-                $"GAME {compatibility.DetectedGameLabel}  |  " +
-                $"LIMELIGHT {compatibility.LimelightVersion}  |  " +
-                $"NATIVE BRIDGE {compatibility.NativeBridgeVersion}  |  " +
+            CompatibilityUpdateTitleText.Text =
+                string.IsNullOrWhiteSpace(
+                    compatibility.SupportedGameUpdateName)
+                    ? "CURRENT DEAD AS DISCO UPDATE"
+                    : compatibility.SupportedGameUpdateName;
+
+            CompatibilityReleaseDateText.Text =
+                string.IsNullOrWhiteSpace(
+                    compatibility.SupportedGameUpdateReleasedLabel)
+                    ? "DATE UNAVAILABLE"
+                    : compatibility.SupportedGameUpdateReleasedLabel;
+
+            CompatibilityBuildDateText.Text =
+                string.IsNullOrWhiteSpace(
+                    compatibility.SupportedBuildPublishedLabel)
+                    ? "DATE UNAVAILABLE"
+                    : compatibility.SupportedBuildPublishedLabel;
+
+            CompatibilityTechnicalText.Text =
+                $"INSTALLED GAME  ·  {compatibility.DetectedGameLabel}\n" +
+                $"LAST VERIFIED  ·  STEAM BUILD {compatibility.SupportedSteamBuildId}  /  {compatibility.SupportedGameVersion}\n" +
+                $"COMPONENTS  ·  LIMELIGHT {compatibility.LimelightVersion}  /  " +
+                $"NATIVE BRIDGE {compatibility.NativeBridgeVersion}  /  " +
                 $"UE4SS {compatibility.Ue4ssVersion}";
 
             CompatibilityStatusText.Text =
@@ -228,7 +247,8 @@ namespace Limelight.Views
 
             CompatibilityStatusText.Foreground =
                 StatusBrush(
-                    compatibility.IsLiveLoaderCompatible);
+                    compatibility.IsLiveLoaderCompatible &&
+                    compatibility.GameBuildCompatible);
 
             CompatibilityDetailText.Text =
                 compatibility.Detail;

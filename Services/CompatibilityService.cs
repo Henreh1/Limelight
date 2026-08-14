@@ -14,6 +14,15 @@ namespace Limelight.Services
         public const string SupportedGameVersion =
             "++brainjar+release-CL-31326";
 
+        public const string SupportedGameUpdateName =
+            "The Midsummer Update Takes the Stage!";
+
+        public const string SupportedGameUpdateReleasedLabel =
+            "3 AUGUST 2026";
+
+        public const string SupportedBuildPublishedLabel =
+            "6 AUGUST 2026 · 21:30 UTC";
+
         public const string SupportedNativeBridgeVersion =
             "0.1.12";
 
@@ -92,6 +101,11 @@ namespace Limelight.Services
                 LimelightVersion = ReadApplicationVersion(),
                 SupportedSteamBuildId = SupportedSteamBuildId,
                 SupportedGameVersion = SupportedGameVersion,
+                SupportedGameUpdateName = SupportedGameUpdateName,
+                SupportedGameUpdateReleasedLabel =
+                    SupportedGameUpdateReleasedLabel,
+                SupportedBuildPublishedLabel =
+                    SupportedBuildPublishedLabel,
                 DetectedSteamBuildId = detectedSteamBuildId,
                 DetectedGameVersion = detectedGameVersion,
                 NativeBridgeVersion = manifest?.BridgeVersion ?? "UNAVAILABLE",

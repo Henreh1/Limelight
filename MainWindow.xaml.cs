@@ -494,9 +494,21 @@ namespace Limelight
                 monitorInfo.rcWork.bottom -
                 monitorInfo.rcWork.top;
 
+            // WM_GETMINMAXINFO expects the maximise position relative to the
+            // selected monitor, not absolute virtual-desktop coordinates.
+            // Absolute coordinates can move the window off-screen when it is
+            // maximised on a monitor positioned beside or above the primary.
+            int workOffsetX =
+                monitorInfo.rcWork.left -
+                monitorInfo.rcMonitor.left;
+
+            int workOffsetY =
+                monitorInfo.rcWork.top -
+                monitorInfo.rcMonitor.top;
+
             maxInfo.ptMaxPosition = new POINT(
-                monitorInfo.rcWork.left,
-                monitorInfo.rcWork.top);
+                workOffsetX,
+                workOffsetY);
 
             maxInfo.ptMaxSize = new POINT(
                 workWidth,
