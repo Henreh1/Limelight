@@ -17,6 +17,30 @@ namespace Limelight.Services
 
         public void Activate(
             InstalledMod mod,
+            IEnumerable<InstalledMod> characterSlotMods,
+            string gameDirectory)
+        {
+            Synchronize(
+                mod,
+                characterSlotMods,
+                gameDirectory);
+        }
+
+        public void Deactivate(
+            IEnumerable<InstalledMod> characterSlotMods,
+            string gameDirectory)
+        {
+            // I only put the spotlight away here. Imported character slots
+            // stay backstage because the in-game Locker still needs them.
+            Synchronize(
+                activeMod: null,
+                characterSlotMods,
+                gameDirectory);
+        }
+
+        private static void Synchronize(
+            InstalledMod? activeMod,
+            IEnumerable<InstalledMod> characterSlotMods,
             string gameDirectory)
         {
             string modsDirectory =
@@ -29,17 +53,23 @@ namespace Limelight.Services
 
             List<DeploymentFile> newFiles =
                 BuildDeploymentList(
-                    mod,
+                    activeMod,
+                    characterSlotMods,
                     modsDirectory);
 
             EnsureNoManualFileConflicts(
                 newFiles,
-                previouslyManagedFiles);
+                previouslyManagedFiles,
+                modsDirectory);
 
             // Copy everything to temporary files first. The currently active
             // mod stays untouched if one of the source files cannot be read.
             foreach (DeploymentFile file in newFiles)
             {
+                Directory.CreateDirectory(
+                    Path.GetDirectoryName(file.StagingPath) ??
+                    modsDirectory);
+
                 File.Copy(
                     file.SourcePath,
                     file.StagingPath,
@@ -56,17 +86,15 @@ namespace Limelight.Services
             {
                 // Move Limelight's old files aside instead of deleting them
                 // immediately. This lets us restore them if deployment fails.
-                foreach (string filename in previouslyManagedFiles)
+                foreach (string relativePath in previouslyManagedFiles)
                 {
-                    if (Path.GetFileName(filename) != filename)
+                    if (!TryResolveManagedPath(
+                            modsDirectory,
+                            relativePath,
+                            out string originalPath))
                     {
                         continue;
                     }
-
-                    string originalPath =
-                        Path.Combine(
-                            modsDirectory,
-                            filename);
 
                     if (!File.Exists(originalPath))
                     {
@@ -101,7 +129,9 @@ namespace Limelight.Services
                 SaveManifest(
                     modsDirectory,
                     newFiles.Select(file =>
-                        Path.GetFileName(file.FinalPath)));
+                        Path.GetRelativePath(
+                            modsDirectory,
+                            file.FinalPath)));
             }
             catch
             {
@@ -149,76 +179,10 @@ namespace Limelight.Services
                     // A leftover backup is harmless and is ignored by Unreal.
                 }
             }
-        }
 
-        public void Deactivate(string gameDirectory)
-        {
-            string modsDirectory =
-                GetGameModsDirectory(gameDirectory);
-
-            if (!Directory.Exists(modsDirectory))
-            {
-                return;
-            }
-
-            List<string> managedFiles =
-                LoadManifest(modsDirectory);
-
-            var backups =
-                new List<BackupFile>();
-
-            try
-            {
-                // Move first and delete later so a failed operation can
-                // restore the active mod without losing files.
-                foreach (string filename in managedFiles)
-                {
-                    if (Path.GetFileName(filename) != filename)
-                    {
-                        continue;
-                    }
-
-                    string originalPath =
-                        Path.Combine(
-                            modsDirectory,
-                            filename);
-
-                    if (!File.Exists(originalPath))
-                    {
-                        continue;
-                    }
-
-                    string backupPath =
-                        originalPath + ".limelight-backup";
-
-                    File.Move(
-                        originalPath,
-                        backupPath,
-                        overwrite: true);
-
-                    backups.Add(
-                        new BackupFile(
-                            originalPath,
-                            backupPath));
-                }
-
-                SaveManifest(
-                    modsDirectory,
-                    Array.Empty<string>());
-            }
-            catch
-            {
-                RestoreBackups(backups);
-                throw;
-            }
-
-            foreach (BackupFile backup in backups)
-            {
-                if (File.Exists(backup.BackupPath))
-                {
-                    File.Delete(backup.BackupPath);
-                }
-            }
+            DeleteEmptyManagedDirectories(
+                modsDirectory,
+                previouslyManagedFiles);
         }
 
         public void PurgeAllMods(
@@ -244,17 +208,62 @@ namespace Limelight.Services
         }
 
         private static List<DeploymentFile> BuildDeploymentList(
-            InstalledMod mod,
+            InstalledMod? activeMod,
+            IEnumerable<InstalledMod> characterSlotMods,
             string modsDirectory)
         {
             var deploymentFiles =
                 new List<DeploymentFile>();
 
-            var usedFilenames =
+            var usedDestinations =
                 new HashSet<string>(
                     StringComparer.OrdinalIgnoreCase);
 
-            foreach (string relativePath in mod.PackageFiles)
+            IEnumerable<InstalledMod> modsToDeploy =
+                (activeMod is null
+                    ? Enumerable.Empty<InstalledMod>()
+                    : new[] { activeMod })
+                .Concat(characterSlotMods.Where(mod =>
+                    mod.IsCharacterSlotMod))
+                .GroupBy(
+                    mod => mod.Id,
+                    StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First());
+
+            foreach (InstalledMod mod in modsToDeploy)
+            {
+                AddModDeploymentFiles(
+                    mod,
+                    modsDirectory,
+                    usedDestinations,
+                    deploymentFiles);
+            }
+
+            return deploymentFiles;
+        }
+
+        private static void AddModDeploymentFiles(
+            InstalledMod mod,
+            string modsDirectory,
+            ISet<string> usedDestinations,
+            ICollection<DeploymentFile> deploymentFiles)
+        {
+            string destinationDirectory =
+                mod.IsCharacterSlotMod
+                    ? Path.Combine(
+                        modsDirectory,
+                        CreateCharacterSlotDirectoryName(mod))
+                    : modsDirectory;
+
+            IEnumerable<string> sourceFiles =
+                mod.PackageFiles.Concat(
+                    mod.IsCharacterSlotMod
+                        ? new[] { mod.CharacterSlotInfoFile }
+                        : Array.Empty<string>())
+                    .Distinct(
+                        StringComparer.OrdinalIgnoreCase);
+
+            foreach (string relativePath in sourceFiles)
             {
                 string sourcePath = Path.GetFullPath(
                     Path.Combine(
@@ -262,7 +271,10 @@ namespace Limelight.Services
                         relativePath));
 
                 string safeLibraryRoot =
-                    Path.GetFullPath(mod.InstallDirectory) +
+                    Path.GetFullPath(mod.InstallDirectory)
+                        .TrimEnd(
+                            Path.DirectorySeparatorChar,
+                            Path.AltDirectorySeparatorChar) +
                     Path.DirectorySeparatorChar;
 
                 if (!sourcePath.StartsWith(
@@ -274,19 +286,17 @@ namespace Limelight.Services
                         $"A package file is missing from {mod.DisplayName}.");
                 }
 
-                string filename =
-                    Path.GetFileName(sourcePath);
-
-                if (!usedFilenames.Add(filename))
-                {
-                    throw new InvalidDataException(
-                        $"{mod.DisplayName} contains duplicate package filenames.");
-                }
-
                 string finalPath =
                     Path.Combine(
-                        modsDirectory,
-                        filename);
+                        destinationDirectory,
+                        Path.GetFileName(sourcePath));
+
+                if (!usedDestinations.Add(
+                        Path.GetFullPath(finalPath)))
+                {
+                    throw new InvalidDataException(
+                        $"Two managed mod files would share {Path.GetFileName(finalPath)}.");
+                }
 
                 deploymentFiles.Add(
                     new DeploymentFile(
@@ -294,33 +304,67 @@ namespace Limelight.Services
                         finalPath,
                         finalPath + ".limelight-new"));
             }
+        }
 
-            return deploymentFiles;
+        private static string CreateCharacterSlotDirectoryName(
+            InstalledMod mod)
+        {
+            string safeCharacterName =
+                new string(
+                    mod.CharacterSlotName
+                        .Where(character =>
+                            char.IsLetterOrDigit(character) ||
+                            character == '_')
+                        .ToArray());
+
+            if (string.IsNullOrWhiteSpace(safeCharacterName))
+            {
+                safeCharacterName = "Character";
+            }
+
+            string idSuffix =
+                mod.Id[..Math.Min(8, mod.Id.Length)];
+
+            return
+                $"Limelight_{safeCharacterName}_{idSuffix}";
         }
 
         private static void EnsureNoManualFileConflicts(
             IEnumerable<DeploymentFile> newFiles,
-            IEnumerable<string> managedFiles)
+            IEnumerable<string> managedFiles,
+            string modsDirectory)
         {
             var managedSet =
                 new HashSet<string>(
-                    managedFiles,
+                    managedFiles.Select(path =>
+                        NormalizeRelativePath(path)),
                     StringComparer.OrdinalIgnoreCase);
 
             foreach (DeploymentFile file in newFiles)
             {
-                string filename =
-                    Path.GetFileName(file.FinalPath);
+                string relativePath =
+                    NormalizeRelativePath(
+                        Path.GetRelativePath(
+                            modsDirectory,
+                            file.FinalPath));
 
                 // Limelight will never overwrite a matching file unless its
                 // own manifest proves that Limelight deployed it.
                 if (File.Exists(file.FinalPath) &&
-                    !managedSet.Contains(filename))
+                    !managedSet.Contains(relativePath))
                 {
                     throw new IOException(
-                        $"{filename} already exists in ~mods and is not managed by Limelight.");
+                        $"{relativePath} already exists in ~mods and is not managed by Limelight.");
                 }
             }
+        }
+
+        private static string NormalizeRelativePath(
+            string path)
+        {
+            return path.Replace(
+                Path.AltDirectorySeparatorChar,
+                Path.DirectorySeparatorChar);
         }
 
         private static string GetGameModsDirectory(
@@ -408,6 +452,77 @@ namespace Limelight.Services
                         backup.OriginalPath,
                         overwrite: true);
                 }
+            }
+        }
+
+        private static bool TryResolveManagedPath(
+            string modsDirectory,
+            string relativePath,
+            out string resolvedPath)
+        {
+            resolvedPath = string.Empty;
+
+            if (string.IsNullOrWhiteSpace(relativePath) ||
+                Path.IsPathRooted(relativePath))
+            {
+                return false;
+            }
+
+            string safeRoot =
+                Path.GetFullPath(modsDirectory)
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
+
+            string safeRootPrefix =
+                safeRoot + Path.DirectorySeparatorChar;
+
+            string candidate =
+                Path.GetFullPath(
+                    Path.Combine(
+                        safeRoot,
+                        relativePath));
+
+            if (!candidate.StartsWith(
+                    safeRootPrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            resolvedPath = candidate;
+            return true;
+        }
+
+        private static void DeleteEmptyManagedDirectories(
+            string modsDirectory,
+            IEnumerable<string> managedPaths)
+        {
+            IEnumerable<string> directories =
+                managedPaths
+                    .Select(path =>
+                        Path.GetDirectoryName(path))
+                    .Where(path =>
+                        !string.IsNullOrWhiteSpace(path))
+                    .Cast<string>()
+                    .Distinct(
+                        StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(path => path.Length);
+
+            foreach (string relativeDirectory in directories)
+            {
+                if (!TryResolveManagedPath(
+                        modsDirectory,
+                        relativeDirectory,
+                        out string directory) ||
+                    !Directory.Exists(directory) ||
+                    Directory.EnumerateFileSystemEntries(
+                        directory).Any())
+                {
+                    continue;
+                }
+
+                Directory.Delete(directory);
             }
         }
 

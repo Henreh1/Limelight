@@ -53,6 +53,75 @@ namespace Limelight.Services
                 cancellationToken);
         }
 
+        public Task<LiveLoaderCommandResult> ActivateCharacterSlotAsync(
+            string definitionObjectPath,
+            string meshObjectPath,
+            string characterName,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(definitionObjectPath) ||
+                string.IsNullOrWhiteSpace(meshObjectPath) ||
+                string.IsNullOrWhiteSpace(characterName) ||
+                !definitionObjectPath.StartsWith(
+                    "/Game/",
+                    StringComparison.Ordinal) ||
+                !meshObjectPath.StartsWith(
+                    "/Game/",
+                    StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "A valid Character Slot PPCD, mesh, and character name are required.",
+                    nameof(definitionObjectPath));
+            }
+
+            return SendAsync(
+                "activate_character_slot",
+                "command.txt",
+                "response.txt",
+                new Dictionary<string, string>
+                {
+                    ["definitionPath"] = definitionObjectPath,
+                    ["meshPath"] = meshObjectPath,
+                    ["characterName"] = characterName
+                },
+                TimeSpan.FromSeconds(15),
+                cancellationToken);
+        }
+
+        public Task<LiveLoaderCommandResult> RegisterMountedAssetsAsync(
+            IEnumerable<string> objectPaths,
+            CancellationToken cancellationToken = default)
+        {
+            string joinedPaths =
+                string.Join(
+                    "|",
+                    objectPaths.Distinct(
+                        StringComparer.OrdinalIgnoreCase));
+
+            return SendAsync(
+                "register_mounted_assets",
+                "native-command.txt",
+                "native-response.txt",
+                new Dictionary<string, string>
+                {
+                    ["objectPaths"] = joinedPaths
+                },
+                TimeSpan.FromSeconds(45),
+                cancellationToken);
+        }
+
+        public Task<LiveLoaderCommandResult> ReleaseRegisteredAssetsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return SendAsync(
+                "release_registered_assets",
+                "native-command.txt",
+                "native-response.txt",
+                arguments: null,
+                timeout: TimeSpan.FromSeconds(15),
+                cancellationToken);
+        }
+
         public Task<LiveLoaderCommandResult> RememberActiveAssetsAsync(
             IEnumerable<string> objectPaths,
             CancellationToken cancellationToken = default)

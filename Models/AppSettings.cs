@@ -55,6 +55,10 @@ namespace Limelight.Models
         public string PendingDeploymentModId { get; set; } =
             string.Empty;
 
+        // I keep a separate catalogue flag because removing the final slot
+        // leaves no mod ID to carry the cleanup note home.
+        public bool CharacterSlotCatalogueNeedsSynchronization { get; set; }
+
         public string DismissedLiveLoaderPromptForGameDirectory { get; set; } =
             string.Empty;
 

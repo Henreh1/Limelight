@@ -28,6 +28,18 @@ namespace Limelight.Models
 
         public int AssetManifestVersion { get; set; }
 
+        public string CharacterSlotName { get; set; } =
+            string.Empty;
+
+        public string CharacterSlotInfoFile { get; set; } =
+            string.Empty;
+
+        public string CharacterSlotMeshPackagePath { get; set; } =
+            string.Empty;
+
+        public string CharacterSlotDefinitionPackagePath { get; set; } =
+            string.Empty;
+
         public DateTimeOffset InstalledAt { get; set; } =
             DateTimeOffset.Now;
 
@@ -66,5 +78,30 @@ namespace Limelight.Models
 
         [JsonIgnore]
         public bool IsActive { get; set; }
+
+        [JsonIgnore]
+        public bool IsCharacterSlotMod =>
+            !string.IsNullOrWhiteSpace(CharacterSlotName) &&
+            !string.IsNullOrWhiteSpace(CharacterSlotInfoFile) &&
+            !string.IsNullOrWhiteSpace(CharacterSlotMeshPackagePath) &&
+            !string.IsNullOrWhiteSpace(CharacterSlotDefinitionPackagePath);
+
+        [JsonIgnore]
+        public string CharacterSlotMeshObjectPath =>
+            string.IsNullOrWhiteSpace(CharacterSlotMeshPackagePath)
+                ? string.Empty
+                : CharacterSlotMeshPackagePath +
+                  "." +
+                  CharacterSlotMeshPackagePath[
+                      (CharacterSlotMeshPackagePath.LastIndexOf('/') + 1)..];
+
+        [JsonIgnore]
+        public string CharacterSlotDefinitionObjectPath =>
+            string.IsNullOrWhiteSpace(CharacterSlotDefinitionPackagePath)
+                ? string.Empty
+                : CharacterSlotDefinitionPackagePath +
+                  "." +
+                  CharacterSlotDefinitionPackagePath[
+                      (CharacterSlotDefinitionPackagePath.LastIndexOf('/') + 1)..];
     }
 }

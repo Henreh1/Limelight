@@ -7,7 +7,7 @@ namespace Limelight.Services
 {
     public sealed class ModAssetScannerService
     {
-        public const int CurrentManifestVersion = 3;
+        public const int CurrentManifestVersion = 4;
 
         public List<ModAssetPackage> Scan(
             string modDirectory)
@@ -129,6 +129,28 @@ namespace Limelight.Services
                     StringComparison.OrdinalIgnoreCase))
             {
                 return ModAssetKind.Material;
+            }
+
+            // I untangle Character Slot Loader's singular Texture cupboard,
+            // where textures and materials are apparently happy roommates.
+            if (packagePath.Contains(
+                    "/ModdedCharacters/",
+                    StringComparison.OrdinalIgnoreCase) &&
+                packagePath.Contains(
+                    "/Texture/",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return assetName.EndsWith(
+                        "Mat",
+                        StringComparison.OrdinalIgnoreCase) ||
+                       assetName.StartsWith(
+                        "M_",
+                        StringComparison.OrdinalIgnoreCase) ||
+                       assetName.StartsWith(
+                        "MI_",
+                        StringComparison.OrdinalIgnoreCase)
+                    ? ModAssetKind.Material
+                    : ModAssetKind.Texture;
             }
 
             if (assetName.EndsWith(

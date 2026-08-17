@@ -49,6 +49,7 @@ namespace Limelight.Models
                 ModAssetKind.PhysicsAsset => IsCharacterAsset,
                 ModAssetKind.AnimationBlueprint => IsCharacterAsset,
                 ModAssetKind.SkeletalMesh => IsCharacterAsset,
+                ModAssetKind.Other => IsCharacterSlotAsset,
                 _ => false
             };
 
@@ -64,8 +65,15 @@ namespace Limelight.Models
                 ModAssetKind.PhysicsAsset => 30,
                 ModAssetKind.AnimationBlueprint => 30,
                 ModAssetKind.SkeletalMesh => 40,
+                ModAssetKind.Other when IsCharacterSlotAsset => 25,
                 _ => 100
             };
+
+        [JsonIgnore]
+        public bool IsCharacterSlotAsset =>
+            PackagePath.StartsWith(
+                "/Game/Pagoda/Characters/Player/ModdedCharacters/",
+                StringComparison.OrdinalIgnoreCase);
 
         [JsonIgnore]
         private bool IsCharacterAsset =>

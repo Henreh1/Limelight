@@ -30,6 +30,7 @@ namespace Limelight.Services
         private readonly string _libraryDirectory;
         private readonly ModArchiveValidator _validator;
         private readonly ModAssetScannerService _assetScanner;
+        private readonly CharacterSlotModService _characterSlotModService;
 
         public ModLibraryService()
         {
@@ -41,6 +42,8 @@ namespace Limelight.Services
 
             _validator = new ModArchiveValidator();
             _assetScanner = new ModAssetScannerService();
+            _characterSlotModService =
+                new CharacterSlotModService();
         }
 
         public InstalledMod Import(
@@ -98,7 +101,7 @@ namespace Limelight.Services
                 List<ModAssetPackage> assetPackages =
                     _assetScanner.Scan(finalDirectory);
 
-                return new InstalledMod
+                var installedMod = new InstalledMod
                 {
                     Id = modId,
                     Name = string.IsNullOrWhiteSpace(displayName)
@@ -114,6 +117,11 @@ namespace Limelight.Services
                     NexusModId = nexusModId,
                     NexusFileId = nexusFileId
                 };
+
+                _characterSlotModService.RefreshMetadata(
+                    installedMod);
+
+                return installedMod;
             }
             catch
             {

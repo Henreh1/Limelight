@@ -1,0 +1,240 @@
+using Limelight.Models;
+using System.IO;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+
+namespace Limelight.Services
+{
+    public sealed class CharacterSlotModService
+    {
+        private const string CharacterAssetRoot =
+            "/Game/Pagoda/Characters/Player/ModdedCharacters/";
+
+        public bool RefreshMetadata(
+            InstalledMod mod)
+        {
+            string previousName =
+                mod.CharacterSlotName;
+
+            string previousInfoFile =
+                mod.CharacterSlotInfoFile;
+
+            string previousMeshPackagePath =
+                mod.CharacterSlotMeshPackagePath;
+
+            string previousDefinitionPackagePath =
+                mod.CharacterSlotDefinitionPackagePath;
+
+            mod.CharacterSlotName =
+                string.Empty;
+
+            mod.CharacterSlotInfoFile =
+                string.Empty;
+
+            mod.CharacterSlotMeshPackagePath =
+                string.Empty;
+
+            mod.CharacterSlotDefinitionPackagePath =
+                string.Empty;
+
+            CharacterSlotMetadata? metadata =
+                Detect(mod);
+
+            if (metadata is not null)
+            {
+                mod.CharacterSlotName =
+                    metadata.CharacterName;
+
+                mod.CharacterSlotInfoFile =
+                    metadata.InfoFileRelativePath;
+
+                mod.CharacterSlotMeshPackagePath =
+                    metadata.MeshPackagePath;
+
+                mod.CharacterSlotDefinitionPackagePath =
+                    metadata.DefinitionPackagePath;
+            }
+
+            return
+                !string.Equals(
+                    previousName,
+                    mod.CharacterSlotName,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    previousInfoFile,
+                    mod.CharacterSlotInfoFile,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    previousMeshPackagePath,
+                    mod.CharacterSlotMeshPackagePath,
+                    StringComparison.Ordinal) ||
+                !string.Equals(
+                    previousDefinitionPackagePath,
+                    mod.CharacterSlotDefinitionPackagePath,
+                    StringComparison.Ordinal);
+        }
+
+        private static CharacterSlotMetadata? Detect(
+            InstalledMod mod)
+        {
+            if (!Directory.Exists(mod.InstallDirectory))
+            {
+                return null;
+            }
+
+            string safeRoot =
+                Path.GetFullPath(mod.InstallDirectory)
+                    .TrimEnd(
+                        Path.DirectorySeparatorChar,
+                        Path.AltDirectorySeparatorChar);
+
+            string safeRootPrefix =
+                safeRoot + Path.DirectorySeparatorChar;
+
+            foreach (string infoFile in
+                     Directory.EnumerateFiles(
+                         safeRoot,
+                         "info.json",
+                         SearchOption.AllDirectories))
+            {
+                string fullInfoFile =
+                    Path.GetFullPath(infoFile);
+
+                if (!fullInfoFile.StartsWith(
+                        safeRootPrefix,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string? characterName =
+                    TryReadCharacterName(fullInfoFile);
+
+                if (string.IsNullOrWhiteSpace(characterName) ||
+                    !HasMatchingCharacterAssets(
+                        mod,
+                        characterName))
+                {
+                    continue;
+                }
+
+                return new CharacterSlotMetadata(
+                    characterName,
+                    Path.GetRelativePath(
+                        safeRoot,
+                        fullInfoFile),
+                    FindCharacterMeshPackagePath(
+                        mod,
+                        characterName)!,
+                    CharacterAssetRoot +
+                    characterName +
+                    "/PPCD_" +
+                    characterName);
+            }
+
+            return null;
+        }
+
+        private static string? TryReadCharacterName(
+            string infoFile)
+        {
+            try
+            {
+                using JsonDocument document =
+                    JsonDocument.Parse(
+                        File.ReadAllText(infoFile));
+
+                if (!document.RootElement.TryGetProperty(
+                        "CharacterName",
+                        out JsonElement characterNameElement) ||
+                    characterNameElement.ValueKind !=
+                        JsonValueKind.String)
+                {
+                    return null;
+                }
+
+                string characterName =
+                    characterNameElement.GetString()?.Trim() ??
+                    string.Empty;
+
+                return Regex.IsMatch(
+                           characterName,
+                           "^[A-Za-z0-9_]{1,64}$")
+                    ? characterName
+                    : null;
+            }
+            catch (Exception exception)
+                when (exception is IOException or JsonException)
+            {
+                return null;
+            }
+        }
+
+        private static bool HasMatchingCharacterAssets(
+            InstalledMod mod,
+            string characterName)
+        {
+            string characterRoot =
+                CharacterAssetRoot +
+                characterName +
+                "/";
+
+            bool hasCharacterFolder =
+                mod.AssetPackages.Any(package =>
+                    package.PackagePath.StartsWith(
+                        characterRoot,
+                        StringComparison.OrdinalIgnoreCase));
+
+            bool hasPlayerCharacterData =
+                mod.AssetPackages.Any(package =>
+                    package.PackagePath.Equals(
+                        characterRoot +
+                        "PPCD_" +
+                        characterName,
+                        StringComparison.OrdinalIgnoreCase));
+
+            return hasCharacterFolder &&
+                   hasPlayerCharacterData &&
+                   FindCharacterMeshPackagePath(
+                       mod,
+                       characterName) is not null;
+        }
+
+        private static string? FindCharacterMeshPackagePath(
+            InstalledMod mod,
+            string characterName)
+        {
+            string characterRoot =
+                CharacterAssetRoot +
+                characterName +
+                "/";
+
+            List<ModAssetPackage> meshes =
+                mod.AssetPackages
+                    .Where(package =>
+                        package.Kind ==
+                            ModAssetKind.SkeletalMesh &&
+                        package.PackagePath.StartsWith(
+                            characterRoot,
+                            StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+            ModAssetPackage? namedMesh =
+                meshes.FirstOrDefault(package =>
+                    package.AssetName.Equals(
+                        "SK_" + characterName,
+                        StringComparison.OrdinalIgnoreCase));
+
+            return namedMesh?.PackagePath ??
+                   (meshes.Count == 1
+                       ? meshes[0].PackagePath
+                       : null);
+        }
+
+        private sealed record CharacterSlotMetadata(
+            string CharacterName,
+            string InfoFileRelativePath,
+            string MeshPackagePath,
+            string DefinitionPackagePath);
+    }
+}
