@@ -6753,8 +6753,8 @@ namespace Limelight
                         Environment.GetFolderPath(
                             Environment.SpecialFolder.UserProfile),
                         "Downloads"),
-                    new[] { ".zip" },
-                    "ZIP ARCHIVES");
+                    ModArchiveSupport.SupportedExtensions,
+                    "MOD ARCHIVES · ZIP · RAR · 7Z");
 
             if (string.IsNullOrWhiteSpace(archivePath))
             {
@@ -6810,14 +6810,14 @@ namespace Limelight
             e.Handled = true;
 
             string[] archivePaths =
-                GetDroppedZipArchives(
+                GetDroppedModArchives(
                     e.Data);
 
             if (archivePaths.Length == 0)
             {
                 ShowLimelightDialog(
-                    "ZIP ARCHIVE REQUIRED",
-                    "Drop one or more Dead as Disco mod ZIP archives into Limelight.",
+                    "MOD ARCHIVE REQUIRED",
+                    "Drop one or more Dead as Disco ZIP, RAR, or 7Z mod archives into Limelight.",
                     LimelightDialogTone.Error,
                     eyebrow: "IMPORT MISSED ITS CUE");
 
@@ -6838,7 +6838,7 @@ namespace Limelight
         {
             bool canImport =
                 !_isModImportInProgress &&
-                GetDroppedZipArchives(
+                GetDroppedModArchives(
                         e.Data)
                     .Length > 0;
 
@@ -6853,7 +6853,7 @@ namespace Limelight
             e.Handled = true;
         }
 
-        private static string[] GetDroppedZipArchives(
+        private static string[] GetDroppedModArchives(
             IDataObject data)
         {
             if (!data.GetDataPresent(
@@ -6870,10 +6870,7 @@ namespace Limelight
             return droppedPaths
                 .Where(path =>
                     File.Exists(path) &&
-                    string.Equals(
-                        Path.GetExtension(path),
-                        ".zip",
-                        StringComparison.OrdinalIgnoreCase))
+                    ModArchiveSupport.IsSupportedArchive(path))
                 .Distinct(
                     StringComparer.OrdinalIgnoreCase)
                 .ToArray();
@@ -6894,14 +6891,12 @@ namespace Limelight
             }
 
             if (!File.Exists(archivePath) ||
-                !string.Equals(
-                    Path.GetExtension(archivePath),
-                    ".zip",
-                    StringComparison.OrdinalIgnoreCase))
+                !ModArchiveSupport.IsSupportedArchive(
+                    archivePath))
             {
                 ShowLimelightDialog(
-                    "ZIP ARCHIVE REQUIRED",
-                    "Limelight can only import mod archives saved as ZIP files.",
+                    "MOD ARCHIVE REQUIRED",
+                    "Limelight accepts mod archives saved as ZIP, RAR, or 7Z files.",
                     LimelightDialogTone.Error,
                     eyebrow: "IMPORT MISSED ITS CUE");
 
@@ -6923,7 +6918,7 @@ namespace Limelight
                 {
                     ShowLimelightDialog(
                         "NOT A MOD ARCHIVE",
-                        "Limelight could not find a supported Dead as Disco mod in this ZIP.",
+                        "Limelight could not find a supported Dead as Disco mod in this archive.",
                         LimelightDialogTone.Error,
                         details: fingerprintResult.Message,
                         eyebrow: "IMPORT SKIPPED");
@@ -7135,7 +7130,7 @@ namespace Limelight
             if (installedCount == 0)
             {
                 LibrarySummaryText.Text =
-                    "Your mod library is empty. Import or drag in a ZIP archive to get started.";
+                    "Your mod library is empty. Import or drag in a ZIP, RAR, or 7Z archive to get started.";
 
                 LibraryStatusText.Text =
                     "NO MODS YET";

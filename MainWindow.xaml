@@ -908,7 +908,7 @@
                                            FontWeight="Bold"/>
 
                                     <TextBlock x:Name="LibrarySummaryText"
-                                           Text="Your mod library is empty. Import or drag in a ZIP archive to get started."
+                                           Text="Your mod library is empty. Import or drag in a ZIP, RAR, or 7Z archive to get started."
                                            Margin="0,10,20,0"
                                            FontSize="13"
                                            TextWrapping="Wrap"
@@ -1315,7 +1315,7 @@
                     <TextBlock MaxWidth="450"
                                Margin="0,19,0,0"
                                HorizontalAlignment="Center"
-                               Text="Release your ZIP archive anywhere in this window. Limelight will validate it before anything enters your library."
+                               Text="Release your ZIP, RAR, or 7Z archive anywhere in this window. Limelight will validate it before anything enters your library."
                                TextAlignment="Center"
                                TextWrapping="Wrap"
                                FontSize="13"
@@ -1329,7 +1329,7 @@
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="7">
-                        <TextBlock Text="◆  ZIP ARCHIVES ONLY"
+                        <TextBlock Text="◆  ZIP · RAR · 7Z ARCHIVES"
                                    FontSize="10"
                                    FontWeight="Bold"
                                    Foreground="{StaticResource PinkBrush}"/>

@@ -1,6 +1,6 @@
 ﻿using Limelight.Models;
 using System.IO;
-using System.IO.Compression;
+using SharpCompress.Archives;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -144,25 +144,30 @@ namespace Limelight.Services
                 };
             }
 
-            using ZipArchive archive =
-                ZipFile.OpenRead(archivePath);
+            using IArchive archive =
+                ModArchiveSupport.OpenArchive(
+                    archivePath);
 
             List<string> packageParts =
                 new List<string>();
 
-            foreach (ZipArchiveEntry entry in archive.Entries.Where(entry =>
-                !string.IsNullOrWhiteSpace(entry.Name) &&
+            foreach (IArchiveEntry entry in archive.Entries.Where(entry =>
+                !entry.IsDirectory &&
+                !string.IsNullOrWhiteSpace(
+                    ModArchiveSupport.EntryPath(entry)) &&
                 PackageExtensions.Contains(
-                    Path.GetExtension(entry.Name),
+                    Path.GetExtension(
+                        ModArchiveSupport.EntryPath(entry)),
                     StringComparer.OrdinalIgnoreCase)))
             {
                 using Stream entryStream =
-                    entry.Open();
+                    entry.OpenEntryStream();
 
                 packageParts.Add(
                     CreatePackageFingerprintPart(
-                        Path.GetExtension(entry.Name),
-                        entry.Length,
+                        Path.GetExtension(
+                            ModArchiveSupport.EntryPath(entry)),
+                        entry.Size,
                         entryStream));
             }
 
@@ -255,8 +260,9 @@ namespace Limelight.Services
     string archivePath,
     string destinationDirectory)
         {
-            using ZipArchive archive =
-                ZipFile.OpenRead(archivePath);
+            using IArchive archive =
+                ModArchiveSupport.OpenArchive(
+                    archivePath);
 
             string safeRoot =
                 Path.GetFullPath(destinationDirectory)
@@ -268,32 +274,37 @@ namespace Limelight.Services
                 safeRoot +
                 Path.DirectorySeparatorChar;
 
-            foreach (ZipArchiveEntry entry in archive.Entries)
+            foreach (IArchiveEntry entry in archive.Entries)
             {
                 string entryPath =
-                    entry.FullName.Trim();
+                    ModArchiveSupport.EntryPath(entry);
 
                 // Some ZIP tools add "." as an entry for the archive root.
                 // I skip it because the destination folder already represents it.
-                if (string.IsNullOrWhiteSpace(entryPath) ||
-                    entryPath.Equals(
-                        ".",
-                        StringComparison.Ordinal) ||
-                    entryPath.Equals(
-                        "./",
-                        StringComparison.Ordinal) ||
-                    entryPath.Equals(
-                        @".\",
-                        StringComparison.Ordinal))
+                if (ModArchiveSupport.IsRootMarker(
+                        entryPath))
                 {
                     continue;
+                }
+
+                if (entry.IsEncrypted)
+                {
+                    throw new InvalidDataException(
+                        "Password-protected archives are not supported.");
+                }
+
+                if (ModArchiveSupport.ContainsLink(entry) ||
+                    ModArchiveSupport.ContainsUnsafePath(entryPath))
+                {
+                    throw new InvalidDataException(
+                        "The archive contains an unsafe path or link.");
                 }
 
                 string targetPath =
                     Path.GetFullPath(
                         Path.Combine(
                             destinationDirectory,
-                            entry.FullName));
+                            entryPath));
 
                 // I keep every extracted file inside Limelight's private library.
                 if (!targetPath.StartsWith(
@@ -305,7 +316,7 @@ namespace Limelight.Services
                 }
 
                 bool isDirectory =
-                    string.IsNullOrWhiteSpace(entry.Name) ||
+                    entry.IsDirectory ||
                     entryPath.EndsWith(
                         "/",
                         StringComparison.Ordinal) ||
@@ -331,9 +342,18 @@ namespace Limelight.Services
                         targetFolder);
                 }
 
-                entry.ExtractToFile(
-                    targetPath,
-                    overwrite: true);
+                using Stream entryStream =
+                    entry.OpenEntryStream();
+
+                using FileStream targetStream =
+                    new FileStream(
+                        targetPath,
+                        FileMode.Create,
+                        FileAccess.Write,
+                        FileShare.None);
+
+                entryStream.CopyTo(
+                    targetStream);
             }
         }
 

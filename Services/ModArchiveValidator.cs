@@ -1,5 +1,6 @@
 ﻿using System.IO;
-using System.IO.Compression;
+using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace Limelight.Services
 {
@@ -27,41 +28,68 @@ namespace Limelight.Services
                 return Invalid("The selected archive could not be found.");
             }
 
-            if (!string.Equals(
-                    Path.GetExtension(archivePath),
-                    ".zip",
-                    StringComparison.OrdinalIgnoreCase))
+            if (!ModArchiveSupport.IsSupportedArchive(
+                    archivePath))
             {
                 return Invalid(
-                    "Limelight currently accepts ZIP archives only.");
+                    "Limelight accepts ZIP, RAR, and 7Z mod archives.");
             }
 
             try
             {
-                using ZipArchive archive =
-                    ZipFile.OpenRead(archivePath);
+                using IArchive archive =
+                    ModArchiveSupport.OpenArchive(
+                        archivePath);
+
+                if (!archive.IsComplete)
+                {
+                    return Invalid(
+                        "This archive is incomplete. Make sure every volume or part is present before importing it.");
+                }
+
+                if (archive.IsEncrypted)
+                {
+                    return Invalid(
+                        "Password-protected archives are not supported. Extract the mod and create an unencrypted ZIP, RAR, or 7Z archive.");
+                }
+
+                List<IArchiveEntry> entries =
+                    archive.Entries.ToList();
 
                 // Inspect the archive before extracting anything to the computer.
-                foreach (ZipArchiveEntry entry in archive.Entries)
+                foreach (IArchiveEntry entry in entries)
                 {
-                    if (ContainsUnsafePath(entry.FullName))
+                    string entryPath =
+                        ModArchiveSupport.EntryPath(entry);
+
+                    if (entry.IsEncrypted)
                     {
                         return Invalid(
-                            "This archive contains an unsafe file path and will not be imported.");
+                            "Password-protected archives are not supported. Extract the mod and create an unencrypted ZIP, RAR, or 7Z archive.");
+                    }
+
+                    if (ModArchiveSupport.ContainsLink(entry) ||
+                        ModArchiveSupport.ContainsUnsafePath(entryPath))
+                    {
+                        return Invalid(
+                            "This archive contains an unsafe path or link and will not be imported.");
                     }
                 }
 
-                List<ZipArchiveEntry> packageFiles =
-                    archive.Entries
+                List<IArchiveEntry> packageFiles =
+                    entries
                         .Where(entry =>
+                            !entry.IsDirectory &&
                             SupportedExtensions.Contains(
-                                Path.GetExtension(entry.Name),
+                                Path.GetExtension(
+                                    ModArchiveSupport.EntryPath(entry)),
                                 StringComparer.OrdinalIgnoreCase))
                         .ToList();
 
                 bool containsPak = packageFiles.Any(entry =>
                     string.Equals(
-                        Path.GetExtension(entry.Name),
+                        Path.GetExtension(
+                            ModArchiveSupport.EntryPath(entry)),
                         ".pak",
                         StringComparison.OrdinalIgnoreCase));
 
@@ -71,18 +99,20 @@ namespace Limelight.Services
                         "No Unreal Engine .pak file was found in this archive.");
                 }
 
-                List<ZipArchiveEntry> utocFiles =
+                List<IArchiveEntry> utocFiles =
                     packageFiles
                         .Where(entry =>
-                            Path.GetExtension(entry.Name).Equals(
+                            Path.GetExtension(
+                                ModArchiveSupport.EntryPath(entry)).Equals(
                                 ".utoc",
                                 StringComparison.OrdinalIgnoreCase))
                         .ToList();
 
-                List<ZipArchiveEntry> ucasFiles =
+                List<IArchiveEntry> ucasFiles =
                     packageFiles
                         .Where(entry =>
-                            Path.GetExtension(entry.Name).Equals(
+                            Path.GetExtension(
+                                ModArchiveSupport.EntryPath(entry)).Equals(
                                 ".ucas",
                                 StringComparison.OrdinalIgnoreCase))
                         .ToList();
@@ -102,28 +132,26 @@ namespace Limelight.Services
                         $"Valid mod archive WEIII. Found {packageFiles.Count} Unreal package files."
                 };
             }
-            catch (InvalidDataException)
+            catch (SharpCompress.Common.CryptographicException)
             {
                 return Invalid(
-                    "The selected file is damaged or is not a valid ZIP archive.");
+                    "Password-protected archives are not supported. Extract the mod and create an unencrypted ZIP, RAR, or 7Z archive.");
+            }
+            catch (SharpCompressException)
+            {
+                return Invalid(
+                    "The selected file is damaged, incomplete, encrypted, or is not a valid ZIP, RAR, or 7Z archive.");
+            }
+            catch (UnauthorizedAccessException exception)
+            {
+                return Invalid(
+                    $"Limelight could not read this archive.\n\n{exception.Message}");
             }
             catch (IOException exception)
             {
                 return Invalid(
                     $"Limelight could not read this archive.\n\n{exception.Message}");
             }
-        }
-
-        private static bool ContainsUnsafePath(string archivePath)
-        {
-            string normalisedPath =
-                archivePath.Replace('\\', '/');
-
-            // Parent-directory paths could otherwise extract outside our mod library.
-            return normalisedPath.StartsWith('/') ||
-                   normalisedPath
-                       .Split('/')
-                       .Any(part => part == "..");
         }
 
         private static ModArchiveValidationResult Invalid(

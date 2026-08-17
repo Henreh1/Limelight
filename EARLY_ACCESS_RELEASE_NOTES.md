@@ -5,7 +5,7 @@ Dead as Disco themed Windows application.
 
 ## Highlights
 
-- Import supported mod ZIP files through the file picker or drag and drop.
+- Import supported mod ZIP, RAR, and 7Z files through the file picker or drag and drop.
 - Keep a named character library with duplicate-content protection.
 - Switch supported models, materials, textures, portraits, and localisation
   assets while Dead as Disco is running.

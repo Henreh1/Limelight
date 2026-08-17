@@ -30,7 +30,7 @@ The Live Loader installs and configures its managed runtime components automatic
 
 | Feature | What it does |
 | --- | --- |
-| Character library | Import ZIP archives, drag and drop mods, rename entries, reject duplicates, and remove mods from one library. |
+| Character library | Import ZIP, RAR, and 7Z archives, drag and drop mods, rename entries, reject duplicates, and remove mods from one library. |
 | Normal Live Loader | Activate a supported character replacement without restarting the game. |
 | X19 LLoader | Rotate through a chosen cast by keyboard or controller, in order or shuffled. |
 | Profiles | Save reusable groups of characters and assign an entire profile to X19 rotation. |
@@ -88,7 +88,7 @@ The normal installer includes the .NET runtime required by Limelight.
 1. Download the latest installer from [Releases](https://github.com/Henreh1/Limelight/releases).
 2. Install and open Limelight.
 3. Choose the folder containing `Dead as Disco` when prompted.
-4. Import a supported mod ZIP, or drag it onto the Limelight window.
+4. Import a supported mod ZIP, RAR, or 7Z archive, or drag it onto the Limelight window.
 5. Open **My Mods** and activate the character you want to use.
 6. Select **Launch Game**, then choose Normal Live Loader, X19 LLoader, or launch without live switching.
 
