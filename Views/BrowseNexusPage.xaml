@@ -971,7 +971,7 @@
                             BorderBrush="{StaticResource BorderBrush}"
                             BorderThickness="1"
                             CornerRadius="9">
-                        <TextBlock Text="Manual ZIP imports and drag and drop installation are ready now. No Nexus API requests are made by this Early Access build."
+                        <TextBlock Text="Manual ZIP, RAR, and 7Z imports and drag and drop installation are ready now. No Nexus API requests are made by this Early Access build."
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
                                    FontSize="12"

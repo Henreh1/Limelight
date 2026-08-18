@@ -63,7 +63,7 @@
                            FontSize="12"
                            FontWeight="Bold"/>
 
-                <TextBlock Text="Existing download history remains here. Manual ZIP imports continue through the Dashboard."
+                <TextBlock Text="Existing download history remains here. Manual ZIP, RAR, and 7Z imports continue through the Dashboard."
                            Margin="0,5,0,0"
                            FontSize="12"
                            Foreground="{StaticResource MutedTextBrush}"/>
@@ -98,7 +98,7 @@
                                FontSize="16"
                                FontWeight="Bold"/>
 
-                    <TextBlock Text="Manual ZIP imports and completed download history will appear here."
+                    <TextBlock Text="Manual ZIP, RAR, and 7Z imports and completed download history will appear here."
                                Margin="0,8,0,0"
                                HorizontalAlignment="Center"
                                FontSize="12"
