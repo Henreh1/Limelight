@@ -32,6 +32,7 @@ The Live Loader installs and configures its managed runtime components automatic
 | --- | --- |
 | Character library | Import ZIP, RAR, and 7Z archives, drag and drop mods, rename entries, reject duplicates, and remove mods from one library. |
 | Normal Live Loader | Activate a supported character replacement without restarting the game. |
+| Character Slot Loader support | Detect a slot mod's data asset and unique mesh, keep its original Locker layout, and switch it through Normal Live Loader or X19. |
 | X19 LLoader | Rotate through a chosen cast by keyboard or controller, in order or shuffled. |
 | Profiles | Save reusable groups of characters and assign an entire profile to X19 rotation. |
 | Asset-aware switching | Scan each imported Unreal container and refresh the model, materials, textures, portraits, and supported localisation assets it replaces. |
@@ -111,6 +112,8 @@ Launch the game without starting live switching. This reduces startup time and r
 ## Mod compatibility
 
 Limelight is primarily designed for Unreal Engine IoStore character replacements containing matching `.pak`, `.ucas`, and `.utoc` files. Imported archives are validated before entering the library.
+
+Character Slot Loader packages are detected when `info.json` names a character whose matching `PPCD_<CharacterName>` data asset and skeletal mesh are present under `/Game/Pagoda/Characters/Player/ModdedCharacters/<CharacterName>`. Limelight preserves the contained folder needed by the in-game Locker, live-mounts its PPCD definition, and applies that definition through the game's own body-type cosmetic pipeline in Normal Live Loader or X19 instead of requiring an `SK_Charlie` replacement. The original Character Loader Logic Mod remains a separate dependency: install its `CharacterLoader.pak`, `.ucas`, and `.utoc` files in `Pagoda\Content\Paks\LogicMods` and restart the game. Limelight detects and works with those files but does not redistribute them.
 
 Live switching depends on the contents and structure of each mod. A mod that works after restarting the game may still contain assets that Unreal cannot safely replace at runtime. See the [compatibility guide](https://henreh1.github.io/LimelightWiki/mod-compatibility.html) for current details.
 

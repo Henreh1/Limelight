@@ -61,6 +61,22 @@ namespace Limelight.Services
     local worldSettling = false
     local transitionGeneration = 0
     local automaticCharlieRefreshEnabled = false
+    local defaultPlayerMeshPath =
+        "/Game/Pagoda/Characters/Player/Meshes/SK_Charlie.SK_Charlie"
+    local defaultBodyCosmeticPath =
+        "/Game/Pagoda/Cosmetics/Charlie/BodyType/PlayerCosmetic_Charlie_BodyType_Default.PlayerCosmetic_Charlie_BodyType_Default"
+    local activeCustomMeshApplied = false
+    local characterLoaderActorId = 35005383
+    local registeredCharacterSlotDefinitions = {}
+    local characterSlotCataloguePath =
+        runtimeDirectory .. "\\character-slot-catalogue.txt"
+    local characterSlotLoaderModePath =
+        runtimeDirectory .. "\\character-slot-loader-mode.txt"
+    local characterSlotCatalogueInitialised = false
+    local activeCharacterSlotDefinitionPath = nil
+    local activeCharacterSlotMeshPath = nil
+    local activeCharacterSlotName = nil
+    local baseCharacterDefinition = nil
     local activeCharliePortraitPath = nil
     local activeObjectPathsText = nil
     local activeStringTablePaths = {}
@@ -122,6 +138,117 @@ namespace Limelight.Services
         end
 
         return values
+    end
+
+    local function loadMountedAsset(objectPath)
+        -- I ask the live object table first because Character Slot packages
+        -- arrive after Unreal finished taking attendance at startup.
+        local findSucceeded,
+              existingAsset =
+            pcall(function()
+                return StaticFindObject(
+                    objectPath)
+            end)
+
+        if findSucceeded and
+           existingAsset ~= nil and
+           existingAsset:IsValid() then
+
+            return existingAsset,
+                true,
+                true
+        end
+
+        local loadCallSucceeded,
+              asset,
+              assetWasFound,
+              assetWasLoaded =
+            pcall(function()
+                return LoadAsset(objectPath)
+            end)
+
+        if loadCallSucceeded and
+           assetWasFound and
+           assetWasLoaded and
+           asset ~= nil and
+           asset:IsValid() then
+
+            return asset,
+                true,
+                true
+        end
+
+        -- If UE4SS asks the stale Asset Registry and gets a blank stare, I use
+        -- BPModLoader's proven FAssetData route for the late arrival instead.
+        local packagePath,
+              assetName =
+            string.match(
+                objectPath,
+                "^(.*)%.([^%.]+)$")
+
+        if packagePath == nil or
+           assetName == nil then
+
+            return nil,
+                false,
+                false
+        end
+
+        local directCallSucceeded,
+              directAsset =
+            pcall(function()
+                local assetRegistryHelpers =
+                    StaticFindObject(
+                        "/Script/AssetRegistry.Default__AssetRegistryHelpers")
+
+                if assetRegistryHelpers == nil or
+                   not assetRegistryHelpers:IsValid() then
+
+                    return nil
+                end
+
+                local assetData = nil
+
+                if UnrealVersion.IsBelow(5, 1) then
+                    assetData =
+                    {
+                        ObjectPath =
+                            UEHelpers.FindOrAddFName(
+                                objectPath)
+                    }
+                else
+                    assetData =
+                    {
+                        PackageName =
+                            UEHelpers.FindOrAddFName(
+                                packagePath),
+                        AssetName =
+                            UEHelpers.FindOrAddFName(
+                                assetName)
+                    }
+                end
+
+                return assetRegistryHelpers:GetAsset(
+                    assetData)
+            end)
+
+        if directCallSucceeded and
+           directAsset ~= nil and
+           directAsset:IsValid() then
+
+            print(
+                "[LimelightBridge] Loaded an unregistered mounted asset directly: " ..
+                objectPath ..
+                "\n")
+
+            return directAsset,
+                true,
+                true
+        end
+
+        return nil,
+            false,
+            false
     end
 
     local function writeResponse(
@@ -513,7 +640,7 @@ namespace Limelight.Services
                   assetWasFound,
                   assetWasLoaded =
                 pcall(function()
-                    return LoadAsset(objectPath)
+                    return loadMountedAsset(objectPath)
                 end)
 
             if callSucceeded and
@@ -572,7 +699,7 @@ namespace Limelight.Services
             return false,
                 "The mounted character is still missing " ..
                 tostring(#failures) ..
-                " required material or texture package(s): " ..
+                " required asset package(s): " ..
                 table.concat(failures, " | ")
         end
 
@@ -841,6 +968,42 @@ namespace Limelight.Services
             materialSummary
     end
 
+    local function restorePlayerMeshVisibility()
+        local meshComponent,
+              pawnName =
+            findActiveCharlieMeshComponent()
+
+        if meshComponent == nil then
+            return false,
+                pawnName
+        end
+
+        local visibilityRestored =
+            pcall(function()
+                meshComponent:SetVisibility(
+                    true,
+                    true)
+            end)
+
+        local hiddenStateRestored =
+            pcall(function()
+                meshComponent:SetHiddenInGame(
+                    false,
+                    true)
+            end)
+
+        if not visibilityRestored and
+           not hiddenStateRestored then
+
+            return false,
+                "The refreshed player mesh could not be made visible again."
+        end
+
+        return true,
+            "The refreshed player mesh is visible on " ..
+            pawnName .. "."
+    end
+
     local function reapplyCharlie()
         local meshComponent,
               pawnName =
@@ -865,18 +1028,28 @@ namespace Limelight.Services
                 "The active player mesh asset was unavailable."
         end
 
-        -- Existing character mods replace SK_Charlie even though the updated
-        -- game now uses a different skeletal mesh during gameplay. Load the
-        -- mounted legacy replacement, then inject it into the live component.
+        -- I only replace SK_Charlie for regular mods. Character Slot mods take
+        -- the scenic route through Dead as Disco's cosmetic system instead.
         local targetMeshPath =
-            "/Game/Pagoda/Characters/Player/Meshes/SK_Charlie.SK_Charlie"
+            defaultPlayerMeshPath
+
+        local expectedMeshName =
+            string.lower(
+                string.match(
+                    targetMeshPath,
+                    "%.([^%.]+)$") or "")
+
+        if expectedMeshName == "" then
+            return false,
+                "The selected player mesh object path was invalid."
+        end
 
         local loadCallSucceeded,
               meshAsset,
               assetWasFound,
               assetWasLoaded =
             pcall(function()
-                return LoadAsset(
+                return loadMountedAsset(
                     targetMeshPath)
             end)
 
@@ -901,9 +1074,10 @@ namespace Limelight.Services
             string.lower(
                 meshAsset:GetFName():ToString())
 
-        if loadedAssetName ~= "sk_charlie" then
+        if loadedAssetName ~= expectedMeshName then
             return false,
-                "The freshly loaded legacy replacement was not SK_Charlie."
+                "The freshly loaded player mesh did not match " ..
+                expectedMeshName .. "."
         end
 
         local previousMesh =
@@ -1013,9 +1187,819 @@ namespace Limelight.Services
             materialSummary ..
             "\n")
 
+        activeCustomMeshApplied = true
+
         return true,
-            "The mounted SK_Charlie replacement and verified materials were applied to the active gameplay mesh on " ..
+            "The mounted player mesh and verified materials were applied to the active gameplay mesh on " ..
             pawnName .. "."
+    end
+
+    local function findCharacterLoaderActor()
+        local actors =
+            FindAllOf("ModActor_C")
+
+        if actors == nil then
+            return nil,
+                "Character Loader's ModActor_C is missing. Install the official Logic Mod and restart Dead as Disco."
+        end
+
+        for _,
+            actor in ipairs(actors) do
+
+            if actor ~= nil and
+               actor:IsValid() then
+
+                local idReadSucceeded,
+                      actorId =
+                    pcall(function()
+                        return actor.ActorID
+                    end)
+
+                if idReadSucceeded and
+                   actorId == characterLoaderActorId then
+
+                    return actor,
+                        "Character Loader is ready."
+                end
+            end
+        end
+
+        return nil,
+            "Character Loader's actor is not ready yet. Its ID should be " ..
+            tostring(characterLoaderActorId) .. "."
+    end
+
+    local function findCosmeticSubsystem()
+        local subsystems =
+            FindAllOf(
+                "PagodaCosmeticLocalPlayerSubsystem")
+
+        if subsystems == nil then
+            return nil
+        end
+
+        for _,
+            subsystem in ipairs(subsystems) do
+
+            if subsystem ~= nil and
+               subsystem:IsValid() then
+
+                local fullNameReadSucceeded,
+                      fullName =
+                    pcall(function()
+                        return subsystem:GetFullName()
+                    end)
+
+                if not fullNameReadSucceeded or
+                   string.find(
+                       fullName,
+                       "Default__",
+                       1,
+                       true) == nil then
+
+                    return subsystem
+                end
+            end
+        end
+
+        return nil
+    end
+
+    local function registerCharacterSlotDefinition(
+        definitionPath)
+
+        local loaderActor,
+              loaderMessage =
+            findCharacterLoaderActor()
+
+        if loaderActor == nil then
+            return false,
+                loaderMessage
+        end
+
+        local registrationState =
+            registeredCharacterSlotDefinitions[
+                definitionPath]
+
+        if registrationState == nil then
+            local definitionAdded,
+                  addError =
+                pcall(function()
+                    loaderActor:AddToModDefinitions(
+                        definitionPath)
+                end)
+
+            if not definitionAdded then
+                return false,
+                    "Character Loader rejected the PPCD: " ..
+                    tostring(addError)
+            end
+
+            -- I remember the halfway point too. If AddToList trips over its
+            -- shoelaces, a retry must not stuff the PPCD into the actor twice.
+            registeredCharacterSlotDefinitions[
+                definitionPath] =
+                "definition_added"
+
+            registrationState =
+                "definition_added"
+        end
+
+        if registrationState ~= "ready" then
+            local listUpdated,
+                  listError =
+                pcall(function()
+                    loaderActor:AddToList()
+                end)
+
+            if not listUpdated then
+                return false,
+                    "Character Loader could not refresh its catalogue: " ..
+                    tostring(listError)
+            end
+
+            registeredCharacterSlotDefinitions[
+                definitionPath] =
+                "ready"
+        end
+
+        return true,
+            "Character Loader registered " ..
+            definitionPath .. "."
+    end
+
+    local function readCharacterSlotCatalogue()
+        local catalogueFile =
+            io.open(characterSlotCataloguePath, "r")
+
+        if catalogueFile == nil then
+            return {}
+        end
+
+        local definitions = {}
+        local seenDefinitions = {}
+
+        for line in catalogueFile:lines() do
+            local definitionPath =
+                string.match(line, "^%s*(.-)%s*$")
+
+            if definitionPath ~= nil and
+               string.sub(definitionPath, 1, 48) ==
+                   "/Game/Pagoda/Characters/Player/ModdedCharacters/" and
+               string.find(
+                   definitionPath,
+                   ".PPCD_",
+                   1,
+                   true) ~= nil and
+               not seenDefinitions[definitionPath] then
+
+                seenDefinitions[definitionPath] = true
+
+                table.insert(
+                    definitions,
+                    definitionPath)
+            end
+        end
+
+        catalogueFile:close()
+        return definitions
+    end
+
+    local function officialCharacterSlotLoaderIsActive()
+        local modeFile =
+            io.open(characterSlotLoaderModePath, "r")
+
+        if modeFile == nil then
+            return false
+        end
+
+        local mode =
+            string.match(
+                modeFile:read("*a") or "",
+                "^%s*(.-)%s*$")
+
+        modeFile:close()
+        return mode == "official"
+    end
+
+    local initialiseCharacterSlotCatalogue
+
+    initialiseCharacterSlotCatalogue = function()
+        if characterSlotCatalogueInitialised then
+            return
+        end
+
+        local definitions =
+            readCharacterSlotCatalogue()
+
+        if #definitions == 0 then
+            characterSlotCatalogueInitialised = true
+            return
+        end
+
+        if officialCharacterSlotLoaderIsActive() then
+            -- I let the official script fill the Locker, then remember its
+            -- homework so a live switch does not add the same slot twice.
+            for _, definitionPath in ipairs(definitions) do
+                registeredCharacterSlotDefinitions[
+                    definitionPath] = "ready"
+            end
+
+            characterSlotCatalogueInitialised = true
+
+            print(
+                "[LimelightBridge] Official Character Slot catalogue detected; Limelight will not duplicate it.\n")
+
+            return
+        end
+
+        local loaderActor,
+              loaderMessage =
+            findCharacterLoaderActor()
+
+        if loaderActor == nil then
+            ExecuteWithDelay(
+                1000,
+                initialiseCharacterSlotCatalogue)
+
+            return
+        end
+
+        local definitionsAdded = 0
+
+        for _, definitionPath in ipairs(definitions) do
+            local registrationState =
+                registeredCharacterSlotDefinitions[
+                    definitionPath]
+
+            if registrationState == nil then
+                local definitionAdded,
+                      addError =
+                    pcall(function()
+                        loaderActor:AddToModDefinitions(
+                            definitionPath)
+                    end)
+
+                if definitionAdded then
+                    registeredCharacterSlotDefinitions[
+                        definitionPath] =
+                            "definition_added"
+
+                    definitionsAdded =
+                        definitionsAdded + 1
+                else
+                    print(
+                        "[LimelightBridge] Character Slot catalogue is still waiting for " ..
+                        definitionPath .. ": " ..
+                        tostring(addError) .. "\n")
+                end
+            elseif registrationState ==
+                   "definition_added" then
+
+                definitionsAdded =
+                    definitionsAdded + 1
+            end
+        end
+
+        if definitionsAdded > 0 then
+            local listUpdated,
+                  listError =
+                pcall(function()
+                    loaderActor:AddToList()
+                end)
+
+            if not listUpdated then
+                print(
+                    "[LimelightBridge] Character Slot catalogue refresh is still warming up: " ..
+                    tostring(listError) .. "\n")
+
+                ExecuteWithDelay(
+                    1000,
+                    initialiseCharacterSlotCatalogue)
+
+                return
+            end
+        end
+
+        local allDefinitionsReady = true
+
+        for _, definitionPath in ipairs(definitions) do
+            if registeredCharacterSlotDefinitions[
+                    definitionPath] ==
+               "definition_added" then
+
+                registeredCharacterSlotDefinitions[
+                    definitionPath] = "ready"
+            elseif registeredCharacterSlotDefinitions[
+                       definitionPath] ~=
+                   "ready" then
+
+                allDefinitionsReady = false
+            end
+        end
+
+        if not allDefinitionsReady then
+            ExecuteWithDelay(
+                1000,
+                initialiseCharacterSlotCatalogue)
+
+            return
+        end
+
+        characterSlotCatalogueInitialised = true
+
+        print(
+            "[LimelightBridge] Added " ..
+            tostring(#definitions) ..
+            " Character Slot model(s) to the in-game Locker.\n")
+    end
+
+    local function getEquippedBodyDefinition(
+        subsystem)
+
+        local wrapperReadSucceeded,
+              wrapper =
+            pcall(function()
+                -- I ask for BodyType explicitly. Some modded PPCDs forget to
+                -- introduce their slot properly, bless their little hearts.
+                return subsystem:GetEquippedCosmeticItem(
+                    1)
+            end)
+
+        if not wrapperReadSucceeded or
+           wrapper == nil or
+           not wrapper:IsValid() then
+
+            return nil
+        end
+
+        local definitionReadSucceeded,
+              equippedDefinition =
+            pcall(function()
+                return wrapper.CosmeticDef
+            end)
+
+        if definitionReadSucceeded and
+           equippedDefinition ~= nil and
+           equippedDefinition:IsValid() then
+
+            return equippedDefinition
+        end
+
+        return nil
+    end
+
+    local function getDefaultBodyDefinition()
+        local definition,
+              definitionWasFound,
+              definitionWasLoaded =
+            loadMountedAsset(
+                defaultBodyCosmeticPath)
+
+        if definitionWasFound and
+           definitionWasLoaded and
+           definition ~= nil and
+           definition:IsValid() then
+
+            return definition
+        end
+
+        return nil
+    end
+
+    local function getRollbackBodyDefinition(
+        subsystem)
+
+        local equippedDefinition =
+            getEquippedBodyDefinition(
+                subsystem)
+
+        if equippedDefinition ~= nil and
+           equippedDefinition:IsValid() then
+
+            return equippedDefinition
+        end
+
+        if activeCharacterSlotDefinitionPath ~= nil then
+            local activeDefinition,
+                  activeDefinitionWasFound,
+                  activeDefinitionWasLoaded =
+                loadMountedAsset(
+                    activeCharacterSlotDefinitionPath)
+
+            if activeDefinitionWasFound and
+               activeDefinitionWasLoaded and
+               activeDefinition ~= nil and
+               activeDefinition:IsValid() then
+
+                return activeDefinition
+            end
+        end
+
+        -- I keep vanilla Charlie's body card behind the bar. The cosmetic
+        -- subsystem occasionally claims its equipped wrapper has gone home.
+        return getDefaultBodyDefinition()
+    end
+
+    local function verifyCharacterSlotMesh(
+        expectedMeshPath)
+
+        local meshComponent,
+              pawnName =
+            findActiveCharlieMeshComponent()
+
+        if meshComponent == nil then
+            return false,
+                pawnName
+        end
+
+        local expectedMeshName =
+            string.lower(
+                string.match(
+                    expectedMeshPath,
+                    "%.([^%.]+)$") or "")
+
+        local meshReadSucceeded,
+              currentMesh =
+            pcall(function()
+                return meshComponent:GetSkeletalMeshAsset()
+            end)
+
+        if not meshReadSucceeded or
+           currentMesh == nil or
+           not currentMesh:IsValid() then
+
+            return false,
+                "Character Loader has not attached a valid body mesh yet."
+        end
+
+        local currentMeshName =
+            string.lower(
+                currentMesh:GetFName():ToString())
+
+        if currentMeshName ~= expectedMeshName then
+            return false,
+                "Character Loader is still applying " ..
+                expectedMeshName .. "."
+        end
+
+        local materialsReady,
+              materialSummary =
+            inspectCharlieMaterials(
+                meshComponent)
+
+        if not materialsReady then
+            return false,
+                "The CSM mesh arrived, but its materials are still backstage: " ..
+                materialSummary
+        end
+
+        local visibilityReady,
+              visibilityMessage =
+            restorePlayerMeshVisibility()
+
+        if not visibilityReady then
+            return false,
+                visibilityMessage
+        end
+
+        return true,
+            "Character Loader equipped the CSM through Dead as Disco's cosmetic system on " ..
+            pawnName .. ". " ..
+            materialSummary
+    end
+
+    local function rollbackCharacterSlot(
+        subsystem,
+        previousDefinition)
+
+        if subsystem == nil or
+           previousDefinition == nil or
+           not previousDefinition:IsValid() then
+
+            return false
+        end
+
+        local rollbackCallSucceeded,
+              rollbackAccepted =
+            pcall(function()
+                return subsystem:TryEquipCosmetic(
+                    previousDefinition)
+            end)
+
+        return rollbackCallSucceeded and
+               rollbackAccepted == true
+    end
+
+    local function scheduleCharacterSlotVerification(
+        requestId,
+        subsystem,
+        definitionPath,
+        expectedMeshPath,
+        characterName,
+        previousDefinition,
+        previousActiveDefinitionPath,
+        previousActiveMeshPath,
+        previousActiveName)
+
+        local verifyAttempt
+
+        verifyAttempt = function(attempt)
+            ExecuteInGameThreadWithDelay(
+                attempt == 1 and 80 or 140,
+                function()
+                    if worldTransitioning or
+                       worldSettling then
+
+                        rollbackCharacterSlot(
+                            subsystem,
+                            previousDefinition)
+
+                        writeResponse(
+                            requestId,
+                            false,
+                            "A level started loading while Character Loader was applying the CSM. The previous cosmetic was restored.")
+
+                        return
+                    end
+
+                    local verificationCallSucceeded,
+                          verificationSucceeded,
+                          verificationMessage =
+                        pcall(function()
+                            return verifyCharacterSlotMesh(
+                                expectedMeshPath)
+                        end)
+
+                    if verificationCallSucceeded and
+                       verificationSucceeded then
+
+                        if activeCharacterSlotDefinitionPath == nil and
+                           baseCharacterDefinition == nil and
+                           previousDefinition ~= nil and
+                           previousDefinition:IsValid() then
+
+                            baseCharacterDefinition =
+                                previousDefinition
+                        end
+
+                        activeCharacterSlotDefinitionPath =
+                            definitionPath
+
+                        activeCharacterSlotMeshPath =
+                            expectedMeshPath
+
+                        activeCharacterSlotName =
+                            characterName
+
+                        automaticCharlieRefreshEnabled = true
+                        activeCustomMeshApplied = true
+
+                        writeResponse(
+                            requestId,
+                            true,
+                            verificationMessage)
+
+                        return
+                    end
+
+                    if attempt < 7 then
+                        verifyAttempt(
+                            attempt + 1)
+
+                        return
+                    end
+
+                    local rollbackSucceeded =
+                        rollbackCharacterSlot(
+                            subsystem,
+                            previousDefinition)
+
+                    activeCharacterSlotDefinitionPath =
+                        previousActiveDefinitionPath
+
+                    activeCharacterSlotMeshPath =
+                        previousActiveMeshPath
+
+                    activeCharacterSlotName =
+                        previousActiveName
+
+                    writeResponse(
+                        requestId,
+                        false,
+                        tostring(verificationMessage) ..
+                        (rollbackSucceeded
+                            and " The previous cosmetic was restored."
+                            or " The previous cosmetic could not be restored automatically."))
+                end)
+        end
+
+        verifyAttempt(1)
+    end
+
+    local function beginCharacterSlotActivation(
+        requestId,
+        definitionPath,
+        expectedMeshPath,
+        characterName)
+
+        local registrationSucceeded,
+              registrationMessage =
+            registerCharacterSlotDefinition(
+                definitionPath)
+
+        if not registrationSucceeded then
+            writeResponse(
+                requestId,
+                false,
+                registrationMessage)
+
+            return
+        end
+
+        local definition,
+              definitionWasFound,
+              definitionWasLoaded =
+            loadMountedAsset(
+                definitionPath)
+
+        if not definitionWasFound or
+           not definitionWasLoaded or
+           definition == nil or
+           not definition:IsValid() then
+
+            writeResponse(
+                requestId,
+                false,
+                "Character Loader registered the slot, but its PPCD object is still unavailable: " ..
+                definitionPath)
+
+            return
+        end
+
+        local definitionName =
+            definition:GetFullName()
+
+        if string.find(
+                definitionName,
+                "PagodaPlayerCosmeticDefinition",
+                1,
+                true) == nil then
+
+            writeResponse(
+                requestId,
+                false,
+                "The CSM entry point was not a PagodaPlayerCosmeticDefinition: " ..
+                definitionName)
+
+            return
+        end
+
+        local subsystem =
+            findCosmeticSubsystem()
+
+        if subsystem == nil then
+            writeResponse(
+                requestId,
+                false,
+                "No local cosmetic subsystem is ready yet. Limelight will retry when the player appears.")
+
+            return
+        end
+
+        local previousDefinition =
+            getRollbackBodyDefinition(
+                subsystem)
+
+        local previousActiveDefinitionPath =
+            activeCharacterSlotDefinitionPath
+
+        local previousActiveMeshPath =
+            activeCharacterSlotMeshPath
+
+        local previousActiveName =
+            activeCharacterSlotName
+
+        local equipCallSucceeded,
+              equipAccepted =
+            pcall(function()
+                return subsystem:TryEquipCosmetic(
+                    definition)
+            end)
+
+        if not equipCallSucceeded or
+           equipAccepted ~= true then
+
+            writeResponse(
+                requestId,
+                false,
+                equipCallSucceeded
+                    and "Dead as Disco declined the registered CSM cosmetic."
+                    or "Dead as Disco could not equip the registered CSM cosmetic: " ..
+                       tostring(equipAccepted))
+
+            return
+        end
+
+        scheduleCharacterSlotVerification(
+            requestId,
+            subsystem,
+            definitionPath,
+            expectedMeshPath,
+            characterName,
+            previousDefinition,
+            previousActiveDefinitionPath,
+            previousActiveMeshPath,
+            previousActiveName)
+    end
+
+    local function restoreBaseCharacterCosmetic()
+        if activeCharacterSlotDefinitionPath == nil then
+            return true,
+                "No Character Slot cosmetic needed restoring."
+        end
+
+        local subsystem =
+            findCosmeticSubsystem()
+
+        if subsystem == nil then
+            return false,
+                "The local cosmetic subsystem is not ready to restore the previous body type."
+        end
+
+        if baseCharacterDefinition == nil or
+           not baseCharacterDefinition:IsValid() then
+
+            -- I would rather fetch vanilla Charlie's real body definition than
+            -- strand everyone in Oberon's dressing room.
+            baseCharacterDefinition =
+                getDefaultBodyDefinition()
+        end
+
+        if baseCharacterDefinition == nil or
+           not baseCharacterDefinition:IsValid() then
+
+            return false,
+                "Dead as Disco's vanilla Charlie body definition is not loadable yet. Limelight will retry when the world is ready."
+        end
+
+        if not rollbackCharacterSlot(
+                   subsystem,
+                   baseCharacterDefinition) then
+
+            return false,
+                "Dead as Disco could not restore the pre-CSM cosmetic."
+        end
+
+        activeCharacterSlotDefinitionPath = nil
+        activeCharacterSlotMeshPath = nil
+        activeCharacterSlotName = nil
+        baseCharacterDefinition = nil
+
+        return true,
+            "The pre-CSM cosmetic was restored."
+    end
+
+    local function reapplyActivePlayerCharacter()
+        if activeCharacterSlotDefinitionPath == nil then
+            return reapplyCharlie()
+        end
+
+        local definition,
+              definitionWasFound,
+              definitionWasLoaded =
+            loadMountedAsset(
+                activeCharacterSlotDefinitionPath)
+
+        local subsystem =
+            findCosmeticSubsystem()
+
+        if not definitionWasFound or
+           not definitionWasLoaded or
+           definition == nil or
+           not definition:IsValid() or
+           subsystem == nil then
+
+            return false,
+                "The active CSM cosmetic is waiting for the new world."
+        end
+
+        local equipCallSucceeded,
+              equipAccepted =
+            pcall(function()
+                return subsystem:TryEquipCosmetic(
+                    definition)
+            end)
+
+        if not equipCallSucceeded or
+           equipAccepted ~= true then
+
+            return false,
+                "Dead as Disco did not re-equip the active CSM after loading."
+        end
+
+        return verifyCharacterSlotMesh(
+            activeCharacterSlotMeshPath)
     end
 
     local function scanMountFunctions()
@@ -1209,6 +2193,19 @@ namespace Limelight.Services
                     return
                 end
 
+                local cosmeticRestored,
+                      cosmeticRestoreMessage =
+                    restoreBaseCharacterCosmetic()
+
+                if not cosmeticRestored then
+                    writeResponse(
+                        requestId,
+                        false,
+                        cosmeticRestoreMessage)
+
+                    return
+                end
+
                 local callSucceeded,
                       reapplySucceeded,
                       reapplyMessage =
@@ -1229,6 +2226,60 @@ namespace Limelight.Services
                         requestId,
                         reapplySucceeded,
                         reapplyMessage)
+                end
+            end)
+        elseif action == "activate_character_slot" then
+            ExecuteInGameThread(function()
+                if worldTransitioning or worldSettling then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "A level is still loading. Limelight will retry once the new world is ready.")
+
+                    return
+                end
+
+                local definitionPath =
+                    command.definitionPath
+
+                local expectedMeshPath =
+                    command.meshPath
+
+                local characterName =
+                    command.characterName
+
+                if definitionPath == nil or
+                   expectedMeshPath == nil or
+                   characterName == nil or
+                   string.sub(definitionPath, 1, 6) ~= "/Game/" or
+                   string.sub(expectedMeshPath, 1, 6) ~= "/Game/" or
+                   string.find(definitionPath, ".", 1, true) == nil or
+                   string.find(expectedMeshPath, ".", 1, true) == nil then
+
+                    writeResponse(
+                        requestId,
+                        false,
+                        "The Character Slot PPCD or mesh path was invalid.")
+
+                    return
+                end
+
+                local activationCallSucceeded,
+                      activationError =
+                    pcall(function()
+                        beginCharacterSlotActivation(
+                            requestId,
+                            definitionPath,
+                            expectedMeshPath,
+                            characterName)
+                    end)
+
+                if not activationCallSucceeded then
+                    writeResponse(
+                        requestId,
+                        false,
+                        "Character Slot activation failed: " ..
+                        tostring(activationError))
                 end
             end)
         elseif action == "remember_active_assets" then
@@ -1339,7 +2390,7 @@ namespace Limelight.Services
                 local reapplyCallSucceeded,
                       refreshSucceeded,
                       refreshMessage =
-                    pcall(reapplyCharlie)
+                    pcall(reapplyActivePlayerCharacter)
 
                 if assetReloadCallSucceeded and
                    assetsReloaded and
@@ -1534,6 +2585,8 @@ namespace Limelight.Services
         return false
     end)
 
+    initialiseCharacterSlotCatalogue()
+
     print("[LimelightBridge] Runtime bridge online\n")
     """;
 
@@ -1658,8 +2711,16 @@ namespace Limelight.Services
 
             try
             {
-                return File.ReadLines(modsTextPath)
-                    .Any(IsEnabledBridgeLine);
+                string installedScript =
+                    File.ReadAllText(
+                        scriptPath);
+
+                return string.Equals(
+                           installedScript,
+                           BridgeScript,
+                           StringComparison.Ordinal) &&
+                       File.ReadLines(modsTextPath)
+                           .Any(IsEnabledBridgeLine);
             }
             catch
             {

@@ -69,6 +69,8 @@ namespace Limelight
 
         private readonly SettingsService _settingsService;
         private readonly ModLibraryService _modLibraryService;
+        private readonly CharacterSlotModService _characterSlotModService;
+        private readonly CharacterSlotLoaderService _characterSlotLoaderService;
         private readonly AppSettings _settings;
         private readonly ModDeploymentService _modDeploymentService;
         private readonly ExistingModsMigrationService _existingModsMigrationService;
@@ -124,6 +126,9 @@ namespace Limelight
         private bool _isApplyingPendingDeployment;
         private bool _pendingDeploymentAttempted;
         private int _nextLiveMountOrder = 1000;
+        private readonly Dictionary<string, string>
+            _characterSlotFingerprintsForSession =
+                new(StringComparer.OrdinalIgnoreCase);
         private int _notificationSequence;
         private readonly List<TutorialStep> _tutorialSteps =
             new List<TutorialStep>();
@@ -150,6 +155,12 @@ namespace Limelight
 
             _modLibraryService =
                 new ModLibraryService();
+
+            _characterSlotModService =
+                new CharacterSlotModService();
+
+            _characterSlotLoaderService =
+                new CharacterSlotLoaderService();
 
             _modDeploymentService =
                 new ModDeploymentService();
@@ -232,6 +243,40 @@ namespace Limelight
 
             _settings.X19LoaderProfileIds ??=
                 new List<string>();
+
+            bool characterSlotMetadataChanged =
+                false;
+
+            foreach (InstalledMod installedMod in
+                     _settings.InstalledMods)
+            {
+                characterSlotMetadataChanged |=
+                    _characterSlotModService.RefreshMetadata(
+                        installedMod);
+            }
+
+            InstalledMod? firstCharacterSlotMod =
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    mod.IsCharacterSlotMod &&
+                    Directory.Exists(mod.InstallDirectory));
+
+            bool characterSlotCatalogueFlagChanged =
+                firstCharacterSlotMod is not null &&
+                !_settings.CharacterSlotCatalogueNeedsSynchronization;
+
+            if (firstCharacterSlotMod is not null)
+            {
+                // I queue one tidy catalogue pass on startup. It also repairs
+                // folders left by builds that only invited the active slot.
+                _settings.CharacterSlotCatalogueNeedsSynchronization =
+                    true;
+            }
+
+            if (characterSlotMetadataChanged ||
+                characterSlotCatalogueFlagChanged)
+            {
+                _settingsService.Save(_settings);
+            }
 
             _discordPresenceService =
                 new DiscordPresenceService();
@@ -1609,6 +1654,7 @@ namespace Limelight
 
                 _hasInitialisedCurrentGameSession = false;
                 _nextLiveMountOrder = 1000;
+                _characterSlotFingerprintsForSession.Clear();
 
                 string gameDirectory =
                     _gameDirectory!;
@@ -1881,7 +1927,7 @@ namespace Limelight
 
                 if (activeMod is not null)
                 {
-                    await ActivateLiveModAsync(
+                    await ActivateDeployedLiveModAsync(
                         activeMod,
                         gameDirectory,
                         (phase, progress) =>
@@ -2127,13 +2173,52 @@ namespace Limelight
                 statusBrush;
         }
 
+        private List<InstalledMod> GetCharacterSlotCatalogue(
+            string? excludedModId = null)
+        {
+            return _settings.InstalledMods
+                .Where(mod =>
+                    mod.IsCharacterSlotMod &&
+                    Directory.Exists(mod.InstallDirectory) &&
+                    !string.Equals(
+                        mod.Id,
+                        excludedModId,
+                        StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        private void SynchronizeModDeployment(
+            InstalledMod? activeMod,
+            IReadOnlyCollection<InstalledMod> characterSlotCatalogue,
+            string gameDirectory)
+        {
+            if (activeMod is null)
+            {
+                _modDeploymentService.Deactivate(
+                    characterSlotCatalogue,
+                    gameDirectory);
+            }
+            else
+            {
+                _modDeploymentService.Activate(
+                    activeMod,
+                    characterSlotCatalogue,
+                    gameDirectory);
+            }
+
+            _characterSlotLoaderService.SynchronizeRuntimeCatalogue(
+                characterSlotCatalogue,
+                gameDirectory);
+        }
+
         private async Task ApplyPendingDeploymentIfPossible()
         {
             if (_isApplyingPendingDeployment ||
                 _isLiveModChangeRunning ||
                 _pendingDeploymentAttempted ||
-                string.IsNullOrWhiteSpace(
-                    _settings.PendingDeploymentModId) ||
+                (string.IsNullOrWhiteSpace(
+                     _settings.PendingDeploymentModId) &&
+                 !_settings.CharacterSlotCatalogueNeedsSynchronization) ||
                 string.IsNullOrWhiteSpace(
                     _gameDirectory) ||
                 _gameProcessService.IsGameRunning(
@@ -2149,16 +2234,36 @@ namespace Limelight
                         _settings.PendingDeploymentModId,
                         StringComparison.OrdinalIgnoreCase));
 
-            if (pendingMod == null ||
-                !Directory.Exists(
-                    pendingMod.InstallDirectory))
+            bool pendingModWasRequested =
+                !string.IsNullOrWhiteSpace(
+                    _settings.PendingDeploymentModId);
+
+            if (pendingModWasRequested &&
+                (pendingMod == null ||
+                 !Directory.Exists(
+                     pendingMod.InstallDirectory)))
             {
                 _settings.PendingDeploymentModId =
                     string.Empty;
 
                 _settingsService.Save(_settings);
-                return;
+
+                if (!_settings.CharacterSlotCatalogueNeedsSynchronization)
+                {
+                    return;
+                }
+
+                pendingMod = null;
             }
+
+            InstalledMod? activeMod =
+                pendingMod ??
+                _settings.InstalledMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        _settings.ActiveModId,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    Directory.Exists(mod.InstallDirectory));
 
             _isApplyingPendingDeployment = true;
             _pendingDeploymentAttempted = true;
@@ -2168,20 +2273,27 @@ namespace Limelight
                 string gameDirectory =
                     _gameDirectory;
 
+                List<InstalledMod> characterSlotCatalogue =
+                    GetCharacterSlotCatalogue();
+
                 await Task.Run(() =>
-                    _modDeploymentService.Activate(
-                        pendingMod,
+                    SynchronizeModDeployment(
+                        activeMod,
+                        characterSlotCatalogue,
                         gameDirectory));
 
                 _settings.PendingDeploymentModId =
                     string.Empty;
 
+                _settings.CharacterSlotCatalogueNeedsSynchronization =
+                    false;
+
                 _settingsService.Save(_settings);
             }
             catch
             {
-                // Keep the pending ID. Limelight can try again the next time
-                // it opens while the game is fully closed.
+                // I keep both notes. Limelight can try again the next time it
+                // opens while the game is fully closed and feeling cooperative.
             }
             finally
             {
@@ -2663,12 +2775,197 @@ namespace Limelight
             }
         }
 
+        private async Task ActivateDeployedLiveModAsync(
+            InstalledMod mod,
+            string gameDirectory,
+            Action<string, int>? reportProgress = null,
+            bool allowDeferredCharlieRefresh = false)
+        {
+            reportProgress?.Invoke(
+                "READING THE DEPLOYED MODEL",
+                35);
+
+            if (mod.IsCharacterSlotMod)
+            {
+                _characterSlotLoaderService.EnsureInstalled(
+                    gameDirectory);
+            }
+
+            List<ModAssetPackage> livePackages =
+                await GetLivePackagesAsync(mod);
+
+            if (livePackages.Count == 0)
+            {
+                throw new InvalidDataException(
+                    "The active mod does not contain any assets Limelight can refresh.");
+            }
+
+            bool hasCharlieReplacement =
+                livePackages.Any(package =>
+                    package.IsCharlieMesh);
+
+            if (!hasCharlieReplacement &&
+                !mod.IsCharacterSlotMod)
+            {
+                throw new InvalidDataException(
+                    "The active mod neither replaces SK_Charlie nor contains a complete Character Slot model.");
+            }
+
+            string generationId =
+                _liveSessionService.BeginActivation(
+                    mod,
+                    gameDirectory);
+
+            try
+            {
+                await EnsureLiveWorldStableAsync();
+
+                reportProgress?.Invoke(
+                    "LINKING THE DEPLOYED MODEL",
+                    68);
+
+                LiveLoaderCommandResult rememberResult =
+                    await _liveLoaderCommandService.RememberActiveAssetsAsync(
+                        livePackages.Select(package =>
+                            package.ObjectPath));
+
+                if (!rememberResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        rememberResult.Message);
+                }
+
+                // The active model was already mounted by Unreal from ~mods at
+                // process startup. Mounting a duplicate live container races the
+                // initial Asset Registry and caused startup-only verification
+                // failures. Prime the existing packages instead.
+                LiveLoaderCommandResult preloadResult =
+                    await _liveLoaderCommandService.ReloadAssetsAsync(
+                        livePackages.Select(package =>
+                            package.ObjectPath));
+
+                if (!preloadResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        preloadResult.Message);
+                }
+
+                int[] retryDelaysMilliseconds =
+                {
+                    0,
+                    180,
+                    320,
+                    550,
+                    850,
+                    1250,
+                    1800
+                };
+
+                LiveLoaderCommandResult reapplyResult =
+                    new LiveLoaderCommandResult
+                    {
+                        Success = false,
+                        Message = "The deployed player model is not ready yet."
+                    };
+
+                bool deferredCharlieRefresh = false;
+
+                foreach (int delayMilliseconds in
+                         retryDelaysMilliseconds)
+                {
+                    if (delayMilliseconds > 0)
+                    {
+                        await Task.Delay(
+                            delayMilliseconds);
+                    }
+
+                    await EnsureLiveWorldStableAsync();
+
+                    reapplyResult =
+                        await ReapplySelectedPlayerMeshAsync(
+                            mod);
+
+                    if (reapplyResult.Success)
+                    {
+                        break;
+                    }
+
+                    bool playerHasNotAppeared =
+                        reapplyResult.Message.Contains(
+                            "No active Charlie pawn",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        reapplyResult.Message.Contains(
+                            "No local cosmetic subsystem is ready",
+                            StringComparison.OrdinalIgnoreCase);
+
+                    if (allowDeferredCharlieRefresh &&
+                        playerHasNotAppeared)
+                    {
+                        deferredCharlieRefresh = true;
+                        break;
+                    }
+                }
+
+                if (!reapplyResult.Success &&
+                    !deferredCharlieRefresh)
+                {
+                    throw new InvalidOperationException(
+                        reapplyResult.Message);
+                }
+
+                reportProgress?.Invoke(
+                    deferredCharlieRefresh
+                        ? "READY: MODEL WILL APPEAR WITH CHARLIE"
+                        : "DEPLOYED MODEL READY",
+                    96);
+
+                _liveSessionService.CompleteActivation(
+                    mod,
+                    generationId);
+
+                RememberCharacterSlotForSession(
+                    mod);
+            }
+            catch (Exception exception)
+            {
+                _liveSessionService.FailActivation(
+                    exception);
+
+                throw;
+            }
+        }
+
         private async Task ActivateLiveModAsync(
             InstalledMod mod,
             string gameDirectory,
             Action<string, int>? reportProgress = null,
             bool allowDeferredCharlieRefresh = false)
         {
+            if (mod.IsCharacterSlotMod)
+            {
+                _characterSlotLoaderService.EnsureInstalled(
+                    gameDirectory);
+
+                if (TryGetCharacterSlotSessionState(
+                        mod,
+                        out bool canReuseMountedSlot))
+                {
+                    if (!canReuseMountedSlot)
+                    {
+                        throw new InvalidOperationException(
+                            "This Character Slot package changed while Dead as Disco was running. " +
+                            "Restart the game before loading the updated files so Unreal cannot confuse them with the previous package generation.");
+                    }
+
+                    await ReactivateMountedCharacterSlotAsync(
+                        mod,
+                        gameDirectory,
+                        reportProgress);
+
+                    return;
+                }
+            }
+
             int upcomingContainerCount =
                 _liveModStagingService.CountContainers(
                     mod);
@@ -2700,8 +2997,11 @@ namespace Limelight
 
             string generationId =
                 _liveSessionService.BeginActivation(
-                mod,
-                gameDirectory);
+                    mod,
+                    gameDirectory);
+
+            bool packagesWereRetired = false;
+            bool registeredMountedAssets = false;
 
             try
             {
@@ -2718,11 +3018,15 @@ namespace Limelight
                         "This mod does not contain any assets Limelight can safely refresh live.");
                 }
 
-                if (!livePackages.Any(package =>
-                        package.IsCharlieMesh))
+                bool hasCharlieReplacement =
+                    livePackages.Any(package =>
+                        package.IsCharlieMesh);
+
+                if (!hasCharlieReplacement &&
+                    !mod.IsCharacterSlotMod)
                 {
                     throw new InvalidDataException(
-                        "This mod does not replace SK_Charlie, so Limelight will not live-mount it automatically.");
+                        "This mod neither replaces SK_Charlie nor contains a complete Character Slot Loader model, so Limelight cannot live-mount it automatically.");
                 }
 
                 reportProgress?.Invoke(
@@ -2802,15 +3106,56 @@ namespace Limelight
                         rememberAssetsResult.Message);
                 }
 
-                LiveLoaderCommandResult releaseResult =
-                    await _liveLoaderCommandService.ReleasePackagesAsync(
-                        livePackages.Select(package =>
-                            package.PackagePath));
-
-                if (!releaseResult.Success)
+                if (!mod.IsCharacterSlotMod)
                 {
-                    throw new InvalidOperationException(
-                        releaseResult.Message);
+                    // I let the native bridge root and rename the old packages,
+                    // so Charlie keeps their clothes on while the next act loads.
+                    LiveLoaderCommandResult releaseResult =
+                        await _liveLoaderCommandService.ReleasePackagesAsync(
+                            livePackages.Select(package =>
+                                package.PackagePath));
+
+                    if (!releaseResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            releaseResult.Message);
+                    }
+
+                    packagesWereRetired = true;
+                }
+                else
+                {
+                    reportProgress?.Invoke(
+                        "REGISTERING CHARACTER SLOT CONTENT",
+                        76);
+
+                    List<string> slotObjectPaths =
+                        livePackages
+                            .Select(package =>
+                                package.ObjectPath)
+                            .Distinct(
+                                StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
+                    // I register the whole CSM container. Oberon quietly borrows
+                    // animation and skeleton packages from another slot folder,
+                    // and pretending not to notice was not especially helpful.
+
+                    LiveLoaderCommandResult registrationResult =
+                        await _liveLoaderCommandService
+                            .RegisterMountedAssetsAsync(
+                                slotObjectPaths);
+
+                    registeredMountedAssets = true;
+
+                    if (!registrationResult.Success)
+                    {
+                        // I let the official loader own the PPCD load. Native
+                        // preloading does not get to boo it offstage beforehand.
+                        reportProgress?.Invoke(
+                            "HANDING CSM CONTENT TO CHARACTER LOADER",
+                            78);
+                    }
                 }
 
                 reportProgress?.Invoke(
@@ -2833,11 +3178,21 @@ namespace Limelight
                                 ModAssetKind.SkeletalMesh)
                         .ToList();
 
+                if (meshPackages.Count == 0)
+                {
+                    throw new InvalidDataException(
+                        "The selected mod did not expose a loadable skeletal mesh package.");
+                }
+
                 LiveLoaderCommandResult dependencyReloadResult =
-                    dependencyPackages.Count == 0
+                    dependencyPackages.Count == 0 ||
+                    mod.IsCharacterSlotMod
                         ? new LiveLoaderCommandResult
                         {
-                            Success = true
+                            Success = true,
+                            Message = mod.IsCharacterSlotMod
+                                ? "Character Loader owns the PPCD dependencies."
+                                : string.Empty
                         }
                         : await _liveLoaderCommandService.ReloadAssetsAsync(
                             dependencyPackages.Select(package =>
@@ -2850,9 +3205,16 @@ namespace Limelight
                 }
 
                 LiveLoaderCommandResult meshReloadResult =
-                    await _liveLoaderCommandService.ReloadAssetsAsync(
-                        meshPackages.Select(package =>
-                            package.ObjectPath));
+                    mod.IsCharacterSlotMod
+                        ? new LiveLoaderCommandResult
+                        {
+                            Success = true,
+                            Message =
+                                "Character Loader will resolve the PPCD mesh."
+                        }
+                        : await _liveLoaderCommandService.ReloadAssetsAsync(
+                            meshPackages.Select(package =>
+                                package.ObjectPath));
 
                 if (!meshReloadResult.Success)
                 {
@@ -2860,7 +3222,8 @@ namespace Limelight
                         meshReloadResult.Message);
                 }
 
-                if (dependencyPackages.Count > 0)
+                if (dependencyPackages.Count > 0 &&
+                    !mod.IsCharacterSlotMod)
                 {
                     // Some material dependencies do not become loadable until
                     // the replacement mesh has opened its package. A short
@@ -2883,11 +3246,13 @@ namespace Limelight
                 }
 
                 List<ModAssetPackage> renderedDependencies =
-                    dependencyPackages
-                        .Where(package =>
-                            package.Kind == ModAssetKind.Texture ||
-                            package.Kind == ModAssetKind.Material)
-                        .ToList();
+                    mod.IsCharacterSlotMod
+                        ? new List<ModAssetPackage>()
+                        : dependencyPackages
+                            .Where(package =>
+                                package.Kind == ModAssetKind.Texture ||
+                                package.Kind == ModAssetKind.Material)
+                            .ToList();
 
                 int[] retryDelaysMilliseconds =
                 {
@@ -2933,7 +3298,8 @@ namespace Limelight
                     if (dependencyVerificationResult.Success)
                     {
                         reapplyResult =
-                            await _liveLoaderCommandService.ReapplyCharlieAsync();
+                            await ReapplySelectedPlayerMeshAsync(
+                                mod);
 
                         if (reapplyResult.Success)
                         {
@@ -2943,6 +3309,9 @@ namespace Limelight
                         bool playerHasNotAppeared =
                             reapplyResult.Message.Contains(
                                 "No active Charlie pawn",
+                                StringComparison.OrdinalIgnoreCase) ||
+                            reapplyResult.Message.Contains(
+                                "No local cosmetic subsystem is ready",
                                 StringComparison.OrdinalIgnoreCase);
 
                         if (allowDeferredCharlieRefresh &&
@@ -2972,7 +3341,8 @@ namespace Limelight
                         retryDelaysMilliseconds[attempt]);
                 }
 
-                if (reapplyResult.Success)
+                if (reapplyResult.Success &&
+                    packagesWereRetired)
                 {
                     if (!deferredCharlieRefresh &&
                         renderedDependencies.Count > 0)
@@ -3047,15 +3417,123 @@ namespace Limelight
                 _liveSessionService.CompleteActivation(
                     mod,
                     generationId);
+
+                RememberCharacterSlotForSession(
+                    mod);
             }
             catch (Exception exception)
             {
+                if (registeredMountedAssets)
+                {
+                    try
+                    {
+                        await _liveLoaderCommandService
+                            .ReleaseRegisteredAssetsAsync();
+                    }
+                    catch
+                    {
+                        // I keep the original activation error in the spotlight.
+                        // The native bridge can tidy these temporary roots when
+                        // the game closes if this cleanup decides to sulk.
+                    }
+                }
+
                 // Anything Unreal already mounted stays recorded for the guarded
                 // retirement path. Files which never mounted are safe to remove now.
                 _liveSessionService.DeleteUncommittedGenerationFiles(
                     generationId,
                     gameDirectory);
 
+                _liveSessionService.FailActivation(
+                    exception);
+
+                throw;
+            }
+        }
+
+        private bool TryGetCharacterSlotSessionState(
+            InstalledMod mod,
+            out bool canReuseMountedSlot)
+        {
+            canReuseMountedSlot = false;
+
+            if (!mod.IsCharacterSlotMod ||
+                !_characterSlotFingerprintsForSession.TryGetValue(
+                    mod.CharacterSlotDefinitionPackagePath,
+                    out string? mountedFingerprint))
+            {
+                return false;
+            }
+
+            canReuseMountedSlot =
+                string.Equals(
+                    mountedFingerprint,
+                    GetCharacterSlotSessionFingerprint(mod),
+                    StringComparison.OrdinalIgnoreCase);
+
+            return true;
+        }
+
+        private void RememberCharacterSlotForSession(
+            InstalledMod mod)
+        {
+            if (!mod.IsCharacterSlotMod)
+            {
+                return;
+            }
+
+            _characterSlotFingerprintsForSession[
+                mod.CharacterSlotDefinitionPackagePath] =
+                    GetCharacterSlotSessionFingerprint(mod);
+        }
+
+        private static string GetCharacterSlotSessionFingerprint(
+            InstalledMod mod)
+        {
+            return string.IsNullOrWhiteSpace(
+                       mod.ContentFingerprint)
+                ? mod.Id
+                : mod.ContentFingerprint.Trim();
+        }
+
+        private async Task ReactivateMountedCharacterSlotAsync(
+            InstalledMod mod,
+            string gameDirectory,
+            Action<string, int>? reportProgress)
+        {
+            string generationId =
+                _liveSessionService.BeginActivation(
+                    mod,
+                    gameDirectory);
+
+            try
+            {
+                reportProgress?.Invoke(
+                    "REUSING REGISTERED CHARACTER SLOT",
+                    72);
+
+                await EnsureLiveWorldStableAsync();
+
+                LiveLoaderCommandResult activationResult =
+                    await ReapplySelectedPlayerMeshAsync(
+                        mod);
+
+                if (!activationResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        activationResult.Message);
+                }
+
+                reportProgress?.Invoke(
+                    "CHARACTER SLOT READY",
+                    100);
+
+                _liveSessionService.CompleteActivation(
+                    mod,
+                    generationId);
+            }
+            catch (Exception exception)
+            {
                 _liveSessionService.FailActivation(
                     exception);
 
@@ -3074,6 +3552,18 @@ namespace Limelight
                 throw new InvalidOperationException(
                     result.Message);
             }
+        }
+
+        private Task<LiveLoaderCommandResult>
+            ReapplySelectedPlayerMeshAsync(
+                InstalledMod mod)
+        {
+            return mod.IsCharacterSlotMod
+                ? _liveLoaderCommandService.ActivateCharacterSlotAsync(
+                    mod.CharacterSlotDefinitionObjectPath,
+                    mod.CharacterSlotMeshObjectPath,
+                    mod.CharacterSlotName)
+                : _liveLoaderCommandService.ReapplyCharlieAsync();
         }
 
         private List<InstalledMod> GetX19Rotation()
@@ -3383,8 +3873,13 @@ namespace Limelight
             {
                 if (isCurrentlyActive)
                 {
+                    List<InstalledMod> characterSlotCatalogue =
+                        GetCharacterSlotCatalogue();
+
                     await Task.Run(() =>
-                        _modDeploymentService.Deactivate(
+                        SynchronizeModDeployment(
+                            activeMod: null,
+                            characterSlotCatalogue,
                             gameDirectory));
 
                     _settings.ActiveModId =
@@ -3392,6 +3887,9 @@ namespace Limelight
 
                     _settings.PendingDeploymentModId =
                         string.Empty;
+
+                    _settings.CharacterSlotCatalogueNeedsSynchronization =
+                        false;
                 }
                 else if (isGameRunning)
                 {
@@ -3513,9 +4011,13 @@ namespace Limelight
                 }
                 else
                 {
+                    List<InstalledMod> characterSlotCatalogue =
+                        GetCharacterSlotCatalogue();
+
                     await Task.Run(() =>
-                        _modDeploymentService.Activate(
+                        SynchronizeModDeployment(
                             selectedMod,
+                            characterSlotCatalogue,
                             gameDirectory));
 
                     _settings.ActiveModId =
@@ -3523,6 +4025,9 @@ namespace Limelight
 
                     _settings.PendingDeploymentModId =
                         string.Empty;
+
+                    _settings.CharacterSlotCatalogueNeedsSynchronization =
+                        false;
                 }
 
                 _settingsService.Save(
@@ -3540,7 +4045,9 @@ namespace Limelight
                         ? $"{selectedMod.DisplayName} is no longer active."
                         : isGameRunning
                             ? $"{selectedMod.DisplayName} is now active live."
-                            : $"{selectedMod.DisplayName} is active and ready for the next launch.";
+                            : selectedMod.IsCharacterSlotMod
+                                ? $"{selectedMod.DisplayName} is ready for Limelight's Live Loader. Its Character Slot files were also kept together for the in-game Locker."
+                                : $"{selectedMod.DisplayName} is active and ready for the next launch.";
 
                 if (isGameRunning &&
                     x19PulseWindow is not null)
@@ -3975,14 +4482,22 @@ namespace Limelight
                     selectedMod.Id,
                     StringComparison.OrdinalIgnoreCase);
 
-            if (isCurrentlyActive &&
+            bool isGameRunning =
                 !string.IsNullOrWhiteSpace(_gameDirectory) &&
                 _gameProcessService.IsGameRunning(
-                    _gameDirectory))
+                    _gameDirectory);
+
+            if ((isCurrentlyActive ||
+                 selectedMod.IsCharacterSlotMod) &&
+                isGameRunning)
             {
                 ShowLimelightDialog(
-                    "ACTIVE MOD IS IN USE",
-                    "Close Dead as Disco before removing the active mod from Limelight.",
+                    selectedMod.IsCharacterSlotMod
+                        ? "CHARACTER SLOT IS IN USE"
+                        : "ACTIVE MOD IS IN USE",
+                    selectedMod.IsCharacterSlotMod
+                        ? "Close Dead as Disco before removing this Character Slot. Unreal loaded its catalogue files when the game started."
+                        : "Close Dead as Disco before removing the active mod from Limelight.",
                     LimelightDialogTone.Warning,
                     eyebrow: "REMOVE BLOCKED");
 
@@ -3991,8 +4506,47 @@ namespace Limelight
 
             try
             {
-                // Deactivate first so removing an active library copy never
-                // leaves its managed packages inside the game directory.
+                InstalledMod? activeModAfterRemoval =
+                    isCurrentlyActive
+                        ? null
+                        : _settings.InstalledMods.FirstOrDefault(mod =>
+                            string.Equals(
+                                mod.Id,
+                                _settings.ActiveModId,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(
+                                mod.Id,
+                                selectedMod.Id,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            Directory.Exists(mod.InstallDirectory));
+
+                List<InstalledMod> characterSlotCatalogue =
+                    GetCharacterSlotCatalogue(
+                        selectedMod.Id);
+
+                if (!string.IsNullOrWhiteSpace(_gameDirectory) &&
+                    !isGameRunning)
+                {
+                    string gameDirectory =
+                        _gameDirectory;
+
+                    // I update ~mods before deleting the library copy. That
+                    // gives the departing slot a clean exit and keeps its cast.
+                    await Task.Run(() =>
+                        SynchronizeModDeployment(
+                            activeModAfterRemoval,
+                            characterSlotCatalogue,
+                            gameDirectory));
+
+                    _settings.CharacterSlotCatalogueNeedsSynchronization =
+                        false;
+                }
+                else if (selectedMod.IsCharacterSlotMod)
+                {
+                    _settings.CharacterSlotCatalogueNeedsSynchronization =
+                        true;
+                }
+
                 if (isCurrentlyActive)
                 {
                     if (string.IsNullOrWhiteSpace(_gameDirectory))
@@ -4000,13 +4554,6 @@ namespace Limelight
                         throw new InvalidOperationException(
                             "Reconnect the game before removing the active mod.");
                     }
-
-                    string gameDirectory =
-                        _gameDirectory;
-
-                    await Task.Run(() =>
-                        _modDeploymentService.Deactivate(
-                            gameDirectory));
 
                     _settings.ActiveModId =
                         string.Empty;
@@ -5932,6 +6479,10 @@ namespace Limelight
 
                     _modDeploymentService.PurgeAllMods(
                         gameDirectory);
+
+                    _characterSlotLoaderService.SynchronizeRuntimeCatalogue(
+                        Array.Empty<InstalledMod>(),
+                        gameDirectory);
                 });
 
                 _settings.ActiveModId =
@@ -5939,6 +6490,9 @@ namespace Limelight
 
                 _settings.PendingDeploymentModId =
                     string.Empty;
+
+                _settings.CharacterSlotCatalogueNeedsSynchronization =
+                    false;
 
                 _settingsService.Save(_settings);
 
@@ -6986,7 +7540,23 @@ namespace Limelight
                 _settings.InstalledMods.Add(
                     installedMod);
 
+                if (installedMod.IsCharacterSlotMod)
+                {
+                    // I add every imported slot to the next catalogue pass so
+                    // the Locker sees the whole cast, not only today's lead.
+                    _settings.CharacterSlotCatalogueNeedsSynchronization =
+                        true;
+
+                    _pendingDeploymentAttempted =
+                        false;
+                }
+
                 _settingsService.Save(_settings);
+
+                if (installedMod.IsCharacterSlotMod)
+                {
+                    await ApplyPendingDeploymentIfPossible();
+                }
 
                 RefreshLibrarySummary();
 
@@ -6997,8 +7567,14 @@ namespace Limelight
                     details:
                         $"Package files: {installedMod.PackageFiles.Count}\n" +
                         $"Assets detected: {installedMod.AssetPackages.Count}\n" +
-                        "Live-refreshable: " +
-                        $"{installedMod.AssetPackages.Count(package => package.IsSafeForLiveReload)}",
+                        (installedMod.IsCharacterSlotMod
+                            ? $"Format: Character Slot Loader ({installedMod.CharacterSlotName})\n" +
+                              $"Live mesh: {installedMod.CharacterSlotMeshPackagePath}\n" +
+                              (_settings.CharacterSlotCatalogueNeedsSynchronization
+                                  ? "Locker slot: ready on the next game launch"
+                                  : "Locker slot: added to the appearance catalogue")
+                            : "Live-refreshable: " +
+                              $"{installedMod.AssetPackages.Count(package => package.IsSafeForLiveReload)}"),
                     eyebrow: "READY FOR THE SPOTLIGHT");
             }
             catch (Exception exception)

@@ -6,6 +6,9 @@ Dead as Disco themed Windows application.
 ## Highlights
 
 - Import supported mod ZIP, RAR, and 7Z files through the file picker or drag and drop.
+- Detect Character Slot Loader packages, preserve their `info.json` and folder layout,
+  and switch their PPCD cosmetics through Normal Live Loader or X19 when the separate
+  official Character Loader Logic Mod is installed.
 - Keep a named character library with duplicate-content protection.
 - Switch supported models, materials, textures, portraits, and localisation
   assets while Dead as Disco is running.
