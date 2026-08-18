@@ -337,7 +337,7 @@
                                                Foreground="{StaticResource PinkBrush}"/>
 
                                     <TextBlock x:Name="DiscordPresenceDetailText"
-                                               Text="Enable this to share Limelight, game, active-mod, and X19 activity on your Discord profile."
+                                               Text="Enable this to share Limelight, game, active-mod, X19, and multiplayer activity on your Discord profile."
                                                Margin="0,7,24,0"
                                                MaxWidth="720"
                                                FontSize="12"

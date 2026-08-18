@@ -476,6 +476,40 @@
                             </StackPanel>
                         </Border>
 
+                        <Border x:Name="MultiplayerNavigation"
+                            Style="{StaticResource SidebarNavigationItemStyle}"
+                            Margin="8,3"
+                            Background="Transparent"
+                            CornerRadius="8"
+                            BorderBrush="Transparent"
+                            BorderThickness="3,0,0,0"
+                            MouseLeftButtonDown="ShowMultiplayer_Click"
+                            MouseEnter="Navigation_MouseEnter"
+                            MouseLeave="Navigation_MouseLeave"
+                            Cursor="Hand">
+
+                            <StackPanel Margin="16,13"
+                                        Orientation="Horizontal">
+
+                                <TextBlock x:Name="MultiplayerNavigationIcon"
+                                           Text="◇"
+                                           Width="26"
+                                           FontSize="13"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                <TextBlock x:Name="MultiplayerNavigationText"
+                                           Text="Multiplayer"
+                                           FontSize="14"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+
+                                <TextBlock Text="  EXP"
+                                           VerticalAlignment="Center"
+                                           FontSize="8"
+                                           FontWeight="Bold"
+                                           Foreground="#FFD477"/>
+                            </StackPanel>
+                        </Border>
+
                         <Border x:Name="BrowseNexusNavigation"
                             Style="{StaticResource SidebarNavigationItemStyle}"
                             Margin="8,3"
@@ -942,6 +976,12 @@
 
             <!-- Loader modes and the X19 rotation share one focused workspace. -->
             <views:LiveLoadersPage x:Name="LiveLoadersPageControl"
+                                   Style="{StaticResource PageTransitionStyle}"
+                                   Grid.Column="1"
+                                   Visibility="Collapsed"/>
+
+            <!-- Experimental online co-op owns its payload and relay separately from Live Loader modes. -->
+            <views:MultiplayerPage x:Name="MultiplayerPageControl"
                                    Style="{StaticResource PageTransitionStyle}"
                                    Grid.Column="1"
                                    Visibility="Collapsed"/>

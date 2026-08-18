@@ -43,4 +43,18 @@
     <EmbeddedResource Include="Payloads\NativeBridge\bridge-manifest.json" LogicalName="Limelight.Payloads.NativeBridge.bridge-manifest.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Payloads\Multiplayer\host.lua" />
+    <None Remove="Payloads\Multiplayer\client.lua" />
+    <None Remove="Payloads\Multiplayer\LimelightMPNative.dll" />
+    <None Remove="Payloads\Multiplayer\LimelightMPRelay.exe" />
+    <None Remove="Payloads\Multiplayer\multiplayer-manifest.json" />
+
+    <EmbeddedResource Include="Payloads\Multiplayer\host.lua" LogicalName="Limelight.Payloads.Multiplayer.host.lua" />
+    <EmbeddedResource Include="Payloads\Multiplayer\client.lua" LogicalName="Limelight.Payloads.Multiplayer.client.lua" />
+    <EmbeddedResource Include="Payloads\Multiplayer\LimelightMPNative.dll" LogicalName="Limelight.Payloads.Multiplayer.LimelightMPNative.dll" />
+    <EmbeddedResource Include="Payloads\Multiplayer\LimelightMPRelay.exe" LogicalName="Limelight.Payloads.Multiplayer.LimelightMPRelay.exe" />
+    <EmbeddedResource Include="Payloads\Multiplayer\multiplayer-manifest.json" LogicalName="Limelight.Payloads.Multiplayer.multiplayer-manifest.json" />
+  </ItemGroup>
+
 </Project>

@@ -1,5 +1,6 @@
 using DiscordRPC;
 using DiscordRPC.Logging;
+using Limelight.Models;
 
 namespace Limelight.Services
 {
@@ -43,7 +44,8 @@ namespace Limelight.Services
             string navigationLabel,
             string? activeModName,
             string loaderMode,
-            string? switchingToModName)
+            string? switchingToModName,
+            MultiplayerRole multiplayerRole)
         {
             if (!IsEnabled)
             {
@@ -68,7 +70,8 @@ namespace Limelight.Services
                 CreateDetails(
                     isGameRunning,
                     isSwitching,
-                    navigationLabel);
+                    navigationLabel,
+                    multiplayerRole);
 
             string state =
                 CreateState(
@@ -76,7 +79,8 @@ namespace Limelight.Services
                     isSwitching,
                     activeModName,
                     loaderMode,
-                    switchingToModName);
+                    switchingToModName,
+                    multiplayerRole);
 
             DateTime startedUtc =
                 isGameRunning
@@ -190,8 +194,18 @@ namespace Limelight.Services
         private static string CreateDetails(
             bool isGameRunning,
             bool isSwitching,
-            string navigationLabel)
+            string navigationLabel,
+            MultiplayerRole multiplayerRole)
         {
+            if (multiplayerRole is
+                MultiplayerRole.Host or
+                MultiplayerRole.Client)
+            {
+                return isGameRunning
+                    ? "Playing Dead as Disco Multiplayer"
+                    : "Preparing Dead as Disco Multiplayer";
+            }
+
             if (isSwitching)
             {
                 return "Switching the spotlight";
@@ -207,8 +221,32 @@ namespace Limelight.Services
             bool isSwitching,
             string? activeModName,
             string loaderMode,
-            string? switchingToModName)
+            string? switchingToModName,
+            MultiplayerRole multiplayerRole)
         {
+            if (multiplayerRole is
+                MultiplayerRole.Host or
+                MultiplayerRole.Client)
+            {
+                string multiplayerState =
+                    multiplayerRole == MultiplayerRole.Host
+                        ? "Hosting online co-op"
+                        : "Joined online co-op";
+
+                if (isSwitching)
+                {
+                    return string.IsNullOrWhiteSpace(
+                               switchingToModName)
+                        ? $"{multiplayerState} · switching character"
+                        : $"{multiplayerState} · next: {switchingToModName}";
+                }
+
+                return string.IsNullOrWhiteSpace(
+                           activeModName)
+                    ? multiplayerState
+                    : $"{multiplayerState} · {activeModName}";
+            }
+
             if (isSwitching)
             {
                 return string.IsNullOrWhiteSpace(

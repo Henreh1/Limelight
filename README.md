@@ -34,6 +34,7 @@ The Live Loader installs and configures its managed runtime components automatic
 | Normal Live Loader | Activate a supported character replacement without restarting the game. |
 | Character Slot Loader support | Detect a slot mod's data asset and unique mesh, keep its original Locker layout, and switch it through Normal Live Loader or X19. |
 | X19 LLoader | Rotate through a chosen cast by keyboard or controller, in order or shuffled. |
+| LimelightMP (experimental) | Host or join a private two-PC co-op test where each player renders their own game and the client controls Chuckles through an authenticated relay. |
 | Profiles | Save reusable groups of characters and assign an entire profile to X19 rotation. |
 | Asset-aware switching | Scan each imported Unreal container and refresh the model, materials, textures, portraits, and supported localisation assets it replaces. |
 | Safe switching | Detect game transitions, block unsafe requests, reuse mounted containers, and show a subtle Limelight pulse while X19 changes character. |
@@ -108,6 +109,12 @@ Build a rotation from individual characters or a saved profile, then advance thr
 ### No Live Loader
 
 Launch the game without starting live switching. This reduces startup time and resource use when Limelight's runtime features are not needed.
+
+## Experimental multiplayer
+
+The **Multiplayer** page contains the current LimelightMP v0.1.0 test harness. The host and client each run their own copy of *Dead as Disco*; Limelight installs the appropriate managed role, starts the controller relay without a separate terminal, launches through Steam, and displays a short friend code plus colour-coded session events.
+
+Both players should use the same game build and LimelightMP version. Tailscale currently provides the private route between PCs. Multiplayer remains experimental while level transitions, cameras, dialogue, rhythm sync, player-local menus, audio and replicated effects are hardened. Ordinary dashboard launches disable a leftover multiplayer role before starting Normal or X19 mode.
 
 ## Mod compatibility
 

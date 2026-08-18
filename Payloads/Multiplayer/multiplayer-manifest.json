@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.0",
+  "protocolVersion": 1,
+  "sourceCommit": "f010ef0aa60375fc8b8de46efaf161ec29a219eb",
+  "sourceDirty": false,
+  "ue4ssVersion": "3.0.1-1009",
+  "ue4ssCommit": "c2ac246447a8bcd92541070cb474044e7a2bbbe6",
+  "hostScript": {
+    "resourceName": "Limelight.Payloads.Multiplayer.host.lua",
+    "size": 68315,
+    "sha256": "DB33181CE59CA07A9551F08F13F9B125B062DACC5979CD8E3A98C3FB1A493E1E"
+  },
+  "clientScript": {
+    "resourceName": "Limelight.Payloads.Multiplayer.client.lua",
+    "size": 53302,
+    "sha256": "DE16F4D93CC39CFC71523F96053470A061D562C88DCAF9FAE9379D69BC70C527"
+  },
+  "nativeBridge": {
+    "resourceName": "Limelight.Payloads.Multiplayer.LimelightMPNative.dll",
+    "size": 862208,
+    "sha256": "6A2E527B387E4AAF3BCCBCEC64E0FEF6A2B28CCC3D6D0FC3F9F692735014F950"
+  },
+  "relay": {
+    "resourceName": "Limelight.Payloads.Multiplayer.LimelightMPRelay.exe",
+    "size": 174080,
+    "sha256": "42DD65D79332FDA582DF09C4CD3804791A3E379A955B1B3EF33467F5E8F4F808"
+  }
+}

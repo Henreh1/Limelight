@@ -4,6 +4,7 @@ namespace Limelight.Models
     {
         Normal,
         X19,
+        Multiplayer,
         Disabled
     }
 }

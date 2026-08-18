@@ -1,0 +1,380 @@
+<UserControl x:Class="Limelight.Views.MultiplayerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BackgroundBrush}"
+             Foreground="{StaticResource TextBrush}"
+             FontFamily="Bahnschrift, Segoe UI">
+
+    <UserControl.Resources>
+        <Style x:Key="MultiplayerTextBoxStyle"
+               TargetType="TextBox">
+            <Setter Property="Background"
+                    Value="#0D1020"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextBrush}"/>
+            <Setter Property="CaretBrush"
+                    Value="{StaticResource CyanBrush}"/>
+            <Setter Property="BorderBrush"
+                    Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="Padding"
+                    Value="13,11"/>
+            <Setter Property="FontSize"
+                    Value="13"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="InputBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused"
+                                     Value="True">
+                                <Setter TargetName="InputBorder"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource CyanBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="38,30">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="LIMELIGHT MP"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource CyanBrush}"/>
+                    <Border Margin="10,-2,0,0"
+                            Padding="8,3"
+                            Background="#402F1C"
+                            BorderBrush="#E2A84C"
+                            BorderThickness="1"
+                            CornerRadius="5">
+                        <TextBlock Text="EXPERIMENTAL"
+                                   FontSize="9"
+                                   FontWeight="Bold"
+                                   Foreground="#FFD477"/>
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Text="OPEN THE SAME SHOW ON TWO PCS"
+                           Margin="0,5,0,0"
+                           FontSize="27"
+                           FontWeight="Bold"/>
+
+                <TextBlock Text="Each player runs their own copy of Dead as Disco. Limelight connects the games and relays the clients controls rough way to do it but we ball."
+                           Margin="0,8,0,0"
+                           MaxWidth="850"
+                           FontSize="13"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource MutedTextBrush}"/>
+            </StackPanel>
+
+            <Border Grid.Column="1"
+                    Padding="14,8"
+                    VerticalAlignment="Top"
+                    Background="{StaticResource RaisedPanelBrush}"
+                    BorderBrush="{StaticResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <TextBlock x:Name="VersionText"
+                           Text="MP v0.1.0"
+                           FontSize="11"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource PinkBrush}"/>
+            </Border>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1"
+                      Margin="0,24,0,0"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ScrollViewer.Resources>
+                <Style TargetType="ScrollBar"
+                       BasedOn="{StaticResource NexusVerticalScrollBarStyle}"/>
+            </ScrollViewer.Resources>
+
+            <StackPanel Margin="0,0,12,24">
+                <Border Padding="16"
+                        Background="#221B13"
+                        BorderBrush="#7B5D2A"
+                        BorderThickness="1"
+                        CornerRadius="9">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="!"
+                                   Width="28"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="#FFD477"/>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="EARLY NETWORK TEST"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="#FFD477"/>
+                            <TextBlock Margin="0,4,0,0"
+                                       Text="Use the same game build and LimelightMP v0.1.0 on both PCs. Level transitions, cameras, dialogue, rhythm sync, local menus and effects are still being hardened."
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Margin="0,14,0,0"
+                        Padding="18"
+                        Background="{StaticResource RaisedPanelBrush}"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="READINESS"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+                            <TextBlock x:Name="ReadinessTitleText"
+                                       Margin="0,5,0,0"
+                                       Text="CHECKING LIMELIGHTMP..."
+                                       FontSize="16"
+                                       FontWeight="Bold"/>
+                            <TextBlock x:Name="ReadinessDetailText"
+                                       Margin="0,5,12,0"
+                                       Text="Limelight is checking the game, Live Loader and embedded multiplayer files."
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Button Content="CHECK SETUP"
+                                    Margin="0,0,8,0"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="Verify_Click"/>
+                            <Button Content="REMOVE TEST FILES"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Click="Remove_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <UniformGrid Margin="0,14,0,0"
+                             Columns="2">
+                    <Border Margin="0,0,7,0"
+                            Padding="20"
+                            MinHeight="230"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource CyanBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="1 · HOST"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource CyanBrush}"/>
+                                <TextBlock Text="OPEN A FRIEND SESSION"
+                                           Margin="0,6,0,0"
+                                           FontSize="18"
+                                           FontWeight="Bold"/>
+                                <TextBlock Margin="0,9,0,0"
+                                           Text="Install the host role, start the secure input relay, launch through Steam and create a short code for your friend."
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+                            <TextBlock Grid.Row="1"
+                                       Margin="0,12,0,12"
+                                       Text="Tailscale is used for the private route. Share only the host PC with your friend when possible."
+                                       FontSize="11"
+                                       TextWrapping="Wrap"
+                                       Foreground="#8C93A8"/>
+                            <Button x:Name="HostButton"
+                                    Grid.Row="2"
+                                    Content="HOST AND LAUNCH"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Click="Host_Click"/>
+                        </Grid>
+                    </Border>
+
+                    <Border Margin="7,0,0,0"
+                            Padding="20"
+                            MinHeight="230"
+                            Background="{StaticResource PanelBrush}"
+                            BorderBrush="{StaticResource PinkBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="2 · JOIN"
+                                           FontSize="11"
+                                           FontWeight="Bold"
+                                           Foreground="{StaticResource PinkBrush}"/>
+                                <TextBlock Text="JOIN YOUR FRIEND'S SHOW"
+                                           Margin="0,6,0,0"
+                                           FontSize="18"
+                                           FontWeight="Bold"/>
+                                <TextBlock Margin="0,9,0,0"
+                                           Text="Paste the complete short code. Your own copy of the game renders locally and connects to the host."
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"/>
+                            </StackPanel>
+                            <TextBox x:Name="FriendCodeTextBox"
+                                     Grid.Row="1"
+                                     Margin="0,12,0,12"
+                                     VerticalAlignment="Center"
+                                     Style="{StaticResource MultiplayerTextBoxStyle}"
+                                     ToolTip="Paste the host's complete L1- code"/>
+                            <Button x:Name="JoinButton"
+                                    Grid.Row="2"
+                                    Content="JOIN AND LAUNCH"
+                                    Style="{StaticResource PrimaryButton}"
+                                    Click="Join_Click"/>
+                        </Grid>
+                    </Border>
+                </UniformGrid>
+
+                <Border x:Name="ActiveSessionCard"
+                        Margin="0,14,0,0"
+                        Padding="20"
+                        Background="#111D22"
+                        BorderBrush="{StaticResource CyanBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="SessionEyebrowText"
+                                       Text="NETWORK SESSION"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="#52E578"/>
+                            <TextBlock x:Name="SessionTitleText"
+                                       Margin="0,5,0,0"
+                                       Text="SESSION READY"
+                                       FontSize="18"
+                                       FontWeight="Bold"/>
+                            <TextBlock x:Name="SessionDetailText"
+                                       Margin="0,5,0,0"
+                                       Text="Leave Limelight open while playing."
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                            <Border x:Name="FriendCodePanel"
+                                    Margin="0,12,0,0"
+                                    Padding="12,9"
+                                    HorizontalAlignment="Left"
+                                    Background="#0B1118"
+                                    BorderBrush="#285A38"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="FriendCodeText"
+                                               VerticalAlignment="Center"
+                                               FontFamily="Cascadia Mono, Consolas"
+                                               FontSize="13"
+                                               Foreground="#52E578"/>
+                                    <Button Content="COPY"
+                                            Margin="12,0,0,0"
+                                            Padding="12,6"
+                                            Style="{StaticResource SecondaryButton}"
+                                            Click="CopyCode_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Content="STOP SESSION"
+                                Margin="18,0,0,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SecondaryButton}"
+                                Click="Stop_Click"/>
+                    </Grid>
+                </Border>
+
+                <Border Margin="0,14,0,0"
+                        Padding="18"
+                        Background="#090B12"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="170"/>
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="SESSION LOG"
+                                       FontSize="11"
+                                       FontWeight="Bold"
+                                       Foreground="{StaticResource CyanBrush}"/>
+                            <TextBlock x:Name="BusyText"
+                                       Grid.Column="1"
+                                       FontSize="11"
+                                       Foreground="{StaticResource MutedTextBrush}"/>
+                        </Grid>
+                        <RichTextBox x:Name="SessionLogBox"
+                                     Grid.Row="1"
+                                     Margin="0,10,0,0"
+                                     Padding="0"
+                                     IsReadOnly="True"
+                                     IsDocumentEnabled="False"
+                                     VerticalScrollBarVisibility="Auto"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     Foreground="#858A97"
+                                     FontFamily="Cascadia Mono, Consolas"
+                                     FontSize="11"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

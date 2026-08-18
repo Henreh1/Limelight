@@ -70,7 +70,7 @@ namespace Limelight.Views
             DiscordPresenceDetailText.Text =
                 enabled
                     ? "Limelight will update Discord while the desktop client is open. No Discord login or secret is stored."
-                    : "Enable this to share Limelight, game, active-mod, and X19 activity on your Discord profile.";
+                    : "Enable this to share Limelight, game, active-mod, X19, and multiplayer activity on your Discord profile.";
 
             DiscordPresenceButton.Content =
                 enabled

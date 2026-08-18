@@ -31,6 +31,7 @@ namespace Limelight
             MyMods,
             Profiles,
             LiveLoaders,
+            Multiplayer,
             BrowseNexus,
             Downloads,
             Settings
@@ -85,6 +86,10 @@ namespace Limelight
         private readonly LiveModStagingService _liveModStagingService;
         private readonly LiveSessionService _liveSessionService;
         private readonly NativeBridgeInstallerService _nativeBridgeInstallerService;
+        private readonly LimelightMpPayloadService _multiplayerPayloadService;
+        private readonly LimelightMpRelayService _multiplayerRelayService;
+        private readonly LimelightMpFriendCodeService _multiplayerFriendCodeService;
+        private readonly LimelightMpSessionService _multiplayerSessionService;
         private readonly CompatibilityService _compatibilityService;
         private readonly DiagnosticReportService _diagnosticReportService;
         private readonly PrivateTestReportService _privateTestReportService;
@@ -141,6 +146,8 @@ namespace Limelight
         private bool _animateWindowAfterRestore;
         private bool _isModImportInProgress;
         private bool _isManualUpdateCheckRunning;
+        private bool _isMultiplayerActionRunning;
+        private bool? _isMultiplayerPayloadValid;
         private string? _gameDirectory;
 
         public MainWindow()
@@ -194,6 +201,24 @@ namespace Limelight
 
             _nativeBridgeInstallerService =
                 new NativeBridgeInstallerService();
+
+            _multiplayerPayloadService =
+                new LimelightMpPayloadService();
+
+            _multiplayerRelayService =
+                new LimelightMpRelayService();
+
+            _multiplayerFriendCodeService =
+                new LimelightMpFriendCodeService();
+
+            _multiplayerSessionService =
+                new LimelightMpSessionService(
+                    _multiplayerPayloadService,
+                    _multiplayerRelayService,
+                    _multiplayerFriendCodeService);
+
+            _multiplayerSessionService.LogEmitted +=
+                MultiplayerLogEmitted;
 
             _compatibilityService =
                 new CompatibilityService(
@@ -313,6 +338,21 @@ namespace Limelight
             LiveLoadersPageControl.X19HotkeyChanged +=
                 X19HotkeyChanged;
 
+            MultiplayerPageControl.HostRequested +=
+                HostMultiplayerRequested;
+
+            MultiplayerPageControl.JoinRequested +=
+                JoinMultiplayerRequested;
+
+            MultiplayerPageControl.StopRequested +=
+                StopMultiplayerRequested;
+
+            MultiplayerPageControl.VerifyRequested +=
+                VerifyMultiplayerRequested;
+
+            MultiplayerPageControl.RemoveRequested +=
+                RemoveMultiplayerRequested;
+
             SettingsPageControl.RepairRequested +=
                 RepairLiveLoaderRequested;
 
@@ -406,6 +446,7 @@ namespace Limelight
                     _gameDirectory;
 
                 ClearLiveLoaderSessionBypass();
+                DeactivateMultiplayerPayloadBestEffort();
 
                 // A previous crash can leave staged containers behind. They
                 // are safe to remove once Windows confirms the game is closed.
@@ -415,6 +456,7 @@ namespace Limelight
             }
 
             RefreshSettingsPage();
+            RefreshMultiplayerPage();
             RefreshDiscordPresence(
                 isGameRunning);
 
@@ -1213,6 +1255,10 @@ namespace Limelight
                     ShowLiveLoadersPage();
                     break;
 
+                case NavigationPage.Multiplayer:
+                    ShowMultiplayerPage();
+                    break;
+
                 case NavigationPage.Profiles:
                     ShowProfilesPage();
                     break;
@@ -1646,6 +1692,9 @@ namespace Limelight
 
             if (gameJustStopped)
             {
+                _multiplayerSessionService.Stop(
+                    "The game closed, so Limelight stopped the multiplayer relay.");
+
                 _globalHotkeyService.Unregister();
                 ClearLiveLoaderSessionBypass();
 
@@ -1666,6 +1715,9 @@ namespace Limelight
                 await Task.Run(() =>
                     _liveSessionService.RecoverClosedGame(
                         gameDirectory));
+
+                DeactivateMultiplayerPayloadBestEffort();
+                MultiplayerPageControl.ShowIdle();
             }
 
             UpdateGameRunningStatus();
@@ -1685,6 +1737,7 @@ namespace Limelight
             }
 
             RefreshSettingsPage();
+            RefreshMultiplayerPage();
             RefreshDiscordPresence(
                 isGameRunning);
         }
@@ -1700,6 +1753,7 @@ namespace Limelight
             _gameStatusTimer.Stop();
             _globalHotkeyService.Dispose();
             _discordPresenceService.Dispose();
+            _multiplayerSessionService.Dispose();
 
             // The bridge has already made its startup decision by this point.
             // Clearing the marker here keeps a later direct game launch normal.
@@ -1717,6 +1771,408 @@ namespace Limelight
             {
                 // The marker expires by itself, so cleanup must never prevent
                 // Limelight or the game from closing normally.
+            }
+        }
+
+        private void MultiplayerLogEmitted(
+            MultiplayerLogLevel level,
+            string message)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.BeginInvoke(
+                    new Action(() =>
+                        MultiplayerLogEmitted(
+                            level,
+                            message)));
+
+                return;
+            }
+
+            MultiplayerPageControl.AddLog(
+                level,
+                message);
+
+            // I refresh here because the relay can leave the party without
+            // politely pressing Limelight's Stop button first.
+            RefreshDiscordPresence();
+        }
+
+        private void RefreshMultiplayerPage()
+        {
+            bool gameConnected =
+                !string.IsNullOrWhiteSpace(
+                    _gameDirectory) &&
+                File.Exists(
+                    Path.Combine(
+                        _gameDirectory!,
+                        "Pagoda.exe"));
+
+            bool gameRunning =
+                gameConnected &&
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory);
+
+            Ue4ssDetectionResult installation =
+                _ue4ssDetectionService.Detect(
+                    _gameDirectory);
+
+            bool multiplayerRuntimeReady =
+                installation.IsInstalled &&
+                _ue4ssConfigurationService.IsRuntimeCompatible(
+                    installation) &&
+                _ue4ssConfigurationService.IsConfigured(
+                    installation) &&
+                _liveLoaderBridgeService.IsInstalled(
+                    installation) &&
+                _nativeBridgeInstallerService.IsCurrentVersionInstalled(
+                    installation);
+
+            if (_isMultiplayerPayloadValid is null)
+            {
+                try
+                {
+                    _multiplayerPayloadService.ValidateEmbeddedPayloads();
+                    _isMultiplayerPayloadValid = true;
+                }
+                catch
+                {
+                    _isMultiplayerPayloadValid = false;
+                }
+            }
+
+            bool payloadValid =
+                _isMultiplayerPayloadValid == true;
+
+            MultiplayerPageControl.ShowReadiness(
+                gameConnected,
+                gameRunning,
+                multiplayerRuntimeReady,
+                payloadValid,
+                _multiplayerSessionService.FindTailscaleIpv4Address(),
+                _multiplayerPayloadService.ReadInstalledRole(
+                    installation));
+        }
+
+        private async void HostMultiplayerRequested()
+        {
+            await StartMultiplayerSessionAsync(
+                MultiplayerRole.Host,
+                friendCode: null);
+        }
+
+        private async void JoinMultiplayerRequested(
+            string friendCode)
+        {
+            await StartMultiplayerSessionAsync(
+                MultiplayerRole.Client,
+                friendCode);
+        }
+
+        private async Task StartMultiplayerSessionAsync(
+            MultiplayerRole role,
+            string? friendCode)
+        {
+            if (_isMultiplayerActionRunning)
+            {
+                return;
+            }
+
+            string? gameDirectory =
+                _gameDirectory;
+
+            if (string.IsNullOrWhiteSpace(gameDirectory) ||
+                !File.Exists(
+                    Path.Combine(
+                        gameDirectory,
+                        "Pagoda.exe")))
+            {
+                ShowLimelightDialog(
+                    "GAME NOT CONNECTED",
+                    "Connect Limelight to the Dead as Disco folder before starting multiplayer.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "MULTIPLAYER BLOCKED");
+
+                return;
+            }
+
+            if (_gameProcessService.IsGameRunning(
+                    gameDirectory))
+            {
+                ShowLimelightDialog(
+                    "CLOSE DEAD AS DISCO",
+                    "The game must be closed while Limelight installs or changes a multiplayer role.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "ROLE CHANGE BLOCKED");
+
+                return;
+            }
+
+            Ue4ssDetectionResult installation =
+                _ue4ssDetectionService.Detect(
+                    gameDirectory);
+
+            if (!installation.IsInstalled ||
+                !_ue4ssConfigurationService.IsRuntimeCompatible(
+                    installation) ||
+                !_ue4ssConfigurationService.IsConfigured(
+                    installation) ||
+                !_liveLoaderBridgeService.IsInstalled(
+                    installation) ||
+                !_nativeBridgeInstallerService.IsCurrentVersionInstalled(
+                    installation))
+            {
+                ShowLimelightDialog(
+                    "LIVE LOADER SETUP REQUIRED",
+                    "Install or repair Limelight's Live Loader from Settings before starting multiplayer.",
+                    LimelightDialogTone.Warning,
+                    primaryAction: "OPEN SETTINGS",
+                    eyebrow: "MULTIPLAYER BLOCKED");
+
+                ShowSettingsPage();
+                SettingsPageControl.ShowSupportCategory();
+                return;
+            }
+
+            _isMultiplayerActionRunning = true;
+
+            MultiplayerPageControl.SetBusy(
+                true,
+                role == MultiplayerRole.Host
+                    ? "PREPARING HOST..."
+                    : "PREPARING CLIENT...");
+
+            MultiplayerPageControl.AddLog(
+                MultiplayerLogLevel.Log,
+                role == MultiplayerRole.Host
+                    ? "Preparing a new host session."
+                    : "Preparing to join the friend session.");
+
+            _globalHotkeyService.Unregister();
+            _selectedLoaderMode =
+                LoaderLaunchMode.Multiplayer;
+
+            try
+            {
+                _liveLoaderBridgeService.SetSessionBypass(
+                    isDisabled: false);
+
+                MultiplayerStartResult session =
+                    await Task.Run(() =>
+                        role == MultiplayerRole.Host
+                            ? _multiplayerSessionService.StartHost(
+                                installation)
+                            : _multiplayerSessionService.StartClient(
+                                installation,
+                                friendCode ?? string.Empty));
+
+                using Process? steamLaunch =
+                    Process.Start(
+                        CreateSteamLaunchStartInfo());
+
+                if (steamLaunch is null)
+                {
+                    throw new InvalidOperationException(
+                        "Windows did not accept Limelight's Steam launch request.");
+                }
+
+                MultiplayerPageControl.ShowSession(
+                    session);
+
+                MultiplayerPageControl.AddLog(
+                    MultiplayerLogLevel.Network,
+                    "Steam accepted the Dead as Disco launch request.");
+
+                ShowNotification(
+                    role == MultiplayerRole.Host
+                        ? "MULTIPLAYER HOST READY"
+                        : "JOIN SESSION READY",
+                    role == MultiplayerRole.Host
+                        ? "Copy the short code for your friend, then host from the Dive Bar."
+                        : "Your game is launching and will connect to the host.",
+                    isError: false);
+            }
+            catch (Exception exception)
+            {
+                _multiplayerSessionService.Stop(
+                    "The multiplayer startup was cancelled.");
+
+                MultiplayerPageControl.ShowIdle();
+                MultiplayerPageControl.AddLog(
+                    MultiplayerLogLevel.Error,
+                    exception.Message);
+
+                _selectedLoaderMode =
+                    LoaderLaunchMode.Normal;
+
+                ClearLiveLoaderSessionBypass();
+                DeactivateMultiplayerPayloadBestEffort();
+
+                ShowLimelightDialog(
+                    "MULTIPLAYER COULD NOT START",
+                    "Limelight left the game closed and stopped the controller relay.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "LIMELIGHT MP");
+            }
+            finally
+            {
+                _isMultiplayerActionRunning = false;
+
+                MultiplayerPageControl.SetBusy(
+                    false,
+                    string.Empty);
+
+                RefreshMultiplayerPage();
+                RefreshDiscordPresence();
+            }
+        }
+
+        private void StopMultiplayerRequested()
+        {
+            _multiplayerSessionService.Stop(
+                "The user stopped the multiplayer relay.");
+
+            bool gameRunning =
+                !string.IsNullOrWhiteSpace(
+                    _gameDirectory) &&
+                _gameProcessService.IsGameRunning(
+                    _gameDirectory);
+
+            if (!gameRunning)
+            {
+                DeactivateMultiplayerPayloadBestEffort();
+                ClearLiveLoaderSessionBypass();
+                _selectedLoaderMode =
+                    LoaderLaunchMode.Normal;
+            }
+
+            MultiplayerPageControl.ShowIdle();
+            RefreshMultiplayerPage();
+            RefreshDiscordPresence();
+
+            ShowNotification(
+                "MULTIPLAYER SESSION STOPPED",
+                gameRunning
+                    ? "The relay is closed. Dead as Disco is still running and can be closed normally."
+                    : "The relay is closed and the multiplayer role is disabled for normal launches.",
+                isError: false);
+        }
+
+        private void VerifyMultiplayerRequested()
+        {
+            try
+            {
+                _multiplayerPayloadService.ValidateEmbeddedPayloads();
+                _isMultiplayerPayloadValid = true;
+                RefreshMultiplayerPage();
+
+                MultiplayerPageControl.AddLog(
+                    MultiplayerLogLevel.Log,
+                    "All embedded LimelightMP v0.1.0 files passed their size and SHA-256 checks.");
+
+                ShowNotification(
+                    "MULTIPLAYER FILES VERIFIED",
+                    "The host, client, native controller and relay payloads are intact.",
+                    isError: false);
+            }
+            catch (Exception exception)
+            {
+                _isMultiplayerPayloadValid = false;
+                MultiplayerPageControl.AddLog(
+                    MultiplayerLogLevel.Error,
+                    exception.Message);
+
+                ShowLimelightDialog(
+                    "MULTIPLAYER FILE CHECK FAILED",
+                    "One or more embedded LimelightMP files did not pass verification.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "PAYLOAD CHECK");
+            }
+        }
+
+        private void RemoveMultiplayerRequested()
+        {
+            if (string.IsNullOrWhiteSpace(
+                    _gameDirectory))
+            {
+                return;
+            }
+
+            if (_gameProcessService.IsGameRunning(
+                    _gameDirectory))
+            {
+                ShowLimelightDialog(
+                    "CLOSE DEAD AS DISCO",
+                    "Close the game before removing LimelightMP test files.",
+                    LimelightDialogTone.Warning,
+                    eyebrow: "REMOVE BLOCKED");
+
+                return;
+            }
+
+            LimelightDialogChoice choice =
+                ShowLimelightDialog(
+                    "REMOVE LIMELIGHTMP TEST FILES?",
+                    "This removes only the managed LimelightMP role and native controller folders. Other UE4SS mods and saved session logs are kept.",
+                    LimelightDialogTone.Question,
+                    primaryAction: "REMOVE TEST FILES",
+                    secondaryAction: "KEEP THEM",
+                    eyebrow: "EXPERIMENTAL CLEANUP");
+
+            if (choice != LimelightDialogChoice.Primary)
+            {
+                return;
+            }
+
+            try
+            {
+                _multiplayerSessionService.Stop();
+
+                _multiplayerPayloadService.Remove(
+                    _ue4ssDetectionService.Detect(
+                        _gameDirectory));
+
+                MultiplayerPageControl.ShowIdle();
+                MultiplayerPageControl.AddLog(
+                    MultiplayerLogLevel.Log,
+                    "Managed LimelightMP test files were removed. Session logs were kept.");
+
+                RefreshMultiplayerPage();
+
+                ShowNotification(
+                    "MULTIPLAYER TEST FILES REMOVED",
+                    "Limelight kept every unrelated mod and multiplayer session log.",
+                    isError: false);
+            }
+            catch (Exception exception)
+            {
+                MultiplayerPageControl.AddLog(
+                    MultiplayerLogLevel.Error,
+                    exception.Message);
+
+                ShowLimelightDialog(
+                    "MULTIPLAYER CLEANUP FAILED",
+                    "Limelight did not remove any unmanaged folder.",
+                    LimelightDialogTone.Error,
+                    details: exception.Message,
+                    eyebrow: "SAFE CLEANUP");
+            }
+        }
+
+        private void DeactivateMultiplayerPayloadBestEffort()
+        {
+            try
+            {
+                _multiplayerPayloadService.Deactivate(
+                    _ue4ssDetectionService.Detect(
+                        _gameDirectory));
+            }
+            catch
+            {
+                // The next multiplayer install repairs its own managed files.
+                // Normal Limelight startup must continue if Windows holds one.
             }
         }
 
@@ -4044,7 +4500,10 @@ namespace Limelight
                     isCurrentlyActive
                         ? $"{selectedMod.DisplayName} is no longer active."
                         : isGameRunning
-                            ? $"{selectedMod.DisplayName} is now active live."
+                            ? _selectedLoaderMode ==
+                                LoaderLaunchMode.Multiplayer
+                                ? $"{selectedMod.DisplayName} is active in this local MP view. Select the same model on the other PC to keep both views matched."
+                                : $"{selectedMod.DisplayName} is now active live."
                             : selectedMod.IsCharacterSlotMod
                                 ? $"{selectedMod.DisplayName} is ready for Limelight's Live Loader. Its Character Slot files were also kept together for the in-game Locker."
                                 : $"{selectedMod.DisplayName} is active and ready for the next launch.";
@@ -4755,6 +5214,44 @@ namespace Limelight
             RefreshDiscordPresence();
         }
 
+        private void ShowMultiplayer_Click(
+            object sender,
+            MouseButtonEventArgs e)
+        {
+            ShowMultiplayerPage();
+        }
+
+        private void ShowMultiplayerPage()
+        {
+            DashboardPage.Visibility =
+                Visibility.Collapsed;
+
+            MyModsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            ProfilesPageControl.Visibility =
+                Visibility.Collapsed;
+
+            LiveLoadersPageControl.Visibility =
+                Visibility.Collapsed;
+
+            BrowseNexusPageControl.Visibility =
+                Visibility.Collapsed;
+
+            DownloadsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            SettingsPageControl.Visibility =
+                Visibility.Collapsed;
+
+            _selectedNavigationPage =
+                NavigationPage.Multiplayer;
+
+            ApplyNavigationAppearance();
+            RefreshMultiplayerPage();
+            RefreshDiscordPresence();
+        }
+
         private void ProfilesChanged(
             IReadOnlyList<ModProfile> profiles)
         {
@@ -5202,6 +5699,12 @@ namespace Limelight
 
         private void ApplyNavigationAppearance()
         {
+            MultiplayerPageControl.Visibility =
+                _selectedNavigationPage ==
+                    NavigationPage.Multiplayer
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
             // The icon is kept separate from the label so the selected page
             // can fill its diamond without moving the text beside it.
             ApplyNavigationItemAppearance(
@@ -5227,6 +5730,12 @@ namespace Limelight
                 LiveLoadersNavigationIcon,
                 LiveLoadersNavigationText,
                 _selectedNavigationPage == NavigationPage.LiveLoaders);
+
+            ApplyNavigationItemAppearance(
+                MultiplayerNavigation,
+                MultiplayerNavigationIcon,
+                MultiplayerNavigationText,
+                _selectedNavigationPage == NavigationPage.Multiplayer);
 
             ApplyNavigationItemAppearance(
                 BrowseNexusNavigation,
@@ -5343,6 +5852,8 @@ namespace Limelight
                  _selectedNavigationPage == NavigationPage.Profiles) ||
                 (navigation == LiveLoadersNavigation &&
                  _selectedNavigationPage == NavigationPage.LiveLoaders) ||
+                (navigation == MultiplayerNavigation &&
+                 _selectedNavigationPage == NavigationPage.Multiplayer) ||
                 (navigation == DownloadsNavigation &&
                  _selectedNavigationPage == NavigationPage.Downloads) ||
                 (navigation == SettingsNavigation &&
@@ -5381,6 +5892,13 @@ namespace Limelight
             {
                 icon = LiveLoadersNavigationIcon;
                 label = LiveLoadersNavigationText;
+                return;
+            }
+
+            if (navigation == MultiplayerNavigation)
+            {
+                icon = MultiplayerNavigationIcon;
+                label = MultiplayerNavigationText;
                 return;
             }
 
@@ -6272,6 +6790,8 @@ namespace Limelight
                         "Building character profiles",
                     NavigationPage.LiveLoaders =>
                         "Configuring the Live Loader",
+                    NavigationPage.Multiplayer =>
+                        "Testing Limelight multiplayer",
                     NavigationPage.BrowseNexus =>
                         "Browsing Nexus Mods",
                     NavigationPage.Downloads =>
@@ -6287,6 +6807,8 @@ namespace Limelight
                 {
                     LoaderLaunchMode.X19 =>
                         "X19 LLoader",
+                    LoaderLaunchMode.Multiplayer =>
+                        "LimelightMP",
                     LoaderLaunchMode.Disabled =>
                         "No Live Loader",
                     _ =>
@@ -6299,7 +6821,10 @@ namespace Limelight
                 pageLabel,
                 activeMod?.DisplayName,
                 loaderMode,
-                _discordPresenceSwitchTarget);
+                _discordPresenceSwitchTarget,
+                _multiplayerSessionService.IsActive
+                    ? _multiplayerSessionService.ActiveRole
+                    : MultiplayerRole.None);
         }
 
         private async void RepairLiveLoaderRequested()
@@ -6555,6 +7080,7 @@ namespace Limelight
                     _selectedLoaderMode switch
                     {
                         LoaderLaunchMode.X19 => "X19 LLoader",
+                        LoaderLaunchMode.Multiplayer => "LimelightMP",
                         LoaderLaunchMode.Disabled => "No Live Loader",
                         _ => "Live Loader"
                     };
@@ -7936,6 +8462,19 @@ namespace Limelight
                 return;
             }
 
+            if (_multiplayerSessionService.IsActive)
+            {
+                ShowMultiplayerPage();
+
+                ShowLimelightDialog(
+                    "MULTIPLAYER SESSION ALREADY READY",
+                    "Use the active Multiplayer session instead of starting a separate Normal or X19 launch.",
+                    LimelightDialogTone.Information,
+                    eyebrow: "LAUNCH SKIPPED");
+
+                return;
+            }
+
             string executablePath =
                 Path.Combine(
                     gameDirectory,
@@ -7951,6 +8490,10 @@ namespace Limelight
 
                 return;
             }
+
+            // A normal dashboard launch must never inherit an old experimental
+            // multiplayer role from a previous test or interrupted Limelight run.
+            DeactivateMultiplayerPayloadBestEffort();
 
             List<InstalledMod> x19Rotation =
                 GetX19Rotation();
