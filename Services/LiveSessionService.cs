@@ -6,8 +6,6 @@ namespace Limelight.Services
 {
     public sealed class LiveSessionService
     {
-        public const int MaximumMountedContainers = 12;
-
         private const int MaximumRetiredHistoryRecords = 24;
 
         private static readonly string[] ManagedExtensions =
@@ -96,41 +94,6 @@ namespace Limelight.Services
 
             Save(freshSession);
             return freshSession;
-        }
-
-        public bool CanStageContainers(
-            string gameDirectory,
-            int upcomingContainerCount,
-            out string message)
-        {
-            LiveSessionState state =
-                Load();
-
-            bool belongsToCurrentGame =
-                string.Equals(
-                    state.GameDirectory,
-                    gameDirectory,
-                    StringComparison.OrdinalIgnoreCase);
-
-            int mountedContainers =
-                belongsToCurrentGame &&
-                state.Status is not LiveSessionStatus.Closed
-                    ? CountMountedContainers(state)
-                    : 0;
-
-            if (mountedContainers + upcomingContainerCount >
-                MaximumMountedContainers)
-            {
-                message =
-                    "This game session has reached Limelight's safe live-container limit. " +
-                    $"It currently has {mountedContainers} of {MaximumMountedContainers} containers mounted. " +
-                    "Close and reopen Dead as Disco before switching again.";
-
-                return false;
-            }
-
-            message = string.Empty;
-            return true;
         }
 
         public static int CountMountedContainers(

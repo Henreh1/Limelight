@@ -538,6 +538,9 @@ namespace Limelight.Views
                 "LIVE LOADER READY" =>
                     "The new character and supporting assets are ready.",
 
+                "FINALISING THE PREVIOUS MODEL" =>
+                    "Unreal is releasing the previous character before another switch is allowed.",
+
                 _ =>
                     "Limelight is confirming that Unreal is ready for a safe live switch."
             };

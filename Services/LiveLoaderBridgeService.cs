@@ -406,7 +406,7 @@ namespace Limelight.Services
               portraitWasFound,
               portraitWasLoaded =
             pcall(function()
-                return LoadAsset(
+                return loadMountedAsset(
                     activeCharliePortraitPath)
             end)
 
@@ -544,7 +544,7 @@ namespace Limelight.Services
             pcall(function()
                 -- I reload the active tables before refreshing widgets so a
                 -- newly created menu sees the replacement localization data.
-                LoadAsset(stringTablePath)
+                loadMountedAsset(stringTablePath)
             end)
         end
 
@@ -861,6 +861,31 @@ namespace Limelight.Services
             "No active Charlie pawn is available yet."
     end
 
+    local function keepMaterialTexturesResident(
+        material)
+
+        if material == nil or
+           not material:IsValid() then
+
+            return false
+        end
+
+        local residencySucceeded =
+            pcall(function()
+                -- I ask the material interface itself to keep every inherited
+                -- and overridden texture awake. Poking the mesh component did
+                -- nothing useful besides giving the Lua log a small tantrum.
+                material:SetForceMipLevelsToBeResident(
+                    true,
+                    true,
+                    600.0,
+                    0,
+                    false)
+            end)
+
+        return residencySucceeded
+    end
+
     local function inspectCharlieMaterials(
         meshComponent)
 
@@ -879,6 +904,7 @@ namespace Limelight.Services
                 end
 
                 local validMaterialCount = 0
+                local residentMaterialCount = 0
                 local fallbackSlots = {}
                 local activeMaterials = {}
 
@@ -931,6 +957,13 @@ namespace Limelight.Services
                         else
                             validMaterialCount =
                                 validMaterialCount + 1
+
+                            if keepMaterialTexturesResident(
+                                   material) then
+
+                                residentMaterialCount =
+                                    residentMaterialCount + 1
+                            end
                         end
                     else
                         table.insert(
@@ -955,7 +988,12 @@ namespace Limelight.Services
                 return true,
                     table.concat(
                         activeMaterials,
-                        " | ")
+                        " | ") ..
+                    " (texture residency requested for " ..
+                    tostring(residentMaterialCount) ..
+                    " of " ..
+                    tostring(validMaterialCount) ..
+                    " materials)"
             end)
 
         if not inspectionSucceeded then
@@ -1083,10 +1121,75 @@ namespace Limelight.Services
         local previousMesh =
             currentMeshAsset
 
+        local previousMaterials = {}
+
+        pcall(function()
+            local previousMaterialCount =
+                meshComponent:GetNumMaterials()
+
+            for materialIndex = 0, previousMaterialCount - 1 do
+                local previousMaterial =
+                    meshComponent:GetMaterial(materialIndex)
+
+                if previousMaterial ~= nil and
+                   previousMaterial:IsValid() then
+
+                    table.insert(
+                        previousMaterials,
+                        {
+                            index = materialIndex,
+                            material = previousMaterial
+                        })
+                end
+            end
+        end)
+
+        local function restorePreviousRender()
+            if previousMesh == nil or
+               not previousMesh:IsValid() then
+
+                return
+            end
+
+            pcall(function()
+                meshComponent:SetSkeletalMeshAsset(
+                    previousMesh)
+            end)
+
+            pcall(function()
+                local overrideMaterials =
+                    meshComponent.OverrideMaterials
+
+                if overrideMaterials ~= nil then
+                    overrideMaterials:Empty()
+                end
+            end)
+
+            for _,
+                previousMaterialEntry in ipairs(previousMaterials) do
+
+                pcall(function()
+                    meshComponent:SetMaterial(
+                        previousMaterialEntry.index,
+                        previousMaterialEntry.material)
+                end)
+            end
+
+            pcall(function()
+                meshComponent:MarkRenderStateDirty()
+            end)
+
+            pcall(function()
+                meshComponent:RecreateRenderState()
+            end)
+
+            restorePlayerMeshVisibility()
+        end
+
         local clearedOverrideCount = 0
 
-        local setSucceeded,
-              setError =
+        local overridesCleared,
+              overrideClearError =
             pcall(function()
                 local overrideMaterials =
                     meshComponent.OverrideMaterials
@@ -1095,11 +1198,25 @@ namespace Limelight.Services
                     clearedOverrideCount =
                         overrideMaterials:GetArrayNum()
 
-                    -- CharacterMesh0 can keep dynamic overrides from the old
-                    -- model. I clear them only on the live player component.
+                    -- Both replacement formats must lose dynamic overrides
+                    -- left by the previous character before the new body mesh
+                    -- supplies its own material slots.
                     overrideMaterials:Empty()
                 end
+            end)
 
+        if not overridesCleared then
+            return false,
+                "The previous character material overrides could not be cleared: " ..
+                tostring(overrideClearError)
+        end
+
+        local setSucceeded = false
+        local setError = nil
+
+        setSucceeded,
+        setError =
+            pcall(function()
                 meshComponent:SetSkeletalMeshAsset(
                     meshAsset)
             end)
@@ -1124,17 +1241,12 @@ namespace Limelight.Services
             end
         end)
 
-        -- Valid material interfaces can still render black while their texture
-        -- resources are not resident after an IoStore swap. Bind first, then
-        -- make Unreal stream the replacement character before rebuilding it.
+        -- I bind first, then ask Unreal to stream the complete replacement
+        -- character before I rebuild its render state.
         pcall(function()
-            if meshComponent.SetTextureForceResidentFlag ~= nil then
-                meshComponent:SetTextureForceResidentFlag(true)
-            end
-
             if meshComponent.PrestreamTextures ~= nil then
                 meshComponent:PrestreamTextures(
-                    30.0,
+                    600.0,
                     true,
                     0)
             end
@@ -1153,6 +1265,8 @@ namespace Limelight.Services
         end)
 
         if not setSucceeded then
+            restorePreviousRender()
+
             return false,
                 "The active Charlie pawn could not accept the replacement mesh: " ..
                 tostring(setError)
@@ -1164,20 +1278,24 @@ namespace Limelight.Services
                 meshComponent)
 
         if not materialsReady then
-            -- A black model is never a successful switch. I restore the old
-            -- mesh and let Limelight retry after dependencies finish loading.
-            if previousMesh ~= nil and
-               previousMesh:IsValid() then
-
-                pcall(function()
-                    meshComponent:SetSkeletalMeshAsset(
-                        previousMesh)
-                end)
-            end
+            -- I refuse to call a black model a successful switch. The old mesh
+            -- and its exact materials get their seats back before I retry.
+            restorePreviousRender()
 
             return false,
                 "The replacement materials are not ready: " ..
                 materialSummary
+        end
+
+        local visibilityReady,
+              visibilityMessage =
+            restorePlayerMeshVisibility()
+
+        if not visibilityReady then
+            restorePreviousRender()
+
+            return false,
+                visibilityMessage
         end
 
         print(

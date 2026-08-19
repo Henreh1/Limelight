@@ -169,12 +169,10 @@ namespace Limelight.Views
                     session);
 
             MountedContainerText.Text =
-                $"{mountedContainers} / {LiveSessionService.MaximumMountedContainers} CONTAINERS";
+                $"{mountedContainers} MOUNTED • AUTO-RECYCLE";
 
             MountedContainerText.Foreground =
-                StatusBrush(
-                    mountedContainers <
-                    LiveSessionService.MaximumMountedContainers);
+                StatusBrush(true);
 
             SessionDetailText.Text =
                 CreateSessionDetail(

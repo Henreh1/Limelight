@@ -445,7 +445,7 @@
                                             BorderThickness="1"
                                             CornerRadius="8">
                                         <TextBlock x:Name="MountedContainerText"
-                                                   Text="0 / 12 CONTAINERS"
+                                                   Text="0 MOUNTED • AUTO-RECYCLE"
                                                    FontSize="11"
                                                    FontWeight="Bold"
                                                    Foreground="{StaticResource CyanBrush}"/>

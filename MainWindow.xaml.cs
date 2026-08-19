@@ -65,6 +65,8 @@ namespace Limelight
 
         private const int CurrentTutorialVersion = 1;
 
+        private const int RetainedLiveRollbackGenerations = 3;
+
         private const string NexusOAuthLoginUrl =
             "https://www.nexusmods.com/";
 
@@ -2424,6 +2426,10 @@ namespace Limelight
             catch (Exception exception)
             {
                 initialisationFailure = exception;
+
+                WriteLaunchTrace(
+                    "Live Loader initialisation failed: " +
+                    exception.Message);
             }
             finally
             {
@@ -3172,9 +3178,36 @@ namespace Limelight
             string gameDirectory,
             Action<string, int>? reportProgress)
         {
-            List<LiveSessionMountRecord> staleContainers =
+            List<LiveSessionMountRecord> candidates =
                 _liveSessionService.GetRetirableMountedContainers(
                     gameDirectory);
+
+            HashSet<string> protectedGenerations =
+                candidates
+                    .GroupBy(
+                        record =>
+                            string.IsNullOrWhiteSpace(record.GenerationId)
+                                ? $"pak:{record.PakPath}"
+                                : $"generation:{record.GenerationId}",
+                        StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(group =>
+                        group.Max(record =>
+                            record.MountedAt ??
+                            record.StagedAt))
+                    .Take(RetainedLiveRollbackGenerations)
+                    .Select(group =>
+                        group.Key)
+                    .ToHashSet(
+                        StringComparer.OrdinalIgnoreCase);
+
+            List<LiveSessionMountRecord> staleContainers =
+                candidates
+                    .Where(record =>
+                        !protectedGenerations.Contains(
+                            string.IsNullOrWhiteSpace(record.GenerationId)
+                                ? $"pak:{record.PakPath}"
+                                : $"generation:{record.GenerationId}"))
+                    .ToList();
 
             if (staleContainers.Count == 0)
             {
@@ -3182,19 +3215,35 @@ namespace Limelight
             }
 
             reportProgress?.Invoke(
-                "RETIRING PREVIOUS CONTAINER",
+                "RECYCLING OLD MODEL CONTAINERS",
                 20);
 
             foreach (LiveSessionMountRecord staleContainer in
                      staleContainers)
             {
-                // I check both sides of the unmount because a level change
-                // can begin while the native bridge is finishing its work.
-                await EnsureLiveWorldStableAsync();
-
                 LiveLoaderCommandResult unmountResult =
-                    await _liveLoaderCommandService.UnmountPakAsync(
-                        staleContainer.PakPath);
+                    new LiveLoaderCommandResult
+                    {
+                        Success = false,
+                        Message = "Unreal has not accepted the recycle request yet."
+                    };
+
+                for (int attempt = 0;
+                     attempt < 3 && !unmountResult.Success;
+                     attempt++)
+                {
+                    await EnsureLiveWorldStableAsync();
+
+                    unmountResult =
+                        await _liveLoaderCommandService.UnmountPakAsync(
+                            staleContainer.PakPath);
+
+                    if (!unmountResult.Success &&
+                        attempt < 2)
+                    {
+                        await Task.Delay(250 * (attempt + 1));
+                    }
+                }
 
                 if (!unmountResult.Success)
                 {
@@ -3202,13 +3251,14 @@ namespace Limelight
                         staleContainer.PakPath,
                         unmountResult.Message);
 
+                    // I stop this one swap instead of leaking mounted
+                    // containers forever or pretending an arbitrary count is
+                    // the real problem. The next attempt retries the recycle.
                     throw new InvalidOperationException(
-                        "Limelight could not retire the previous live container. " +
+                        "Limelight could not safely recycle an older model container yet. " +
                         unmountResult.Message +
-                        " Wait until the current level is fully visible, then try again.");
+                        " Wait until the current level is stable, then try the swap again.");
                 }
-
-                await EnsureLiveWorldStableAsync();
 
                 _liveSessionService.RecordUnmountedContainer(
                     staleContainer.PakPath);
@@ -3220,8 +3270,8 @@ namespace Limelight
 
                 if (cleanup.Errors.Count > 0)
                 {
-                    // The slot is safe to reuse once Unreal confirms the
-                    // unmount. Busy files can wait for closed-game cleanup.
+                    // I can retry a busy file when the game closes; Unreal has
+                    // already returned the important mounted-container slot.
                     _liveSessionService.RecordRetirementFailure(
                         staleContainer.PakPath,
                         string.Join(
@@ -3434,22 +3484,16 @@ namespace Limelight
 
             await EnsureLiveWorldStableAsync();
 
-            // I keep the active generation and the incoming generation only.
-            // This stops X19 rotations from consuming a new safety slot on
-            // every press while leaving the current assets available until
-            // their replacement is ready to mount.
+            // I keep the active model plus three rollback generations, then
+            // recycle anything older. That gives render streaming a generous
+            // runway without inventing a fixed number of swaps per session.
+            reportProgress?.Invoke(
+                "PREPARING MODEL RESOURCE WINDOW",
+                20);
+
             await RetireStaleLiveContainersAsync(
                 gameDirectory,
                 reportProgress);
-
-            if (!_liveSessionService.CanStageContainers(
-                    gameDirectory,
-                    upcomingContainerCount,
-                    out string limitMessage))
-            {
-                throw new InvalidOperationException(
-                    limitMessage);
-            }
 
             string generationId =
                 _liveSessionService.BeginActivation(
@@ -3660,6 +3704,17 @@ namespace Limelight
                         dependencyReloadResult.Message);
                 }
 
+                int[] meshReloadDelaysMilliseconds =
+                {
+                    0,
+                    180,
+                    320,
+                    550,
+                    850,
+                    1250,
+                    1800
+                };
+
                 LiveLoaderCommandResult meshReloadResult =
                     mod.IsCharacterSlotMod
                         ? new LiveLoaderCommandResult
@@ -3668,9 +3723,40 @@ namespace Limelight
                             Message =
                                 "Character Loader will resolve the PPCD mesh."
                         }
-                        : await _liveLoaderCommandService.ReloadAssetsAsync(
-                            meshPackages.Select(package =>
-                                package.ObjectPath));
+                        : new LiveLoaderCommandResult
+                    {
+                        Success = false,
+                        Message = "The replacement skeletal mesh has not registered yet."
+                    };
+
+                if (!mod.IsCharacterSlotMod)
+                {
+                    foreach (int delayMilliseconds in
+                             meshReloadDelaysMilliseconds)
+                    {
+                        if (delayMilliseconds > 0)
+                        {
+                            await Task.Delay(
+                                delayMilliseconds);
+                        }
+
+                        await EnsureLiveWorldStableAsync();
+
+                        // A permissive reload reports success even when Unreal
+                        // loads zero objects. Requiring every mesh here prevents a
+                        // retired model from remaining bound with black texture
+                        // resources while the replacement package is unavailable.
+                        meshReloadResult =
+                            await _liveLoaderCommandService.VerifyAssetsAsync(
+                                meshPackages.Select(package =>
+                                    package.ObjectPath));
+
+                        if (meshReloadResult.Success)
+                        {
+                            break;
+                        }
+                    }
+                }
 
                 if (!meshReloadResult.Success)
                 {
@@ -3817,6 +3903,8 @@ namespace Limelight
                             await Task.Delay(
                                 stabilizationDelaysMilliseconds[attempt]);
 
+                            await EnsureLiveWorldStableAsync();
+
                             LiveLoaderCommandResult stabilizationResult =
                                 await _liveLoaderCommandService.ReloadAssetsAsync(
                                     renderedDependencies.Select(package =>
@@ -3827,8 +3915,11 @@ namespace Limelight
                                 continue;
                             }
 
+                            await EnsureLiveWorldStableAsync();
+
                             LiveLoaderCommandResult stabilizationReapplyResult =
-                                await _liveLoaderCommandService.ReapplyCharlieAsync();
+                                await ReapplySelectedPlayerMeshAsync(
+                                    mod);
 
                             if (stabilizationReapplyResult.Success)
                             {
@@ -3837,18 +3928,10 @@ namespace Limelight
                         }
                     }
 
-                    LiveLoaderCommandResult retirementResult =
-                        await _liveLoaderCommandService
-                            .ConfirmPackageRetirementAsync();
-
-                    if (!retirementResult.Success)
-                    {
-                        throw new InvalidOperationException(
-                            retirementResult.Message);
-                    }
                 }
 
-                if (dependencyPackages.Count > 0)
+                if (dependencyPackages.Count > 0 &&
+                    !mod.IsCharacterSlotMod)
                 {
                     // The automatic world refresh needs every non-mesh asset,
                     // not only the strict material verification subset.
@@ -3861,6 +3944,82 @@ namespace Limelight
                     {
                         throw new InvalidOperationException(
                             rememberedAssetsResult.Message);
+                    }
+                }
+
+                if (reapplyResult.Success &&
+                    !deferredCharlieRefresh &&
+                    !mod.IsCharacterSlotMod)
+                {
+                    // Reloading every dependency can update a material's
+                    // texture objects after the earlier mesh bind. Give the
+                    // streaming manager one final frame window, then bind and
+                    // rebuild Charlie again before the native bridge is allowed
+                    // to release its temporary retirement roots.
+                    await Task.Delay(500);
+                    await EnsureLiveWorldStableAsync();
+
+                    LiveLoaderCommandResult finalReapplyResult =
+                        await ReapplySelectedPlayerMeshAsync(
+                            mod);
+
+                    if (!finalReapplyResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            finalReapplyResult.Message);
+                    }
+                }
+
+                if (registeredMountedAssets &&
+                    reapplyResult.Success &&
+                    !deferredCharlieRefresh)
+                {
+                    LiveLoaderCommandResult registeredAssetReleaseResult =
+                        await _liveLoaderCommandService
+                            .ReleaseRegisteredAssetsAsync();
+
+                    if (!registeredAssetReleaseResult.Success)
+                    {
+                        if (!mod.IsCharacterSlotMod)
+                        {
+                            throw new InvalidOperationException(
+                                registeredAssetReleaseResult.Message);
+                        }
+
+                        // I keep partially registered CSM roots for this game
+                        // process if cleanup sulks. The verified model matters
+                        // more than a dramatic but harmless error card.
+                        reportProgress?.Invoke(
+                            "CHARACTER SLOT READY; CACHE RETAINED",
+                            96);
+                    }
+                    else
+                    {
+                        registeredMountedAssets = false;
+                    }
+                }
+
+                if (reapplyResult.Success &&
+                    packagesWereRetired)
+                {
+                    LiveLoaderCommandResult retirementResult =
+                        await _liveLoaderCommandService
+                            .ConfirmPackageRetirementAsync();
+
+                    if (!retirementResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            retirementResult.Message);
+                    }
+
+                    LiveLoaderCommandResult settlementResult =
+                        await WaitForRetiredAssetsToSettleAsync(
+                            reportProgress);
+
+                    if (!settlementResult.Success)
+                    {
+                        throw new InvalidOperationException(
+                            settlementResult.Message);
                     }
                 }
 
@@ -4008,6 +4167,67 @@ namespace Limelight
                 throw new InvalidOperationException(
                     result.Message);
             }
+        }
+
+        private async Task<LiveLoaderCommandResult>
+            WaitForRetiredAssetsToSettleAsync(
+                Action<string, int>? reportProgress)
+        {
+            DateTime deadline =
+                DateTime.UtcNow.AddSeconds(35);
+
+            int consecutiveReadyChecks = 0;
+
+            // The native bridge releases temporary UObject roots on Unreal's
+            // garbage-collection pass. Do not let a rapid next click mount a
+            // new generation into that retirement window.
+            await Task.Delay(350);
+
+            LiveLoaderCommandResult result =
+                await _liveLoaderCommandService
+                    .CanSwitchModsAsync();
+
+            while (DateTime.UtcNow < deadline)
+            {
+                if (result.Success)
+                {
+                    consecutiveReadyChecks++;
+
+                    if (consecutiveReadyChecks >= 3)
+                    {
+                        return result;
+                    }
+
+                    await Task.Delay(300);
+                }
+                else
+                {
+                    consecutiveReadyChecks = 0;
+
+                    if (!IsTemporaryLiveSwitchDelay(
+                            result.Message))
+                    {
+                        return result;
+                    }
+
+                    reportProgress?.Invoke(
+                        "FINALISING THE PREVIOUS MODEL",
+                        98);
+
+                    await Task.Delay(450);
+                }
+
+                result =
+                    await _liveLoaderCommandService
+                        .CanSwitchModsAsync();
+            }
+
+            return new LiveLoaderCommandResult
+            {
+                Success = false,
+                Message =
+                    "Unreal did not finish retiring the previous model resources in time. The current model is safe, but restart the game before another live swap."
+            };
         }
 
         private Task<LiveLoaderCommandResult>
@@ -4741,6 +4961,7 @@ namespace Limelight
                 message,
                 "still settling",
                 "still retiring",
+                "still processing the previous live-loader command",
                 "temporarily locked",
                 "level is still loading",
                 "world is still loading");
