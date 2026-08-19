@@ -57,4 +57,9 @@
     <EmbeddedResource Include="Payloads\Multiplayer\multiplayer-manifest.json" LogicalName="Limelight.Payloads.Multiplayer.multiplayer-manifest.json" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="Payloads\UE4SS\UE4SS.dll" />
+    <EmbeddedResource Include="Payloads\UE4SS\UE4SS.dll" LogicalName="Limelight.Payloads.UE4SS.UE4SS.dll" />
+  </ItemGroup>
+
 </Project>

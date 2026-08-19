@@ -49,6 +49,15 @@ namespace Limelight.Services
             end
             """;
 
+        private const string VerifiedRuntimeResourceName =
+            "Limelight.Payloads.UE4SS.UE4SS.dll";
+
+        private const string VerifiedRuntimeSha256 =
+            "3C5523CE1290157672461491AEA786AAF76AF5DE9B7A0D831D9693F1BED1BB56";
+
+        private const string LegacyVerifierPatchSha256 =
+            "46DEFDF0628EB21EFC98297853A6DDFFF38341C29E8CAA5EA2F9A60A08AEC02F";
+
         private readonly object _compatibilityCacheLock =
             new object();
 
@@ -112,6 +121,14 @@ namespace Limelight.Services
                     string.Equals(
                         actualHash,
                         Ue4ssReleaseService.CompatibleDllSha256,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(
+                        actualHash,
+                        VerifiedRuntimeSha256,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(
+                        actualHash,
+                        LegacyVerifierPatchSha256,
                         StringComparison.OrdinalIgnoreCase);
 
                 return _cachedCompatibilityResult;
@@ -122,6 +139,7 @@ namespace Limelight.Services
             Ue4ssDetectionResult installation)
         {
             if (!IsRuntimeCompatible(installation) ||
+                !IsRuntimeStabilized(installation) ||
                 string.IsNullOrWhiteSpace(
                     installation.WorkingDirectory) ||
                 string.IsNullOrWhiteSpace(
@@ -193,6 +211,11 @@ namespace Limelight.Services
             string settingsPath =
                 installation.SettingsPath;
 
+            string runtimePath =
+                Path.Combine(
+                    installation.WorkingDirectory,
+                    "UE4SS.dll");
+
             if (!File.Exists(settingsPath))
             {
                 throw new FileNotFoundException(
@@ -205,7 +228,8 @@ namespace Limelight.Services
                 fNamePath,
                 staticConstructObjectPath,
                 gNativesPath,
-                settingsPath
+                settingsPath,
+                runtimePath
             };
 
             Dictionary<string, byte[]?> originalFiles =
@@ -213,6 +237,9 @@ namespace Limelight.Services
 
             try
             {
+                InstallVerifiedRuntime(
+                    runtimePath);
+
                 // The current game build needs this resolver before UE4SS can
                 // finish starting. The pattern has one verified match in the
                 // Dead as Disco shipping executable.
@@ -242,6 +269,141 @@ namespace Limelight.Services
                 // part of the configuration step fails.
                 RestoreFiles(originalFiles);
                 throw;
+            }
+        }
+
+        private static bool IsRuntimeStabilized(
+            Ue4ssDetectionResult installation)
+        {
+            if (string.IsNullOrWhiteSpace(
+                    installation.WorkingDirectory))
+            {
+                return false;
+            }
+
+            string runtimePath =
+                Path.Combine(
+                    installation.WorkingDirectory,
+                    "UE4SS.dll");
+
+            if (!File.Exists(runtimePath))
+            {
+                return false;
+            }
+
+            using FileStream runtimeStream =
+                File.OpenRead(runtimePath);
+
+            string actualHash =
+                Convert.ToHexString(
+                    SHA256.HashData(runtimeStream));
+
+            return string.Equals(
+                actualHash,
+                VerifiedRuntimeSha256,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void InstallVerifiedRuntime(
+            string runtimePath)
+        {
+            byte[] runtime =
+                File.ReadAllBytes(runtimePath);
+
+            string currentHash =
+                Convert.ToHexString(
+                    SHA256.HashData(runtime));
+
+            if (string.Equals(
+                    currentHash,
+                    VerifiedRuntimeSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            bool canUpgrade =
+                string.Equals(
+                    currentHash,
+                    Ue4ssReleaseService.CompatibleDllSha256,
+                    StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(
+                    currentHash,
+                    LegacyVerifierPatchSha256,
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (!canUpgrade)
+            {
+                throw new InvalidDataException(
+                    "The installed UE4SS runtime is not the verified Dead as Disco build.");
+            }
+
+            using Stream? verifiedRuntimeStream =
+                typeof(DeadAsDiscoUe4ssConfigurationService)
+                    .Assembly
+                    .GetManifestResourceStream(
+                        VerifiedRuntimeResourceName);
+
+            if (verifiedRuntimeStream is null)
+            {
+                throw new InvalidDataException(
+                    "Limelight's verified UE4SS runtime is missing.");
+            }
+
+            using MemoryStream verifiedRuntimeBuffer =
+                new MemoryStream();
+
+            verifiedRuntimeStream.CopyTo(
+                verifiedRuntimeBuffer);
+
+            byte[] verifiedRuntime =
+                verifiedRuntimeBuffer.ToArray();
+
+            string verifiedHash =
+                Convert.ToHexString(
+                    SHA256.HashData(verifiedRuntime));
+
+            if (!string.Equals(
+                    verifiedHash,
+                    VerifiedRuntimeSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    "Limelight's UE4SS runtime did not match its verified digest.");
+            }
+
+            // I ship the tiny verifier correction as one known runtime. The
+            // game calling the constructor is proof enough; making it sit a
+            // second exam is what caused the crash loop in the first place.
+            WriteBytesAtomically(
+                runtimePath,
+                verifiedRuntime);
+        }
+
+        private static void WriteBytesAtomically(
+            string path,
+            byte[] contents)
+        {
+            string temporaryPath =
+                path + ".limelight.tmp";
+
+            try
+            {
+                File.WriteAllBytes(
+                    temporaryPath,
+                    contents);
+
+                File.Move(
+                    temporaryPath,
+                    path,
+                    overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
             }
         }
 
