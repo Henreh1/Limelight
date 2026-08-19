@@ -2,24 +2,24 @@
   "schemaVersion": 1,
   "version": "0.1.0",
   "protocolVersion": 1,
-  "sourceCommit": "f010ef0aa60375fc8b8de46efaf161ec29a219eb",
-  "sourceDirty": false,
+  "sourceCommit": "540e7dbdcd20d141b71bb8f8e1413fd02296ae4c",
+  "sourceDirty": true,
   "ue4ssVersion": "3.0.1-1009",
   "ue4ssCommit": "c2ac246447a8bcd92541070cb474044e7a2bbbe6",
   "hostScript": {
     "resourceName": "Limelight.Payloads.Multiplayer.host.lua",
-    "size": 68315,
-    "sha256": "DB33181CE59CA07A9551F08F13F9B125B062DACC5979CD8E3A98C3FB1A493E1E"
+    "size": 69412,
+    "sha256": "D0ED1567EEBC21D0463A9887CB9EDD7D20E8A0D485EEFFE68F3BF8905463798F"
   },
   "clientScript": {
     "resourceName": "Limelight.Payloads.Multiplayer.client.lua",
-    "size": 53302,
-    "sha256": "DE16F4D93CC39CFC71523F96053470A061D562C88DCAF9FAE9379D69BC70C527"
+    "size": 56641,
+    "sha256": "1328CDC5094D71311E4E134965BB38480C69E8A65E382131344BF9F7099A06AC"
   },
   "nativeBridge": {
     "resourceName": "Limelight.Payloads.Multiplayer.LimelightMPNative.dll",
-    "size": 862208,
-    "sha256": "6A2E527B387E4AAF3BCCBCEC64E0FEF6A2B28CCC3D6D0FC3F9F692735014F950"
+    "size": 937472,
+    "sha256": "FF7D9ADBE1071EBC4B62768CB07BA21F003530A15A0010A472B1F8C4C1103538"
   },
   "relay": {
     "resourceName": "Limelight.Payloads.Multiplayer.LimelightMPRelay.exe",

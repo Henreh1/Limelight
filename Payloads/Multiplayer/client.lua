@@ -48,18 +48,21 @@ local personalMenuHooksRegistered = false
 local preparedPersonalMenus = {}
 local hudPresentationHooksRegistered = false
 local preparedHudWidgets = {}
+local deferredHookPaths = {}
+local deferredHookFailures = {}
 
 -- Replicated Character roots arrive in discrete network updates. Unreal applies
 -- visual smoothing to the skeletal mesh, so use that as the camera anchor and
 -- lightly filter any remaining corrections without delaying look rotation.
 local CAMERA_ANCHOR_BLEND = 0.35
-local CAMERA_ANCHOR_SNAP_DISTANCE_SQUARED = 1000000.0
+local CAMERA_ANCHOR_SNAP_DISTANCE_SQUARED = 640000.0
+local CAMERA_ANCHOR_SNAP_VERTICAL_DISTANCE = 350.0
 -- Pagoda's replicated song clock arrives in steps. A small tolerance makes the
 -- native correction seek on nearly every frame between network updates. Keep
 -- that failsafe wide and align the local song once when it becomes playable.
 local MAX_CLIENT_RHYTHM_DEVIATION = 2.50
-local MUSIC_RECOVERY_MAX_ATTEMPTS = 12
-local MUSIC_RECOVERY_RETRY_TICKS = 60
+local MUSIC_RECOVERY_MAX_ATTEMPTS = 6
+local MUSIC_RECOVERY_RETRY_TICKS = 300
 
 local function log(message)
     print(string.format("[%s] %s\n", MOD_NAME, tostring(message)))
@@ -141,6 +144,25 @@ local function parameterValue(parameter)
     return ok and value or parameter
 end
 
+local function registerDeferredHook(path, callback)
+    if deferredHookPaths[path] then
+        return true, nil, nil, false
+    end
+
+    local ok, preId, postId = pcall(function()
+        return RegisterHook(path, callback)
+    end)
+    if ok then
+        deferredHookPaths[path] = true
+        deferredHookFailures[path] = nil
+        return true, preId, postId, true
+    end
+
+    local firstFailure = not deferredHookFailures[path]
+    deferredHookFailures[path] = true
+    return false, preId, postId, firstFailure
+end
+
 local function applyVersionWatermark(layout, reason)
     if not isValid(layout) then
         return false
@@ -179,23 +201,39 @@ local function installVersionWatermark()
         return
     end
 
-    local ok, preId, postId = pcall(function()
-        return RegisterHook(
-            "/Game/Pagoda/UI/Game/UI_Layout_Game.UI_Layout_Game_C:OnInitialized",
-            function(layoutParameter)
-                local layout = parameterValue(layoutParameter)
-                ExecuteInGameThreadWithDelay(1, function()
-                    applyVersionWatermark(layout, "game-layout-initialized")
-                end)
-            end)
+    local path = "/Game/Pagoda/UI/Game/UI_Layout_Game.UI_Layout_Game_C:OnInitialized"
+    local ok, preId, postId, changed = registerDeferredHook(path, function(layoutParameter)
+        local layout = parameterValue(layoutParameter)
+        ExecuteInGameThreadWithDelay(1, function()
+            applyVersionWatermark(layout, "game-layout-initialized")
+        end)
     end)
     versionWatermarkHookRegistered = ok
-    report(string.format(
-        "watermark=layout-hooked ok=%s pre=%s post=%s detail=%s",
-        tostring(ok),
-        tostring(preId),
-        tostring(postId),
-        ok and "nil" or tostring(preId)))
+    if changed then
+        report(string.format(
+            "%s pre=%s post=%s detail=%s",
+            ok and "watermark=layout-hooked" or "watermark=layout-hook-deferred",
+            tostring(preId),
+            tostring(postId),
+            ok and "nil" or tostring(preId)))
+    end
+end
+
+local function applyVersionWatermarkToLoadedLayouts(reason)
+    local ok, layouts = pcall(function()
+        return FindAllOf("UI_Layout_Game_C") or {}
+    end)
+    if not ok then
+        return false
+    end
+
+    local applied = false
+    for _, layout in ipairs(layouts) do
+        if applyVersionWatermark(layout, reason) then
+            applied = true
+        end
+    end
+    return applied
 end
 
 local function restoreHazardPresentation(actor, reason)
@@ -231,10 +269,6 @@ local function restoreHazardPresentation(actor, reason)
 end
 
 local function installHazardPresentationHooks()
-    if hazardPresentationHooksRegistered then
-        return
-    end
-
     local hookPaths = {
         "/Game/Pagoda/Common/BP_GroundImpactIndicator.BP_GroundImpactIndicator_C:ReceiveBeginPlay",
         "/Game/Pagoda/Common/BP_GroundImpactIndicator.BP_GroundImpactIndicator_C:SetupIndicator",
@@ -244,30 +278,32 @@ local function installHazardPresentationHooks()
         "/Game/Pagoda/Common/BP_TraceImpactIndicator.BP_TraceImpactIndicator_C:SetIsReadyToShoot"
     }
     local registered = 0
+    local changed = false
     for _, hookPath in ipairs(hookPaths) do
         local path = hookPath
-        local ok, preId = pcall(function()
-            return RegisterHook(path, function(actorParameter, ...)
-                local actor = parameterValue(actorParameter)
-                ExecuteInGameThreadWithDelay(1, function()
-                    restoreHazardPresentation(actor, path)
-                end)
+        local ok, preId, _, pathChanged = registerDeferredHook(path, function(actorParameter, ...)
+            local actor = parameterValue(actorParameter)
+            ExecuteInGameThreadWithDelay(1, function()
+                restoreHazardPresentation(actor, path)
             end)
         end)
         if ok then
             registered = registered + 1
-        else
+        elseif pathChanged then
             report(string.format(
-                "hazard_presentation=hook-failed path=%s detail=%s",
+                "hazard_presentation=hook-deferred path=%s detail=%s",
                 path,
                 tostring(preId)))
         end
+        changed = changed or pathChanged
     end
-    hazardPresentationHooksRegistered = registered > 0
-    report(string.format(
-        "hazard_presentation=hooks registered=%d total=%d",
-        registered,
-        #hookPaths))
+    hazardPresentationHooksRegistered = registered == #hookPaths
+    if changed then
+        report(string.format(
+            "hazard_presentation=hooks registered=%d total=%d",
+            registered,
+            #hookPaths))
+    end
 end
 
 local function prepareDialogueWidget(widget, reason)
@@ -327,69 +363,95 @@ local function prepareDialogueComponent(component, reason)
 end
 
 local function installDialogueInputHooks()
-    if dialogueInputHookRegistered then
-        return
-    end
-
     local componentPaths = {
         "/Game/Pagoda/Characters/Player/Components/BP_PlayerDialogueComponent.BP_PlayerDialogueComponent_C:PushDialogueWidget",
         "/Game/Pagoda/Characters/Player/Components/BP_PlayerDialogueComponent.BP_PlayerDialogueComponent_C:GetOrPushWidget",
         "/Game/Pagoda/Characters/Player/Components/BP_PlayerDialogueComponent.BP_PlayerDialogueComponent_C:HandleDialogStarted"
     }
     local registered = 0
+    local changed = false
 
     for _, hookPath in ipairs(componentPaths) do
         local path = hookPath
-        local ok, preId, postId = pcall(function()
-            return RegisterHook(path, function(componentParameter, ...)
-                local component = parameterValue(componentParameter)
-                ExecuteInGameThreadWithDelay(1, function()
-                    prepareDialogueComponent(component, path .. ":1ms")
-                end)
-                ExecuteInGameThreadWithDelay(75, function()
-                    prepareDialogueComponent(component, path .. ":75ms")
-                end)
+        local ok, preId, postId, pathChanged = registerDeferredHook(path, function(componentParameter, ...)
+            local component = parameterValue(componentParameter)
+            ExecuteInGameThreadWithDelay(1, function()
+                prepareDialogueComponent(component, path .. ":1ms")
+            end)
+            ExecuteInGameThreadWithDelay(75, function()
+                prepareDialogueComponent(component, path .. ":75ms")
             end)
         end)
         if ok then
             registered = registered + 1
+            if pathChanged then
+                report(string.format(
+                    "dialogue_input=hooked path=%s pre=%s post=%s",
+                    path,
+                    tostring(preId),
+                    tostring(postId)))
+            end
+        elseif pathChanged then
             report(string.format(
-                "dialogue_input=hooked path=%s pre=%s post=%s",
-                path,
-                tostring(preId),
-                tostring(postId)))
-        else
-            report(string.format(
-                "dialogue_input=hook-failed path=%s detail=%s",
+                "dialogue_input=hook-deferred path=%s detail=%s",
                 path,
                 tostring(preId)))
         end
+        changed = changed or pathChanged
     end
 
     local widgetPath = "/Game/Pagoda/UI/Dialogue/WBP_Dialogue_Main.WBP_Dialogue_Main_C:HandleDialogueStart"
-    local widgetOk, widgetPreId, widgetPostId = pcall(function()
-        return RegisterHook(widgetPath, function(widgetParameter, ...)
-            local widget = parameterValue(widgetParameter)
-            ExecuteInGameThreadWithDelay(1, function()
-                prepareDialogueWidget(widget, widgetPath)
-            end)
+    local widgetOk, widgetPreId, widgetPostId, widgetChanged = registerDeferredHook(widgetPath, function(widgetParameter, ...)
+        local widget = parameterValue(widgetParameter)
+        ExecuteInGameThreadWithDelay(1, function()
+            prepareDialogueWidget(widget, widgetPath)
         end)
     end)
     if widgetOk then
         registered = registered + 1
+        if widgetChanged then
+            report(string.format(
+                "dialogue_input=hooked path=%s pre=%s post=%s",
+                widgetPath,
+                tostring(widgetPreId),
+                tostring(widgetPostId)))
+        end
+    elseif widgetChanged then
         report(string.format(
-            "dialogue_input=hooked path=%s pre=%s post=%s",
-            widgetPath,
-            tostring(widgetPreId),
-            tostring(widgetPostId)))
-    else
-        report(string.format(
-            "dialogue_input=hook-failed path=%s detail=%s",
+            "dialogue_input=hook-deferred path=%s detail=%s",
             widgetPath,
             tostring(widgetPreId)))
     end
+    changed = changed or widgetChanged
 
-    dialogueInputHookRegistered = registered > 0
+    dialogueInputHookRegistered = registered == #componentPaths + 1
+    return changed
+end
+
+local function prepareLoadedDialogue(reason)
+    local prepared = false
+    local componentOk, components = pcall(function()
+        return FindAllOf("BP_PlayerDialogueComponent_C") or {}
+    end)
+    if componentOk then
+        for _, component in ipairs(components) do
+            if prepareDialogueComponent(component, reason) then
+                prepared = true
+            end
+        end
+    end
+
+    local widgetOk, widgets = pcall(function()
+        return FindAllOf("WBP_Dialogue_Main_C") or {}
+    end)
+    if widgetOk then
+        for _, widget in ipairs(widgets) do
+            if prepareDialogueWidget(widget, reason) then
+                prepared = true
+            end
+        end
+    end
+    return prepared
 end
 
 local function owningPlayerController(widget)
@@ -530,10 +592,6 @@ local function preparePersonalMenu(widget, reason)
 end
 
 local function installPersonalMenuHooks()
-    if personalMenuHooksRegistered then
-        return
-    end
-
     local widgetClasses = {
         "/Game/Pagoda/UI/Game/WBP_PauseMenu_Main.WBP_PauseMenu_Main_C",
         "/Game/Pagoda/UI/SkillTree/WBP_SkillTree_Main.WBP_SkillTree_Main_C",
@@ -542,32 +600,34 @@ local function installPersonalMenuHooks()
         "/Game/Pagoda/UI/Cosmetics/WBP_DanceMoveEquip_Panel.WBP_DanceMoveEquip_Panel_C"
     }
     local registered = 0
+    local changed = false
     for _, classPath in ipairs(widgetClasses) do
         for _, eventName in ipairs({ "OnInitialized", "BP_OnActivated" }) do
             local hookPath = classPath .. ":" .. eventName
             local path = hookPath
-            local ok, preId, postId = pcall(function()
-                return RegisterHook(path, function(widgetParameter, ...)
-                    local widget = parameterValue(widgetParameter)
-                    preparePersonalMenu(widget, path .. ":immediate")
-                    for _, delayMs in ipairs({ 1, 75, 250, 750 }) do
-                        local delay = delayMs
-                        ExecuteInGameThreadWithDelay(delay, function()
-                            preparePersonalMenu(widget, path .. ":" .. tostring(delay) .. "ms")
-                        end)
-                    end
-                end)
+            local ok, preId, postId, pathChanged = registerDeferredHook(path, function(widgetParameter, ...)
+                local widget = parameterValue(widgetParameter)
+                preparePersonalMenu(widget, path .. ":immediate")
+                for _, delayMs in ipairs({ 1, 75, 250, 750 }) do
+                    local delay = delayMs
+                    ExecuteInGameThreadWithDelay(delay, function()
+                        preparePersonalMenu(widget, path .. ":" .. tostring(delay) .. "ms")
+                    end)
+                end
             end)
             if ok then
                 registered = registered + 1
-            else
-                report(string.format("personal_menu=hook-failed path=%s detail=%s", path, tostring(preId)))
+            elseif pathChanged then
+                report(string.format("personal_menu=hook-deferred path=%s detail=%s", path, tostring(preId)))
             end
+            changed = changed or pathChanged
         end
     end
 
-    personalMenuHooksRegistered = registered > 0
-    report(string.format("personal_menu=hooks registered=%d", registered))
+    personalMenuHooksRegistered = registered == #widgetClasses * 2
+    if changed then
+        report(string.format("personal_menu=hooks registered=%d total=%d", registered, #widgetClasses * 2))
+    end
 end
 
 local function restoreHudWidget(widget, reason)
@@ -655,35 +715,33 @@ local function restoreLocalHud(reason)
 end
 
 local function installHudPresentationHooks()
-    if hudPresentationHooksRegistered then
-        return
-    end
-
     local hookPaths = {
         "/Game/Pagoda/UI/Game/WBP_HUDCanvas.WBP_HUDCanvas_C:OnInitialized",
         "/Game/Pagoda/UI/Game/InfiniteDisco/WBP_InfiniteDiscoHUD.WBP_InfiniteDiscoHUD_C:OnInitialized",
         "/Game/Pagoda/UI/Game/InfiniteDisco/WBP_InfiniteDiscoHUD.WBP_InfiniteDiscoHUD_C:BP_OnActivated"
     }
     local registered = 0
+    local changed = false
     for _, hookPath in ipairs(hookPaths) do
         local path = hookPath
-        local ok, preId = pcall(function()
-            return RegisterHook(path, function(widgetParameter, ...)
-                local widget = parameterValue(widgetParameter)
-                ExecuteInGameThreadWithDelay(1, function()
-                    restoreHudWidget(widget, path)
-                    restoreLocalHud(path)
-                end)
+        local ok, preId, _, pathChanged = registerDeferredHook(path, function(widgetParameter, ...)
+            local widget = parameterValue(widgetParameter)
+            ExecuteInGameThreadWithDelay(1, function()
+                restoreHudWidget(widget, path)
+                restoreLocalHud(path)
             end)
         end)
         if ok then
             registered = registered + 1
-        else
-            report(string.format("hud=hook-failed path=%s detail=%s", path, tostring(preId)))
+        elseif pathChanged then
+            report(string.format("hud=hook-deferred path=%s detail=%s", path, tostring(preId)))
         end
+        changed = changed or pathChanged
     end
-    hudPresentationHooksRegistered = registered > 0
-    report(string.format("hud=hooks registered=%d total=%d", registered, #hookPaths))
+    hudPresentationHooksRegistered = registered == #hookPaths
+    if changed then
+        report(string.format("hud=hooks registered=%d total=%d", registered, #hookPaths))
+    end
 end
 
 local function hideStaleFadePanels(reason)
@@ -790,7 +848,8 @@ local function smoothTargetAnchor(location, targetName)
     local dy = y - smoothedTargetY
     local dz = z - smoothedTargetZ
     local distanceSquared = dx * dx + dy * dy + dz * dz
-    if distanceSquared > CAMERA_ANCHOR_SNAP_DISTANCE_SQUARED then
+    if distanceSquared >= CAMERA_ANCHOR_SNAP_DISTANCE_SQUARED or
+       math.abs(dz) >= CAMERA_ANCHOR_SNAP_VERTICAL_DISTANCE then
         smoothedTargetX = x
         smoothedTargetY = y
         smoothedTargetZ = z
@@ -1319,6 +1378,35 @@ local function updateCamera()
     return true, nil
 end
 
+local function refreshDeferredMultiplayerHooks(reason)
+    -- Blueprint hooks are map assets, not startup assets. I keep retrying the
+    -- individual missing paths as Pagoda streams them in, then repair widgets
+    -- which were already born before their hook arrived at the party.
+    installVersionWatermark()
+    installDialogueInputHooks()
+    installPersonalMenuHooks()
+    installHudPresentationHooks()
+    installRhythmSyncHook()
+    installHazardPresentationHooks()
+    applyVersionWatermarkToLoadedLayouts(reason)
+    prepareLoadedDialogue(reason)
+    restoreLocalHud(reason)
+
+    for _, classToFind in ipairs({
+        "BP_GroundImpactIndicator_C",
+        "BP_TraceImpactIndicator_C"
+    }) do
+        local ok, actors = pcall(function()
+            return FindAllOf(classToFind) or {}
+        end)
+        if ok then
+            for _, actor in ipairs(actors) do
+                restoreHazardPresentation(actor, reason)
+            end
+        end
+    end
+end
+
 local function startCameraLoop(reason)
     cameraGeneration = cameraGeneration + 1
     local generation = cameraGeneration
@@ -1348,6 +1436,9 @@ local function startCameraLoop(reason)
                 cameraLastReferenceRefreshTick = ticks
                 refreshCameraReferences(ticks == 1 and reason or "periodic-health")
             end
+            if ticks == 300 then
+                refreshDeferredMultiplayerHooks("camera-loop:" .. tostring(ticks))
+            end
             local ok, detail = updateCamera()
             if not ok and not waitingReported then
                 waitingReported = true
@@ -1355,8 +1446,8 @@ local function startCameraLoop(reason)
             elseif ok then
                 waitingReported = false
             end
-            if ticks == 120 or ticks % 60 == 0 then
-                tryRecoverMusic(ticks, ticks == 120 and "camera-ready" or "periodic-check")
+            if ticks == 180 or ticks % 300 == 0 then
+                tryRecoverMusic(ticks, ticks == 180 and "camera-ready" or "periodic-check")
             end
         end
         ExecuteInGameThreadWithDelay(16, tick)
@@ -1422,12 +1513,7 @@ local function tryJoin(reason)
     })
 end
 
-installVersionWatermark()
-installDialogueInputHooks()
-installPersonalMenuHooks()
-installHudPresentationHooks()
 installRhythmSyncHook()
-installHazardPresentationHooks()
 
 RegisterLoadMapPreHook(function()
     worldTransitioning = true
@@ -1449,6 +1535,14 @@ RegisterLoadMapPostHook(function()
     worldTransitioning = false
     local worldName = string.lower(objectName(UEHelpers.GetWorld()))
     report("map_transition=finished world=" .. objectName(UEHelpers.GetWorld()))
+    if isGameplayWorld() then
+        for _, delayMs in ipairs({ 100, 1200 }) do
+            local delay = delayMs
+            ExecuteInGameThreadWithDelay(delay, function()
+                refreshDeferredMultiplayerHooks("map-load:" .. tostring(delay) .. "ms")
+            end)
+        end
+    end
     if joinIssued and isConnectionRecoveryWorld() then
         -- An ordinary story OpenLevel returns this client to Startup/Main Menu.
         -- Retry automatically while the host reopens that story map as a
