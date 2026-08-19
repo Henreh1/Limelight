@@ -16,10 +16,10 @@ namespace Limelight.Services
 
     public sealed class LiveLoaderCommandService
     {
-        private readonly SemaphoreSlim _luaCommandLock =
+        private static readonly SemaphoreSlim LuaCommandLock =
             new(1, 1);
 
-        private readonly SemaphoreSlim _nativeCommandLock =
+        private static readonly SemaphoreSlim NativeCommandLock =
             new(1, 1);
 
         private string RuntimeDirectory =>
@@ -196,8 +196,8 @@ namespace Limelight.Services
         public Task<LiveLoaderCommandResult> ConfirmPackageRetirementAsync(
             CancellationToken cancellationToken = default)
         {
-            // The native bridge may only retire the old render resources once
-            // Lua has proved that the new player mesh and materials are live.
+            // I confirm that Lua completed the handoff before NativeBridge
+            // advances its rolling render-resource window.
             return SendAsync(
                 "confirm_package_retirement",
                 "native-command.txt",
@@ -344,8 +344,8 @@ namespace Limelight.Services
                 responseFileName.Equals(
                     "native-response.txt",
                     StringComparison.OrdinalIgnoreCase)
-                    ? _nativeCommandLock
-                    : _luaCommandLock;
+                    ? NativeCommandLock
+                    : LuaCommandLock;
 
             await commandLock.WaitAsync(
                 cancellationToken);
@@ -382,9 +382,6 @@ namespace Limelight.Services
                     RuntimeDirectory,
                     commandFileName);
 
-            string temporaryCommandPath =
-                commandPath + ".tmp";
-
             string responsePath =
                 Path.Combine(
                     RuntimeDirectory,
@@ -392,6 +389,11 @@ namespace Limelight.Services
 
             string requestId =
                 Guid.NewGuid().ToString("N");
+
+            string temporaryCommandPath =
+                Path.Combine(
+                    RuntimeDirectory,
+                    $".{commandFileName}.{requestId}.limelight-writing");
 
             string commandText =
                 $"requestId={requestId}{Environment.NewLine}" +
@@ -414,17 +416,23 @@ namespace Limelight.Services
                 }
             }
 
-            // Write to a temporary file first so the Lua bridge never reads a
-            // command while Limelight is still writing it.
-            await File.WriteAllTextAsync(
-                temporaryCommandPath,
-                commandText,
-                cancellationToken);
-
-            File.Move(
-                temporaryCommandPath,
-                commandPath,
-                overwrite: true);
+            try
+            {
+                // I give each command its own backstage file. Reusing one
+                // fixed .tmp name let session cleanup and command publishing
+                // grab the same prop, which is how a healthy bridge produced
+                // a completely bogus "file not found" launch failure.
+                await PublishCommandAsync(
+                    temporaryCommandPath,
+                    commandPath,
+                    commandText,
+                    cancellationToken);
+            }
+            finally
+            {
+                TryDeleteFile(
+                    temporaryCommandPath);
+            }
 
             DateTime timeoutAt =
                 DateTime.UtcNow.Add(timeout);
@@ -480,6 +488,23 @@ namespace Limelight.Services
                 Success = false,
                 Message = "The live-loader bridge did not respond."
             };
+        }
+
+        private static async Task PublishCommandAsync(
+            string temporaryCommandPath,
+            string commandPath,
+            string commandText,
+            CancellationToken cancellationToken)
+        {
+            await File.WriteAllTextAsync(
+                temporaryCommandPath,
+                commandText,
+                cancellationToken);
+
+            File.Move(
+                temporaryCommandPath,
+                commandPath,
+                overwrite: true);
         }
 
         private static async Task<Dictionary<string, string>?>
