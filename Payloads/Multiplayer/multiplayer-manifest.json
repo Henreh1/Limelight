@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "version": "0.1.0",
   "protocolVersion": 1,
-  "sourceCommit": "540e7dbdcd20d141b71bb8f8e1413fd02296ae4c",
-  "sourceDirty": true,
+  "sourceCommit": "cbcae6221059b072976217342df09b7310eae07c",
+  "sourceDirty": false,
   "ue4ssVersion": "3.0.1-1009",
   "ue4ssCommit": "c2ac246447a8bcd92541070cb474044e7a2bbbe6",
   "hostScript": {
