@@ -171,6 +171,19 @@ namespace Limelight.Views
                 NexusHomeUrl);
         }
 
+        public void SetTutorialOverlayActive(
+            bool isActive)
+        {
+            // WebView2 owns a native child window, so normal WPF Z-order
+            // cannot place the tutorial card above it. I hide only the native
+            // browser surface while this page's tour step is visible; the
+            // browser session and the rest of the Nexus page stay intact.
+            NexusBrowser.Visibility =
+                isActive
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+        }
+
         public void ShowDownloadState(
             NexusModFile file,
             string message,

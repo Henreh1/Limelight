@@ -1212,6 +1212,9 @@ namespace Limelight
             TutorialStep step =
                 _tutorialSteps[_tutorialStepIndex];
 
+            BrowseNexusPageControl.SetTutorialOverlayActive(
+                step.Page == NavigationPage.BrowseNexus);
+
             NavigateForTutorial(step.Page);
 
             TutorialEyebrowText.Text =
@@ -1381,6 +1384,9 @@ namespace Limelight
 
         private void CompleteTutorial()
         {
+            BrowseNexusPageControl.SetTutorialOverlayActive(
+                false);
+
             _settings.CompletedTutorialVersion =
                 CurrentTutorialVersion;
 
