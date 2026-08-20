@@ -144,6 +144,30 @@ namespace Limelight.Services
                 cancellationToken);
         }
 
+        public Task<LiveLoaderCommandResult> CommitActiveAssetsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return SendAsync(
+                "commit_active_assets",
+                "command.txt",
+                "response.txt",
+                arguments: null,
+                timeout: TimeSpan.FromSeconds(10),
+                cancellationToken);
+        }
+
+        public Task<LiveLoaderCommandResult> RollbackActiveAssetsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return SendAsync(
+                "rollback_active_assets",
+                "command.txt",
+                "response.txt",
+                arguments: null,
+                timeout: TimeSpan.FromSeconds(10),
+                cancellationToken);
+        }
+
         public Task<LiveLoaderCommandResult> ReloadAssetsAsync(
             IEnumerable<string> objectPaths,
             CancellationToken cancellationToken = default)

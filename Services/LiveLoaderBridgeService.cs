@@ -79,6 +79,7 @@ namespace Limelight.Services
     local baseCharacterDefinition = nil
     local activeCharliePortraitPath = nil
     local activeObjectPathsText = nil
+    local activeObjectPathsRollbackText = nil
     local activeStringTablePaths = {}
     local knownCharliePortraitResources =
     {
@@ -345,7 +346,7 @@ namespace Limelight.Services
         return false
     end
 
-    local function rememberActiveAssets(objectPathsText)
+    local function applyActiveAssets(objectPathsText)
         activeObjectPathsText = objectPathsText
         activeCharliePortraitPath = nil
         activeStringTablePaths = {}
@@ -392,6 +393,33 @@ namespace Limelight.Services
             localizedTextRefreshPassesRemaining = 30
             lastLocalizedTextRefreshSecond = 0
         end
+    end
+
+    local function rememberActiveAssets(objectPathsText)
+        if activeObjectPathsRollbackText == nil then
+            activeObjectPathsRollbackText =
+                activeObjectPathsText or ""
+        end
+
+        applyActiveAssets(objectPathsText)
+    end
+
+    local function commitActiveAssets()
+        activeObjectPathsRollbackText = nil
+    end
+
+    local function rollbackActiveAssets()
+        if activeObjectPathsRollbackText == nil then
+            return false
+        end
+
+        local rollbackObjectPathsText =
+            activeObjectPathsRollbackText
+
+        activeObjectPathsRollbackText = nil
+        applyActiveAssets(rollbackObjectPathsText)
+
+        return true
     end
 
     local function refreshCharliePortraitWidgets()
@@ -2408,6 +2436,23 @@ namespace Limelight.Services
                 requestId,
                 true,
                 "Limelight remembered the complete active asset list.")
+        elseif action == "commit_active_assets" then
+            commitActiveAssets()
+
+            writeResponse(
+                requestId,
+                true,
+                "Limelight committed the verified active asset list.")
+        elseif action == "rollback_active_assets" then
+            local rollbackApplied =
+                rollbackActiveAssets()
+
+            writeResponse(
+                requestId,
+                true,
+                rollbackApplied and
+                    "Limelight restored the previous active asset list." or
+                    "No pending active asset list needed rollback.")
         elseif action == "reload_assets" then
             ExecuteInGameThread(function()
                 if worldTransitioning or worldSettling then
@@ -2444,7 +2489,7 @@ namespace Limelight.Services
                         if activeObjectPathsText == nil or
                            activeObjectPathsText == "" then
 
-                            rememberActiveAssets(
+                            applyActiveAssets(
                                 command.objectPaths)
                         end
                     end

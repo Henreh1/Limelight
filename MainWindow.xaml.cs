@@ -3328,6 +3328,8 @@ namespace Limelight
                     mod,
                     gameDirectory);
 
+            bool activeAssetsPending = false;
+
             try
             {
                 await EnsureLiveWorldStableAsync();
@@ -3346,6 +3348,8 @@ namespace Limelight
                     throw new InvalidOperationException(
                         rememberResult.Message);
                 }
+
+                activeAssetsPending = true;
 
                 // The active model was already mounted by Unreal from ~mods at
                 // process startup. Mounting a duplicate live container races the
@@ -3425,6 +3429,18 @@ namespace Limelight
                         reapplyResult.Message);
                 }
 
+                LiveLoaderCommandResult commitAssetsResult =
+                    await _liveLoaderCommandService
+                        .CommitActiveAssetsAsync();
+
+                if (!commitAssetsResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        commitAssetsResult.Message);
+                }
+
+                activeAssetsPending = false;
+
                 reportProgress?.Invoke(
                     deferredCharlieRefresh
                         ? "READY: MODEL WILL APPEAR WITH CHARLIE"
@@ -3440,6 +3456,20 @@ namespace Limelight
             }
             catch (Exception exception)
             {
+                if (activeAssetsPending)
+                {
+                    try
+                    {
+                        await _liveLoaderCommandService
+                            .RollbackActiveAssetsAsync();
+                    }
+                    catch
+                    {
+                        // I keep the startup failure as the useful error. The
+                        // next game process starts with a fresh Lua bridge.
+                    }
+                }
+
                 _liveSessionService.FailActivation(
                     exception);
 
@@ -3508,6 +3538,9 @@ namespace Limelight
 
             bool packagesWereRetired = false;
             bool registeredMountedAssets = false;
+            bool activeAssetsPending = false;
+            List<ModAssetPackage> livePackages =
+                new();
 
             try
             {
@@ -3515,7 +3548,7 @@ namespace Limelight
                     "SCANNING MOD CONTENT",
                     35);
 
-                List<ModAssetPackage> livePackages =
+                livePackages =
                     await GetLivePackagesAsync(mod);
 
                 if (livePackages.Count == 0)
@@ -3611,6 +3644,8 @@ namespace Limelight
                     throw new InvalidOperationException(
                         rememberAssetsResult.Message);
                 }
+
+                activeAssetsPending = true;
 
                 if (!mod.IsCharacterSlotMod)
                 {
@@ -4029,6 +4064,18 @@ namespace Limelight
                     }
                 }
 
+                LiveLoaderCommandResult commitAssetsResult =
+                    await _liveLoaderCommandService
+                        .CommitActiveAssetsAsync();
+
+                if (!commitAssetsResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        commitAssetsResult.Message);
+                }
+
+                activeAssetsPending = false;
+
                 reportProgress?.Invoke(
                     deferredCharlieRefresh
                         ? "READY: CHARLIE WILL REFRESH WHEN SHE APPEARS"
@@ -4059,6 +4106,22 @@ namespace Limelight
                     }
                 }
 
+                try
+                {
+                    await RollbackFailedLiveActivationAsync(
+                        generationId,
+                        gameDirectory,
+                        livePackages,
+                        packagesWereRetired,
+                        activeAssetsPending);
+                }
+                catch
+                {
+                    // I preserve the activation error the tester actually hit.
+                    // A game restart remains the safe fallback if rollback is
+                    // interrupted by a level transition.
+                }
+
                 // Anything Unreal already mounted stays recorded for the guarded
                 // retirement path. Files which never mounted are safe to remove now.
                 _liveSessionService.DeleteUncommittedGenerationFiles(
@@ -4069,6 +4132,173 @@ namespace Limelight
                     exception);
 
                 throw;
+            }
+        }
+
+        private async Task RollbackFailedLiveActivationAsync(
+            string generationId,
+            string gameDirectory,
+            IReadOnlyCollection<ModAssetPackage> livePackages,
+            bool packagesWereRetired,
+            bool activeAssetsPending)
+        {
+            if (activeAssetsPending)
+            {
+                await EnsureLiveWorldStableAsync();
+
+                await _liveLoaderCommandService
+                    .RollbackActiveAssetsAsync();
+            }
+
+            bool retirementWindowReady = true;
+
+            if (packagesWereRetired)
+            {
+                await EnsureLiveWorldStableAsync();
+
+                LiveLoaderCommandResult retirementResult =
+                    await _liveLoaderCommandService
+                        .ConfirmPackageRetirementAsync();
+
+                retirementWindowReady =
+                    retirementResult.Success;
+
+                if (retirementWindowReady)
+                {
+                    LiveLoaderCommandResult settlementResult =
+                        await WaitForRetiredAssetsToSettleAsync(
+                            reportProgress: null);
+
+                    retirementWindowReady =
+                        settlementResult.Success;
+                }
+            }
+
+            List<LiveSessionMountRecord> failedContainers =
+                _liveSessionService.Load()
+                    .Mounts
+                    .Where(record =>
+                        record.WasMounted &&
+                        !record.WasUnmounted &&
+                        string.Equals(
+                            record.GenerationId,
+                            generationId,
+                            StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(record =>
+                        record.MountOrder)
+                    .ToList();
+
+            bool allFailedContainersUnmounted = true;
+
+            foreach (LiveSessionMountRecord failedContainer in
+                     failedContainers)
+            {
+                LiveLoaderCommandResult unmountResult =
+                    new()
+                    {
+                        Success = false,
+                        Message = "Unreal has not accepted the failed-generation cleanup yet."
+                    };
+
+                for (int attempt = 0;
+                     attempt < 3 && !unmountResult.Success;
+                     attempt++)
+                {
+                    await EnsureLiveWorldStableAsync();
+
+                    unmountResult =
+                        await _liveLoaderCommandService
+                            .UnmountPakAsync(
+                                failedContainer.PakPath);
+
+                    if (!unmountResult.Success &&
+                        attempt < 2)
+                    {
+                        await Task.Delay(
+                            250 * (attempt + 1));
+                    }
+                }
+
+                if (!unmountResult.Success)
+                {
+                    allFailedContainersUnmounted = false;
+
+                    _liveSessionService.RecordRetirementFailure(
+                        failedContainer.PakPath,
+                        unmountResult.Message);
+
+                    continue;
+                }
+
+                _liveSessionService.RecordUnmountedContainer(
+                    failedContainer.PakPath);
+
+                LiveSessionCleanupResult cleanup =
+                    _liveSessionService.DeleteRetiredContainerFiles(
+                        failedContainer.PakPath,
+                        gameDirectory);
+
+                if (cleanup.Errors.Count > 0)
+                {
+                    _liveSessionService.RecordRetirementFailure(
+                        failedContainer.PakPath,
+                        string.Join(
+                            "; ",
+                            cleanup.Errors));
+                }
+            }
+
+            List<ModAssetPackage> failedStringTables =
+                livePackages
+                    .Where(package =>
+                        package.Kind ==
+                            ModAssetKind.StringTable)
+                    .ToList();
+
+            if (!retirementWindowReady ||
+                !allFailedContainersUnmounted ||
+                failedStringTables.Count == 0)
+            {
+                return;
+            }
+
+            await EnsureLiveWorldStableAsync();
+
+            LiveLoaderCommandResult releaseResult =
+                await _liveLoaderCommandService
+                    .ReleasePackagesAsync(
+                        failedStringTables.Select(package =>
+                            package.PackagePath));
+
+            if (!releaseResult.Success)
+            {
+                return;
+            }
+
+            try
+            {
+                await EnsureLiveWorldStableAsync();
+
+                // The failed container is gone, so this path now resolves to
+                // the previous CRM or Dead as Disco's original string table.
+                await _liveLoaderCommandService
+                    .ReloadAssetsAsync(
+                        failedStringTables.Select(package =>
+                            package.ObjectPath));
+            }
+            finally
+            {
+                await EnsureLiveWorldStableAsync();
+
+                LiveLoaderCommandResult retirementResult =
+                    await _liveLoaderCommandService
+                        .ConfirmPackageRetirementAsync();
+
+                if (retirementResult.Success)
+                {
+                    await WaitForRetiredAssetsToSettleAsync(
+                        reportProgress: null);
+                }
             }
         }
 
