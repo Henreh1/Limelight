@@ -17,6 +17,12 @@ namespace Limelight.Views
         private string _renamingModId =
             string.Empty;
 
+        private bool _showingCharacters =
+            true;
+
+        private int _characterModCount;
+        private int _otherModCount;
+
         public event Action<string>? ToggleModRequested;
         public event Action<string>? RemoveModRequested;
         public event Action<string, string>? RenameModRequested;
@@ -28,12 +34,16 @@ namespace Limelight.Views
 
         public void ShowMods(
             IEnumerable<InstalledMod> mods,
-            string activeModId)
+            string activeModId,
+            IEnumerable<string> enabledConventionalModIds)
         {
-            // Materialise the list once so the count and visible cards
-            // always represent the same library snapshot.
             List<InstalledMod> visibleMods =
                 mods.ToList();
+
+            var enabledConventionalIds =
+                new HashSet<string>(
+                    enabledConventionalModIds,
+                    StringComparer.OrdinalIgnoreCase);
 
             _visibleMods.Clear();
 
@@ -43,16 +53,41 @@ namespace Limelight.Views
                     mod;
 
                 mod.IsActive =
+                    mod.IsPlayerCharacterMod &&
                     string.Equals(
                         mod.Id,
                         activeModId,
                         StringComparison.OrdinalIgnoreCase);
+
+                mod.IsEnabledForNextLaunch =
+                    mod.IsConventionalMod &&
+                    enabledConventionalIds.Contains(
+                        mod.Id);
             }
 
-            // Resetting the source ensures the active-state button
-            // immediately changes between Activate and Deactivate.
-            ModsList.ItemsSource = null;
-            ModsList.ItemsSource = visibleMods;
+            List<InstalledMod> characterMods =
+                visibleMods
+                    .Where(mod =>
+                        mod.IsPlayerCharacterMod)
+                    .ToList();
+
+            List<InstalledMod> otherMods =
+                visibleMods
+                    .Where(mod =>
+                        mod.IsConventionalMod)
+                    .ToList();
+
+            CharacterModsList.ItemsSource = null;
+            CharacterModsList.ItemsSource = characterMods;
+
+            OtherModsList.ItemsSource = null;
+            OtherModsList.ItemsSource = otherMods;
+
+            _characterModCount =
+                characterMods.Count;
+
+            _otherModCount =
+                otherMods.Count;
 
             ModCountText.Text =
                 visibleMods.Count == 1
@@ -64,10 +99,80 @@ namespace Limelight.Views
             ? "PinkBrush"
             : "CyanBrush");
 
-            EmptyLibraryText.Visibility =
-                visibleMods.Count == 0
+            EmptyCharactersText.Visibility =
+                characterMods.Count == 0
                     ? Visibility.Visible
                     : Visibility.Collapsed;
+
+            EmptyOtherModsText.Visibility =
+                otherMods.Count == 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            UpdateCategoryVisibility();
+        }
+
+        private void CharactersTab_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            _showingCharacters =
+                true;
+
+            UpdateCategoryVisibility();
+        }
+
+        private void OtherModsTab_Click(
+            object sender,
+            RoutedEventArgs e)
+        {
+            _showingCharacters =
+                false;
+
+            UpdateCategoryVisibility();
+        }
+
+        private void UpdateCategoryVisibility()
+        {
+            CharactersPanel.Visibility =
+                _showingCharacters
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+
+            OtherModsPanel.Visibility =
+                _showingCharacters
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+
+            CharactersTabButton.Content =
+                $"CHARACTERS ({_characterModCount})";
+
+            OtherModsTabButton.Content =
+                $"OTHER REPLACEMENTS ({_otherModCount})";
+
+            CharactersTabButton.Background =
+                (Brush)FindResource(
+                    _showingCharacters
+                        ? "CyanBrush"
+                        : "PanelBrush");
+
+            CharactersTabButton.Foreground =
+                (Brush)FindResource(
+                    _showingCharacters
+                        ? "BackgroundBrush"
+                        : "TextBrush");
+
+            OtherModsTabButton.Background =
+                (Brush)FindResource(
+                    _showingCharacters
+                        ? "PanelBrush"
+                        : "CyanBrush");
+
+            OtherModsTabButton.Foreground =
+                (Brush)FindResource(
+                    _showingCharacters
+                        ? "TextBrush"
+                        : "BackgroundBrush");
         }
 
         private void ToggleMod_Click(

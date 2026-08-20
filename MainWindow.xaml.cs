@@ -2655,22 +2655,53 @@ namespace Limelight
                 .ToList();
         }
 
+        private List<InstalledMod> GetEnabledConventionalMods(
+            string? excludedModId = null)
+        {
+            _settings.EnabledConventionalModIds ??=
+                new List<string>();
+
+            var enabledIds =
+                new HashSet<string>(
+                    _settings.EnabledConventionalModIds,
+                    StringComparer.OrdinalIgnoreCase);
+
+            return _settings.InstalledMods
+                .Where(mod =>
+                    mod.IsConventionalMod &&
+                    enabledIds.Contains(mod.Id) &&
+                    Directory.Exists(mod.InstallDirectory) &&
+                    !string.Equals(
+                        mod.Id,
+                        excludedModId,
+                        StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         private void SynchronizeModDeployment(
             InstalledMod? activeMod,
             IReadOnlyCollection<InstalledMod> characterSlotCatalogue,
-            string gameDirectory)
+            string gameDirectory,
+            IReadOnlyCollection<InstalledMod>? enabledConventionalMods = null)
         {
+            List<InstalledMod> companionMods =
+                characterSlotCatalogue
+                    .Concat(
+                        enabledConventionalMods ??
+                        GetEnabledConventionalMods())
+                    .ToList();
+
             if (activeMod is null)
             {
                 _modDeploymentService.Deactivate(
-                    characterSlotCatalogue,
+                    companionMods,
                     gameDirectory);
             }
             else
             {
                 _modDeploymentService.Activate(
                     activeMod,
-                    characterSlotCatalogue,
+                    companionMods,
                     gameDirectory);
             }
 
@@ -2686,7 +2717,8 @@ namespace Limelight
                 _pendingDeploymentAttempted ||
                 (string.IsNullOrWhiteSpace(
                      _settings.PendingDeploymentModId) &&
-                 !_settings.CharacterSlotCatalogueNeedsSynchronization) ||
+                 !_settings.CharacterSlotCatalogueNeedsSynchronization &&
+                 !_settings.ConventionalModsNeedSynchronization) ||
                 string.IsNullOrWhiteSpace(
                     _gameDirectory) ||
                 _gameProcessService.IsGameRunning(
@@ -2754,6 +2786,9 @@ namespace Limelight
                     string.Empty;
 
                 _settings.CharacterSlotCatalogueNeedsSynchronization =
+                    false;
+
+                _settings.ConventionalModsNeedSynchronization =
                     false;
 
                 _settingsService.Save(_settings);
@@ -3124,6 +3159,38 @@ namespace Limelight
                 _settings.InstalledMods.AddRange(
                     plan.ImportedMods);
 
+                bool conventionalModsPreserved =
+                    false;
+
+                foreach (InstalledMod migratedMod in
+                         plan.ImportedMods.Where(mod =>
+                             mod.IsConventionalMod))
+                {
+                    if (_settings.EnabledConventionalModIds.Any(id =>
+                            string.Equals(
+                                id,
+                                migratedMod.Id,
+                                StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
+                    _settings.EnabledConventionalModIds.Add(
+                        migratedMod.Id);
+
+                    conventionalModsPreserved =
+                        true;
+                }
+
+                if (conventionalModsPreserved)
+                {
+                    _settings.ConventionalModsNeedSynchronization =
+                        true;
+
+                    _pendingDeploymentAttempted =
+                        false;
+                }
+
                 _settingsService.Save(_settings);
 
                 // Originals are removed only after settings.json contains
@@ -3132,11 +3199,18 @@ namespace Limelight
                     _existingModsMigrationService.CompleteMigration(
                         plan));
 
+                if (conventionalModsPreserved)
+                {
+                    await ApplyPendingDeploymentIfPossible();
+                }
+
                 RefreshLibrarySummary();
 
                 ShowLimelightDialog(
                     "MODS JOINED THE LIBRARY",
-                    "The existing mods were moved into Limelight successfully. Choose the model you want and select Activate.",
+                    conventionalModsPreserved
+                        ? "The existing mods were moved into Limelight successfully. Other replacements stayed enabled for your next launch."
+                        : "The existing mods were moved into Limelight successfully. Choose the character you want and select Activate.",
                     LimelightDialogTone.Success,
                     eyebrow: "MIGRATION COMPLETE");
             }
@@ -4659,6 +4733,169 @@ namespace Limelight
             errorPulse.ShowError();
         }
 
+        private List<InstalledMod> FindEnabledConventionalConflicts(
+            InstalledMod selectedMod)
+        {
+            var selectedPackagePaths =
+                new HashSet<string>(
+                    selectedMod.AssetPackages
+                        .Select(package =>
+                            package.PackagePath)
+                        .Where(packagePath =>
+                            !string.IsNullOrWhiteSpace(packagePath)),
+                    StringComparer.OrdinalIgnoreCase);
+
+            if (selectedPackagePaths.Count == 0)
+            {
+                return new List<InstalledMod>();
+            }
+
+            // I only block mods that replace the same Unreal package. Different
+            // bosses, enemies, and world assets are free to stay enabled together.
+            return GetEnabledConventionalMods()
+                .Where(mod =>
+                    mod.AssetPackages.Any(package =>
+                        selectedPackagePaths.Contains(
+                            package.PackagePath)))
+                .ToList();
+        }
+
+        private async Task ToggleConventionalModAsync(
+            InstalledMod selectedMod,
+            string gameDirectory)
+        {
+            _settings.EnabledConventionalModIds ??=
+                new List<string>();
+
+            List<string> originalEnabledIds =
+                _settings.EnabledConventionalModIds.ToList();
+
+            bool originalSynchronizationState =
+                _settings.ConventionalModsNeedSynchronization;
+
+            bool isEnabled =
+                _settings.EnabledConventionalModIds.Any(id =>
+                    string.Equals(
+                        id,
+                        selectedMod.Id,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (!isEnabled)
+            {
+                List<InstalledMod> conflicts =
+                    FindEnabledConventionalConflicts(
+                        selectedMod);
+
+                if (conflicts.Count > 0)
+                {
+                    string conflictNames =
+                        string.Join(
+                            ", ",
+                            conflicts.Select(mod =>
+                                mod.DisplayName));
+
+                    LimelightDialogChoice choice =
+                        ShowLimelightDialog(
+                            "REPLACEMENT CONFLICT FOUND",
+                            $"{selectedMod.DisplayName} replaces the same game asset as {conflictNames}. Disable the conflicting replacement and enable this one instead?",
+                            LimelightDialogTone.Question,
+                            primaryAction: "SWITCH REPLACEMENT",
+                            secondaryAction: "KEEP CURRENT",
+                            eyebrow: "ONE MOD PER TARGET");
+
+                    if (choice != LimelightDialogChoice.Primary)
+                    {
+                        return;
+                    }
+
+                    foreach (InstalledMod conflict in conflicts)
+                    {
+                        _settings.EnabledConventionalModIds.RemoveAll(id =>
+                            string.Equals(
+                                id,
+                                conflict.Id,
+                                StringComparison.OrdinalIgnoreCase));
+                    }
+                }
+
+                _settings.EnabledConventionalModIds.Add(
+                    selectedMod.Id);
+            }
+            else
+            {
+                _settings.EnabledConventionalModIds.RemoveAll(id =>
+                    string.Equals(
+                        id,
+                        selectedMod.Id,
+                        StringComparison.OrdinalIgnoreCase));
+            }
+
+            _settings.ConventionalModsNeedSynchronization =
+                true;
+
+            _pendingDeploymentAttempted =
+                false;
+
+            bool isGameRunning =
+                _gameProcessService.IsGameRunning(
+                    gameDirectory);
+
+            try
+            {
+                if (!isGameRunning)
+                {
+                    InstalledMod? activeMod =
+                        _settings.InstalledMods.FirstOrDefault(mod =>
+                            mod.IsPlayerCharacterMod &&
+                            string.Equals(
+                                mod.Id,
+                                _settings.ActiveModId,
+                                StringComparison.OrdinalIgnoreCase) &&
+                            Directory.Exists(mod.InstallDirectory));
+
+                    List<InstalledMod> characterSlotCatalogue =
+                        GetCharacterSlotCatalogue();
+
+                    await Task.Run(() =>
+                        SynchronizeModDeployment(
+                            activeMod,
+                            characterSlotCatalogue,
+                            gameDirectory));
+
+                    _settings.ConventionalModsNeedSynchronization =
+                        false;
+                }
+
+                _settingsService.Save(_settings);
+                RefreshLibrarySummary();
+
+                ShowNotification(
+                    isEnabled
+                        ? "MOD DISABLED"
+                        : "MOD ENABLED",
+                    isGameRunning
+                        ? $"{selectedMod.DisplayName} will be {(isEnabled ? "disabled" : "enabled")} after Dead as Disco closes, ready for the next launch."
+                        : $"{selectedMod.DisplayName} is {(isEnabled ? "disabled" : "enabled")} for the next launch.",
+                    isError: false);
+            }
+            catch (Exception exception)
+            {
+                _settings.EnabledConventionalModIds =
+                    originalEnabledIds;
+
+                _settings.ConventionalModsNeedSynchronization =
+                    originalSynchronizationState;
+
+                _settingsService.Save(_settings);
+                RefreshLibrarySummary();
+
+                ShowNotification(
+                    "MOD CHANGE FAILED",
+                    exception.Message,
+                    isError: true);
+            }
+        }
+
         private async void ToggleModRequested(
     string modId)
         {
@@ -4694,6 +4931,16 @@ namespace Limelight
 
             string gameDirectory =
                 _gameDirectory;
+
+            if (selectedMod.IsConventionalMod)
+            {
+                await ToggleConventionalModAsync(
+                    selectedMod,
+                    gameDirectory);
+
+                _isX19SwitchRequest = false;
+                return;
+            }
 
             bool isCurrentlyActive =
                 string.Equals(
@@ -5403,17 +5650,29 @@ namespace Limelight
                 _gameProcessService.IsGameRunning(
                     _gameDirectory);
 
+            bool isEnabledConventional =
+                _settings.EnabledConventionalModIds.Any(id =>
+                    string.Equals(
+                        id,
+                        selectedMod.Id,
+                        StringComparison.OrdinalIgnoreCase));
+
             if ((isCurrentlyActive ||
-                 selectedMod.IsCharacterSlotMod) &&
+                 selectedMod.IsCharacterSlotMod ||
+                 isEnabledConventional) &&
                 isGameRunning)
             {
                 ShowLimelightDialog(
                     selectedMod.IsCharacterSlotMod
                         ? "CHARACTER SLOT IS IN USE"
-                        : "ACTIVE MOD IS IN USE",
+                        : isEnabledConventional
+                            ? "ENABLED MOD IS IN USE"
+                            : "ACTIVE MOD IS IN USE",
                     selectedMod.IsCharacterSlotMod
                         ? "Close Dead as Disco before removing this Character Slot. Unreal loaded its catalogue files when the game started."
-                        : "Close Dead as Disco before removing the active mod from Limelight.",
+                        : isEnabledConventional
+                            ? "Close Dead as Disco before removing this enabled replacement. Unreal loaded it when the game started."
+                            : "Close Dead as Disco before removing the active mod from Limelight.",
                     LimelightDialogTone.Warning,
                     eyebrow: "REMOVE BLOCKED");
 
@@ -5440,6 +5699,10 @@ namespace Limelight
                     GetCharacterSlotCatalogue(
                         selectedMod.Id);
 
+                List<InstalledMod> conventionalModsAfterRemoval =
+                    GetEnabledConventionalMods(
+                        selectedMod.Id);
+
                 if (!string.IsNullOrWhiteSpace(_gameDirectory) &&
                     !isGameRunning)
                 {
@@ -5452,9 +5715,13 @@ namespace Limelight
                         SynchronizeModDeployment(
                             activeModAfterRemoval,
                             characterSlotCatalogue,
-                            gameDirectory));
+                            gameDirectory,
+                            conventionalModsAfterRemoval));
 
                     _settings.CharacterSlotCatalogueNeedsSynchronization =
+                        false;
+
+                    _settings.ConventionalModsNeedSynchronization =
                         false;
                 }
                 else if (selectedMod.IsCharacterSlotMod)
@@ -5463,16 +5730,26 @@ namespace Limelight
                         true;
                 }
 
-                if (isCurrentlyActive)
+                if (isCurrentlyActive ||
+                    isEnabledConventional)
                 {
                     if (string.IsNullOrWhiteSpace(_gameDirectory))
                     {
                         throw new InvalidOperationException(
-                            "Reconnect the game before removing the active mod.");
+                            "Reconnect the game before removing a deployed mod.");
                     }
 
-                    _settings.ActiveModId =
-                        string.Empty;
+                    _settings.EnabledConventionalModIds.RemoveAll(id =>
+                        string.Equals(
+                            id,
+                            selectedMod.Id,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    if (isCurrentlyActive)
+                    {
+                        _settings.ActiveModId =
+                            string.Empty;
+                    }
                 }
 
                 await Task.Run(() =>
@@ -7476,6 +7753,11 @@ namespace Limelight
                 _settings.CharacterSlotCatalogueNeedsSynchronization =
                     false;
 
+                _settings.EnabledConventionalModIds.Clear();
+
+                _settings.ConventionalModsNeedSynchronization =
+                    false;
+
                 _settingsService.Save(_settings);
 
                 RefreshLibrarySummary();
@@ -8625,6 +8907,57 @@ namespace Limelight
                             mod.InstallDirectory))
                     .ToList();
 
+            _settings.EnabledConventionalModIds ??=
+                new List<string>();
+
+            bool settingsChanged =
+                false;
+
+            InstalledMod? savedActiveMod =
+                availableMods.FirstOrDefault(mod =>
+                    string.Equals(
+                        mod.Id,
+                        _settings.ActiveModId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (savedActiveMod?.IsConventionalMod == true)
+            {
+                if (!_settings.EnabledConventionalModIds.Any(id =>
+                        string.Equals(
+                            id,
+                            savedActiveMod.Id,
+                            StringComparison.OrdinalIgnoreCase)))
+                {
+                    _settings.EnabledConventionalModIds.Add(
+                        savedActiveMod.Id);
+                }
+
+                _settings.ActiveModId =
+                    string.Empty;
+
+                _settings.ConventionalModsNeedSynchronization =
+                    true;
+
+                settingsChanged =
+                    true;
+            }
+
+            var availableConventionalIds =
+                new HashSet<string>(
+                    availableMods
+                        .Where(mod =>
+                            mod.IsConventionalMod)
+                        .Select(mod =>
+                            mod.Id),
+                    StringComparer.OrdinalIgnoreCase);
+
+            if (_settings.EnabledConventionalModIds.RemoveAll(id =>
+                    !availableConventionalIds.Contains(id)) > 0)
+            {
+                settingsChanged =
+                    true;
+            }
+
             InstalledMod? activeMod =
                 availableMods.FirstOrDefault(mod =>
                     string.Equals(
@@ -8641,6 +8974,31 @@ namespace Limelight
                 _settings.ActiveModId =
                     string.Empty;
 
+                settingsChanged =
+                    true;
+            }
+
+            List<InstalledMod> playerCharacterMods =
+                availableMods
+                    .Where(mod =>
+                        mod.IsPlayerCharacterMod)
+                    .ToList();
+
+            var playerCharacterModIds =
+                new HashSet<string>(
+                    playerCharacterMods.Select(mod =>
+                        mod.Id),
+                    StringComparer.OrdinalIgnoreCase);
+
+            if (_settings.X19LoaderModIds.RemoveAll(id =>
+                    !playerCharacterModIds.Contains(id)) > 0)
+            {
+                settingsChanged =
+                    true;
+            }
+
+            if (settingsChanged)
+            {
                 _settingsService.Save(_settings);
             }
 
@@ -8649,14 +9007,15 @@ namespace Limelight
 
             MyModsPageControl.ShowMods(
                 availableMods,
-                _settings.ActiveModId);
+                _settings.ActiveModId,
+                _settings.EnabledConventionalModIds);
 
             ProfilesPageControl.ShowProfiles(
                 _settings.ModProfiles,
-                availableMods);
+                playerCharacterMods);
 
             LiveLoadersPageControl.ShowConfiguration(
-                availableMods,
+                playerCharacterMods,
                 _settings.X19LoaderModIds,
                 _settings.X19LoaderProfileIds,
                 _settings.ActiveModId,

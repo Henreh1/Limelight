@@ -80,6 +80,122 @@ namespace Limelight.Models
         public bool IsActive { get; set; }
 
         [JsonIgnore]
+        public bool IsPlayerCharacterMod =>
+            IsCharacterSlotMod ||
+            AssetPackages.Any(package =>
+                package.IsCharlieMesh);
+
+        [JsonIgnore]
+        public bool IsConventionalMod =>
+            !IsPlayerCharacterMod;
+
+        [JsonIgnore]
+        public bool IsEnabledForNextLaunch { get; set; }
+
+        [JsonIgnore]
+        public string LibraryCategoryLabel
+        {
+            get
+            {
+                if (IsCharacterSlotMod)
+                {
+                    return "CHARACTER SLOT";
+                }
+
+                if (IsPlayerCharacterMod)
+                {
+                    return "CHARLIE REPLACEMENT";
+                }
+
+                string friendlyTarget =
+                    GetFriendlyReplacementTarget();
+
+                return string.IsNullOrWhiteSpace(friendlyTarget)
+                    ? "OTHER REPLACEMENT"
+                    : $"{friendlyTarget} REPLACEMENT";
+            }
+        }
+
+        [JsonIgnore]
+        public string ReplacementTargetLabel
+        {
+            get
+            {
+                if (IsCharacterSlotMod)
+                {
+                    return "LIVE SWITCHING + LOCKER SLOT";
+                }
+
+                if (IsPlayerCharacterMod)
+                {
+                    return "LIVE SWITCHING AVAILABLE";
+                }
+
+                string friendlyTarget =
+                    GetFriendlyReplacementTarget();
+
+                return string.IsNullOrWhiteSpace(friendlyTarget)
+                    ? "ENABLED FOR THE NEXT LAUNCH"
+                    : $"TARGET: {friendlyTarget}  |  NEXT LAUNCH";
+            }
+        }
+
+        private string GetFriendlyReplacementTarget()
+        {
+            // I only name targets we have confirmed in the game files so a
+            // technical asset name never gets mistaken for another character.
+            if (AssetPackages.Any(package =>
+                    string.Equals(
+                        package.AssetName,
+                        "SK_AI_Rebel",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return "HEMLOCK";
+            }
+
+            if (AssetPackages.Any(package =>
+                    package.AssetName.StartsWith(
+                        "SK_AI_Prophet_Phase",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(
+                        package.AssetName,
+                        "SM_Prophet_Mic_Hero",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return "PROPHET";
+            }
+
+            if (AssetPackages.Any(package =>
+                    package.AssetName.StartsWith(
+                        "SK_AI_Bouncer",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return "BOUNCER";
+            }
+
+            if (AssetPackages.Any(package =>
+                    package.AssetName.StartsWith(
+                        "SK_AI_Shred",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    package.AssetName.StartsWith(
+                        "SK_Shred_",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return "DEX";
+            }
+
+            if (AssetPackages.Any(package =>
+                    package.AssetName.StartsWith(
+                        "SK_AI_Doll",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return "ARORA";
+            }
+
+            return string.Empty;
+        }
+
+        [JsonIgnore]
         public bool IsCharacterSlotMod =>
             !string.IsNullOrWhiteSpace(CharacterSlotName) &&
             !string.IsNullOrWhiteSpace(CharacterSlotInfoFile) &&
