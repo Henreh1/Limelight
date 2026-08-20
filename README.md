@@ -26,6 +26,18 @@ Limelight keeps character model mods organised and lets supported assets switch 
 
 The Live Loader installs and configures its managed runtime components automatically. Users do not need to manually copy UE4SS, bridge, or staging files into the game.
 
+## The Limelight family
+
+Limelight started as a mod manager and somehow grew into an entire family of
+increasingly questionable ideas. The main app keeps everything together while
+each mode handles its own part of the show.
+
+<p align="center">
+  <img src="Assets/README/LimelightFamily.png" alt="Hand-drawn overview of the Limelight family and its different modes" width="100%">
+  <br>
+  <em>One launcher, several increasingly questionable ideas.</em>
+</p>
+
 ## Highlights
 
 | Feature | What it does |
