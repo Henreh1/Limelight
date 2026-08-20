@@ -1,6 +1,8 @@
 ﻿using Limelight.Models;
 using System.IO;
 using SharpCompress.Archives;
+using SharpCompress.Common;
+using SharpCompress.Readers;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -159,24 +161,30 @@ namespace Limelight.Services
             List<string> packageParts =
                 new List<string>();
 
-            foreach (IArchiveEntry entry in archive.Entries.Where(entry =>
-                !entry.IsDirectory &&
-                !string.IsNullOrWhiteSpace(
-                    ModArchiveSupport.EntryPath(entry)) &&
-                PackageExtensions.Contains(
-                    Path.GetExtension(
-                        ModArchiveSupport.EntryPath(entry)),
-                    StringComparer.OrdinalIgnoreCase)))
+            if (RequiresSequentialReader(
+                    archive,
+                    archivePath))
             {
-                using Stream entryStream =
-                    entry.OpenEntryStream();
+                using IReader reader =
+                    archive.ExtractAllEntries();
 
-                packageParts.Add(
-                    CreatePackageFingerprintPart(
-                        Path.GetExtension(
-                            ModArchiveSupport.EntryPath(entry)),
-                        entry.Size,
-                        entryStream));
+                while (reader.MoveToNextEntry())
+                {
+                    AddPackageFingerprintPart(
+                        reader.Entry,
+                        () => reader.OpenEntryStream(),
+                        packageParts);
+                }
+            }
+            else
+            {
+                foreach (IArchiveEntry entry in archive.Entries)
+                {
+                    AddPackageFingerprintPart(
+                        entry,
+                        () => entry.OpenEntryStream(),
+                        packageParts);
+                }
             }
 
             return new ModArchiveFingerprintResult
@@ -186,6 +194,45 @@ namespace Limelight.Services
                     CreatePackageSetFingerprint(
                         packageParts)
             };
+        }
+
+        private static bool RequiresSequentialReader(
+            IArchive archive,
+            string archivePath)
+        {
+            return archive.IsSolid ||
+                   string.Equals(
+                       Path.GetExtension(archivePath),
+                       ".7z",
+                       StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void AddPackageFingerprintPart(
+            IEntry entry,
+            Func<Stream> openEntryStream,
+            ICollection<string> packageParts)
+        {
+            string entryPath =
+                ModArchiveSupport.EntryPath(
+                    entry);
+
+            if (entry.IsDirectory ||
+                string.IsNullOrWhiteSpace(entryPath) ||
+                !PackageExtensions.Contains(
+                    Path.GetExtension(entryPath),
+                    StringComparer.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            using Stream entryStream =
+                openEntryStream();
+
+            packageParts.Add(
+                CreatePackageFingerprintPart(
+                    Path.GetExtension(entryPath),
+                    entry.Size,
+                    entryStream));
         }
 
         public string CalculateInstalledModFingerprint(
@@ -282,87 +329,119 @@ namespace Limelight.Services
                 safeRoot +
                 Path.DirectorySeparatorChar;
 
-            foreach (IArchiveEntry entry in archive.Entries)
+            if (RequiresSequentialReader(
+                    archive,
+                    archivePath))
             {
-                string entryPath =
-                    ModArchiveSupport.EntryPath(entry);
+                using IReader reader =
+                    archive.ExtractAllEntries();
 
-                // Some ZIP tools add "." as an entry for the archive root.
-                // I skip it because the destination folder already represents it.
-                if (ModArchiveSupport.IsRootMarker(
-                        entryPath))
+                while (reader.MoveToNextEntry())
                 {
-                    continue;
+                    ExtractEntrySafely(
+                        reader.Entry,
+                        () => reader.OpenEntryStream(),
+                        destinationDirectory,
+                        safeRootPrefix);
                 }
-
-                if (entry.IsEncrypted)
-                {
-                    throw new InvalidDataException(
-                        "Password-protected archives are not supported.");
-                }
-
-                if (ModArchiveSupport.ContainsLink(entry) ||
-                    ModArchiveSupport.ContainsUnsafePath(entryPath))
-                {
-                    throw new InvalidDataException(
-                        "The archive contains an unsafe path or link.");
-                }
-
-                string targetPath =
-                    Path.GetFullPath(
-                        Path.Combine(
-                            destinationDirectory,
-                            entryPath));
-
-                // I keep every extracted file inside Limelight's private library.
-                if (!targetPath.StartsWith(
-                        safeRootPrefix,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidDataException(
-                        "The archive contains an unsafe file path.");
-                }
-
-                bool isDirectory =
-                    entry.IsDirectory ||
-                    entryPath.EndsWith(
-                        "/",
-                        StringComparison.Ordinal) ||
-                    entryPath.EndsWith(
-                        "\\",
-                        StringComparison.Ordinal);
-
-                if (isDirectory)
-                {
-                    Directory.CreateDirectory(
-                        targetPath);
-
-                    continue;
-                }
-
-                string? targetFolder =
-                    Path.GetDirectoryName(
-                        targetPath);
-
-                if (targetFolder != null)
-                {
-                    Directory.CreateDirectory(
-                        targetFolder);
-                }
-
-                using Stream entryStream =
-                    entry.OpenEntryStream();
-
-                using FileStream targetStream =
-                    new FileStream(
-                        targetPath,
-                        FileMode.Create,
-                        FileAccess.Write,
-                        FileShare.None);
-
-                entryStream.CopyTo(
-                    targetStream);
             }
+            else
+            {
+                foreach (IArchiveEntry entry in archive.Entries)
+                {
+                    ExtractEntrySafely(
+                        entry,
+                        () => entry.OpenEntryStream(),
+                        destinationDirectory,
+                        safeRootPrefix);
+                }
+            }
+        }
+
+        private static void ExtractEntrySafely(
+            IEntry entry,
+            Func<Stream> openEntryStream,
+            string destinationDirectory,
+            string safeRootPrefix)
+        {
+            string entryPath =
+                ModArchiveSupport.EntryPath(entry);
+
+            // Some ZIP tools add "." as an entry for the archive root.
+            // I skip it because the destination folder already represents it.
+            if (ModArchiveSupport.IsRootMarker(
+                    entryPath))
+            {
+                return;
+            }
+
+            if (entry.IsEncrypted)
+            {
+                throw new InvalidDataException(
+                    "Password-protected archives are not supported.");
+            }
+
+            if (ModArchiveSupport.ContainsLink(entry) ||
+                ModArchiveSupport.ContainsUnsafePath(entryPath))
+            {
+                throw new InvalidDataException(
+                    "The archive contains an unsafe path or link.");
+            }
+
+            string targetPath =
+                Path.GetFullPath(
+                    Path.Combine(
+                        destinationDirectory,
+                        entryPath));
+
+            // I keep every extracted file inside Limelight's private library.
+            if (!targetPath.StartsWith(
+                    safeRootPrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException(
+                    "The archive contains an unsafe file path.");
+            }
+
+            bool isDirectory =
+                entry.IsDirectory ||
+                entryPath.EndsWith(
+                    "/",
+                    StringComparison.Ordinal) ||
+                entryPath.EndsWith(
+                    "\\",
+                    StringComparison.Ordinal);
+
+            if (isDirectory)
+            {
+                Directory.CreateDirectory(
+                    targetPath);
+
+                return;
+            }
+
+            string? targetFolder =
+                Path.GetDirectoryName(
+                    targetPath);
+
+            if (targetFolder != null)
+            {
+                Directory.CreateDirectory(
+                    targetFolder);
+            }
+
+            using Stream entryStream =
+                openEntryStream();
+
+            using FileStream targetStream =
+                new FileStream(
+                    targetPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None);
+
+            entryStream.CopyTo(
+                targetStream);
         }
 
         private static List<string> FindPackageFiles(

@@ -1377,5 +1377,41 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+        <Border x:Name="ModImportProgressOverlay"
+                Grid.RowSpan="2"
+                Panel.ZIndex="710"
+                Width="360"
+                Margin="0,0,24,24"
+                Padding="18,15"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Background="#F2171B31"
+                BorderBrush="{StaticResource CyanBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                IsHitTestVisible="False"
+                Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Text="IMPORTING MOD"
+                           FontSize="10"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource CyanBrush}"/>
+
+                <TextBlock x:Name="ModImportProgressText"
+                           Margin="0,6,0,10"
+                           Text="READING ARCHIVE..."
+                           TextTrimming="CharacterEllipsis"
+                           FontSize="13"
+                           FontWeight="Bold"
+                           Foreground="{StaticResource TextBrush}"/>
+
+                <ProgressBar Height="4"
+                             IsIndeterminate="True"
+                             Background="#252A43"
+                             BorderThickness="0"
+                             Foreground="{StaticResource PinkBrush}"/>
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

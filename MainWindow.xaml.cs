@@ -1,4 +1,4 @@
-﻿using Limelight.Models;
+using Limelight.Models;
 using Limelight.Services;
 using Limelight.Views;
 using Microsoft.Win32;
@@ -23,7 +23,26 @@ namespace Limelight
     public partial class MainWindow : Window
     {
         private const int WmGetMinMaxInfo = 0x0024;
+        private const int WmDropFiles = 0x0233;
         private const int MonitorDefaultToNearest = 0x00000002;
+
+        [DllImport("shell32.dll")]
+        private static extern void DragAcceptFiles(
+            IntPtr windowHandle,
+            bool acceptFiles);
+
+        [DllImport(
+            "shell32.dll",
+            CharSet = CharSet.Unicode)]
+        private static extern uint DragQueryFile(
+            IntPtr dropHandle,
+            uint fileIndex,
+            System.Text.StringBuilder? fileName,
+            uint fileNameSize);
+
+        [DllImport("shell32.dll")]
+        private static extern void DragFinish(
+            IntPtr dropHandle);
 
         private enum NavigationPage
         {
@@ -147,6 +166,10 @@ namespace Limelight
         private bool _windowTransitionInProgress;
         private bool _animateWindowAfterRestore;
         private bool _isModImportInProgress;
+        private string _lastArchiveDropSignature =
+            string.Empty;
+        private DateTime _lastArchiveDropAt =
+            DateTime.MinValue;
         private bool _isManualUpdateCheckRunning;
         private bool _isMultiplayerActionRunning;
         private bool? _isMultiplayerPayloadValid;
@@ -520,6 +543,10 @@ namespace Limelight
                 return;
             }
 
+            DragAcceptFiles(
+                source.Handle,
+                acceptFiles: true);
+
             // I keep maximise sizing in WPF native coordinates so the
             // custom chrome continues to respect the monitor work area.
             source.AddHook(WindowProc);
@@ -532,6 +559,15 @@ namespace Limelight
             IntPtr lParam,
             ref bool handled)
         {
+            if (message == WmDropFiles)
+            {
+                HandleNativeFileDrop(
+                    wParam);
+
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             if (message != WmGetMinMaxInfo)
             {
                 return IntPtr.Zero;
@@ -8584,6 +8620,112 @@ namespace Limelight
                 archivePath);
         }
 
+        private void HandleNativeFileDrop(
+            IntPtr dropHandle)
+        {
+            var droppedPaths =
+                new List<string>();
+
+            try
+            {
+                uint fileCount =
+                    DragQueryFile(
+                        dropHandle,
+                        uint.MaxValue,
+                        fileName: null,
+                        fileNameSize: 0);
+
+                for (uint fileIndex = 0;
+                     fileIndex < fileCount;
+                     fileIndex++)
+                {
+                    uint pathLength =
+                        DragQueryFile(
+                            dropHandle,
+                            fileIndex,
+                            fileName: null,
+                            fileNameSize: 0);
+
+                    var fileName =
+                        new System.Text.StringBuilder(
+                            checked((int)pathLength + 1));
+
+                    if (DragQueryFile(
+                            dropHandle,
+                            fileIndex,
+                            fileName,
+                            (uint)fileName.Capacity) > 0)
+                    {
+                        droppedPaths.Add(
+                            fileName.ToString());
+                    }
+                }
+            }
+            finally
+            {
+                DragFinish(
+                    dropHandle);
+            }
+
+            _ = ImportDroppedModArchivesAsync(
+                droppedPaths);
+        }
+
+        private async Task ImportDroppedModArchivesAsync(
+            IEnumerable<string> droppedPaths)
+        {
+            string[] archivePaths =
+                droppedPaths
+                    .Where(path =>
+                        ModArchiveSupport.IsSupportedArchive(path))
+                    .Distinct(
+                        StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+            if (archivePaths.Length == 0)
+            {
+                ShowLimelightDialog(
+                    "MOD ARCHIVE REQUIRED",
+                    "Drop one or more Dead as Disco ZIP, RAR, or 7Z mod archives into Limelight.",
+                    LimelightDialogTone.Error,
+                    eyebrow: "IMPORT MISSED ITS CUE");
+
+                return;
+            }
+
+            string dropSignature =
+                string.Join(
+                    "|",
+                    archivePaths.OrderBy(path =>
+                        path,
+                        StringComparer.OrdinalIgnoreCase));
+
+            DateTime droppedAt =
+                DateTime.UtcNow;
+
+            if (string.Equals(
+                    dropSignature,
+                    _lastArchiveDropSignature,
+                    StringComparison.OrdinalIgnoreCase) &&
+                droppedAt - _lastArchiveDropAt <
+                    TimeSpan.FromSeconds(2))
+            {
+                return;
+            }
+
+            _lastArchiveDropSignature =
+                dropSignature;
+
+            _lastArchiveDropAt =
+                droppedAt;
+
+            foreach (string archivePath in archivePaths)
+            {
+                await ImportModArchiveAsync(
+                    archivePath);
+            }
+        }
+
         private void MainWindow_PreviewDragEnter(
             object sender,
             DragEventArgs e)
@@ -8632,24 +8774,8 @@ namespace Limelight
                 GetDroppedModArchives(
                     e.Data);
 
-            if (archivePaths.Length == 0)
-            {
-                ShowLimelightDialog(
-                    "MOD ARCHIVE REQUIRED",
-                    "Drop one or more Dead as Disco ZIP, RAR, or 7Z mod archives into Limelight.",
-                    LimelightDialogTone.Error,
-                    eyebrow: "IMPORT MISSED ITS CUE");
-
-                return;
-            }
-
-            // Multiple archives are handled in the order Windows provides
-            // them, using exactly the same checks as the Import Mod button.
-            foreach (string archivePath in archivePaths)
-            {
-                await ImportModArchiveAsync(
-                    archivePath);
-            }
+            await ImportDroppedModArchivesAsync(
+                archivePaths);
         }
 
         private void UpdateModDropFeedback(
@@ -8688,7 +8814,6 @@ namespace Limelight
 
             return droppedPaths
                 .Where(path =>
-                    File.Exists(path) &&
                     ModArchiveSupport.IsSupportedArchive(path))
                 .Distinct(
                     StringComparer.OrdinalIgnoreCase)
@@ -8725,6 +8850,8 @@ namespace Limelight
             _isModImportInProgress = true;
             ImportModButton.IsEnabled = false;
             ImportModButton.Content = "IMPORTING...";
+            ShowModImportProgress(
+                "READING AND VALIDATING ARCHIVE...");
 
             try
             {
@@ -8747,6 +8874,9 @@ namespace Limelight
 
                 string incomingFingerprint =
                     fingerprintResult.Fingerprint;
+
+                ShowModImportProgress(
+                    "CHECKING FOR DUPLICATES...");
 
                 List<(InstalledMod Mod, string Fingerprint)> libraryFingerprints =
                     await Task.Run(
@@ -8796,6 +8926,9 @@ namespace Limelight
 
                 // Large archives are processed in the background so
                 // the interface remains responsive during the import.
+                ShowModImportProgress(
+                    "EXTRACTING AND SCANNING FILES...");
+
                 InstalledMod installedMod =
                     await Task.Run(() =>
                         _modLibraryService.Import(
@@ -8804,6 +8937,9 @@ namespace Limelight
 
                 _settings.InstalledMods.Add(
                     installedMod);
+
+                ShowModImportProgress(
+                    "SAVING TO YOUR LIBRARY...");
 
                 if (installedMod.IsCharacterSlotMod)
                 {
@@ -8856,7 +8992,19 @@ namespace Limelight
                 _isModImportInProgress = false;
                 ImportModButton.IsEnabled = true;
                 ImportModButton.Content = "IMPORT MOD";
+                ModImportProgressOverlay.Visibility =
+                    Visibility.Collapsed;
             }
+        }
+
+        private void ShowModImportProgress(
+            string stage)
+        {
+            ModImportProgressText.Text =
+                stage;
+
+            ModImportProgressOverlay.Visibility =
+                Visibility.Visible;
         }
 
         private List<(InstalledMod Mod, string Fingerprint)>

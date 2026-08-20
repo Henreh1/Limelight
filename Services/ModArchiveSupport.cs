@@ -1,4 +1,5 @@
 using SharpCompress.Archives;
+using SharpCompress.Common;
 using SharpCompress.Readers;
 using System.IO;
 
@@ -62,7 +63,7 @@ namespace Limelight.Services
         }
 
         public static string EntryPath(
-            IArchiveEntry entry)
+            IEntry entry)
         {
             return (entry.Key ?? string.Empty).Trim();
         }
@@ -120,7 +121,7 @@ namespace Limelight.Services
         }
 
         public static bool ContainsLink(
-            IArchiveEntry entry)
+            IEntry entry)
         {
             return !string.IsNullOrWhiteSpace(
                 entry.LinkTarget);
