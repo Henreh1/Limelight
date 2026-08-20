@@ -40,19 +40,19 @@ each mode handles its own part of the show.
 
 ## Highlights
 
-| Feature | What it does |
-| --- | --- |
-| Character library | Import ZIP, RAR, and 7Z archives, drag and drop mods, rename entries, reject duplicates, and remove mods from one library. |
-| Normal Live Loader | Activate a supported character replacement without restarting the game. |
-| Character Slot Loader support | Detect a slot mod's data asset and unique mesh, keep its original Locker layout, and switch it through Normal Live Loader or X19. |
-| X19 LLoader | Rotate through a chosen cast by keyboard or controller, in order or shuffled. |
-| LimelightMP (experimental) | Host or join a private two-PC co-op test where each player renders their own game and the client controls Chuckles through an authenticated relay. |
-| Profiles | Save reusable groups of characters and assign an entire profile to X19 rotation. |
-| Asset-aware switching | Scan each imported Unreal container and refresh the model, materials, textures, portraits, and supported localisation assets it replaces. |
-| Safe switching | Detect game transitions, block unsafe requests, reuse mounted containers, and show a subtle Limelight pulse while X19 changes character. |
-| Compatibility checks | Verify the game build, UE4SS runtime, Lua bridge, and native bridge before enabling live switching. |
-| Recovery and reports | Repair managed loader files and create privacy-conscious diagnostic or private test reports. |
-| Windows integration | Themed dialogs, a themed file explorer, Discord Rich Presence, optional resource monitoring, and a guided first-run tour. |
+| Feature                       | What it does                                                                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Character library             | Import ZIP, RAR, and 7Z archives, drag and drop mods, rename entries, reject duplicates, and remove mods from one library.                         |
+| Normal Live Loader            | Activate a supported character replacement without restarting the game.                                                                            |
+| Character Slot Loader support | Detect a slot mod's data asset and unique mesh, keep its original Locker layout, and switch it through Normal Live Loader or X19.                  |
+| X19 LLoader                   | Rotate through a chosen cast by keyboard or controller, in order or shuffled.                                                                      |
+| LimelightMP (experimental)    | Host or join a private two-PC co-op test where each player renders their own game and the client controls Chuckles through an authenticated relay. |
+| Profiles                      | Save reusable groups of characters and assign an entire profile to X19 rotation.                                                                   |
+| Asset-aware switching         | Scan each imported Unreal container and refresh the model, materials, textures, portraits, and supported localisation assets it replaces.          |
+| Safe switching                | Detect game transitions, block unsafe requests, reuse mounted containers, and show a subtle Limelight pulse while X19 changes character.           |
+| Compatibility checks          | Verify the game build, UE4SS runtime, Lua bridge, and native bridge before enabling live switching.                                                |
+| Recovery and reports          | Repair managed loader files and create privacy-conscious diagnostic or private test reports.                                                       |
+| Windows integration           | Themed dialogs, a themed file explorer, Discord Rich Presence, optional resource monitoring, and a guided first-run tour.                          |
 
 ## Screenshots
 
@@ -122,6 +122,25 @@ Build a rotation from individual characters or a saved profile, then advance thr
 
 Launch the game without starting live switching. This reduces startup time and resource use when Limelight's runtime features are not needed.
 
+### How the Live Loader works
+
+Limelight detects the selected replacement, identifies its target and sends a
+reload request into the running game. UE4SS and the native bridge perform the
+Unreal-specific work: mounting the replacement containers, releasing stale
+package state, swapping the active mesh and refreshing its materials and
+textures. Success or a useful error then returns to Limelight.
+
+<p align="center">
+  <img src="Assets/README/LiveLoaderSimple.png" alt="Hand-drawn Live Loader flow from updated replacement files to the running game" width="100%">
+  <br>
+  <em>The highly advanced Live Loader technical blueprint.</em>
+</p>
+
+The drawing uses Charlie as the example on stage, but the same flow applies to
+the active replacement target. Limelight can identify supported Charlie, Arora,
+Hemlock, Bouncer, Prophet, Dex and other replacement packages rather than
+assuming every mod belongs to Charlie.
+
 ## Experimental multiplayer
 
 The **Multiplayer** page contains the current LimelightMP v0.1.0 test harness. The host and client each run their own copy of *Dead as Disco*; Limelight installs the appropriate managed role, starts the controller relay without a separate terminal, launches through Steam, and displays a short friend code plus colour-coded session events.
@@ -159,9 +178,11 @@ A massive thank you to the people at **Brain Jar Games** for making *Dead as Dis
 
 Special thanks to the Limelight testers:
 
-- **X19**
-- **Taxes I Hate Em**
-- **Bananas**
+- **X19** - Idea of the Live "model refresh" concept and X19 loader mode, and for Early Access testing and feedback.
+- **Taxes I Hate Em** - Early Access testing and feedback.
+- **Bananas** - First Multiplayer tester and for Early Access testing and feedback.
+- **Miles** - Early Access testing and feedback.
+- **Bronze_tito** - Early Access testing and feedback, and for helping track down package references used by the improved inspection system.
 
 Limelight also builds on the work of the [RE-UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) and [CUE4Parse](https://github.com/FabianFG/CUE4Parse) projects.
 
