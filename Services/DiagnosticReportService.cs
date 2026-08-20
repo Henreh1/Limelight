@@ -146,15 +146,56 @@ namespace Limelight.Services
 
             try
             {
+                using FileStream logStream =
+                    new(
+                        logPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.ReadWrite |
+                        FileShare.Delete);
+
+                using StreamReader logReader =
+                    new(
+                        logStream,
+                        Encoding.UTF8,
+                        detectEncodingFromByteOrderMarks: true);
+
+                Queue<string> relevantLineQueue =
+                    new();
+
+                // UE4SS keeps writing for the whole game session. I share its
+                // live handle and retain only the newest useful report lines.
+                while (logReader.ReadLine() is string line)
+                {
+                    bool isRelevant =
+                        line.Contains(
+                            "limelight",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        line.Contains(
+                            "error",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        line.Contains(
+                            "warning",
+                            StringComparison.OrdinalIgnoreCase) ||
+                        line.Contains(
+                            "exception",
+                            StringComparison.OrdinalIgnoreCase);
+
+                    if (!isRelevant)
+                    {
+                        continue;
+                    }
+
+                    relevantLineQueue.Enqueue(line);
+
+                    if (relevantLineQueue.Count > 200)
+                    {
+                        relevantLineQueue.Dequeue();
+                    }
+                }
+
                 string[] relevantLines =
-                    File.ReadLines(logPath)
-                        .Where(line =>
-                            line.Contains("limelight", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("error", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("warning", StringComparison.OrdinalIgnoreCase) ||
-                            line.Contains("exception", StringComparison.OrdinalIgnoreCase))
-                        .TakeLast(200)
-                        .ToArray();
+                    relevantLineQueue.ToArray();
 
                 if (relevantLines.Length == 0)
                 {
