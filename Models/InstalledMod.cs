@@ -192,6 +192,15 @@ namespace Limelight.Models
                 return "ARORA";
             }
 
+            if (AssetPackages.Any(package =>
+                    string.Equals(
+                        package.AssetName,
+                        "SM_Drumstick",
+                        StringComparison.OrdinalIgnoreCase)))
+            {
+                return "DRUMSTICK";
+            }
+
             return string.Empty;
         }
 
